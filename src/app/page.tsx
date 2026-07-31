@@ -66,7 +66,7 @@ export default function HomePage() {
         {/* 用户端入口 */}
         <div>
           <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">用户端</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <Link
               href="/submit"
               className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-[#1e3a5f] hover:shadow-md"
@@ -74,8 +74,19 @@ export default function HomePage() {
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
                 <FileText className="h-5 w-5" />
               </div>
-              <h4 className="font-semibold text-gray-900 group-hover:text-[#1e3a5f]">活动负责人</h4>
-              <p className="mt-1 text-xs text-gray-500">提交活动信息（含策划书、备案表）、查看提交审核状态</p>
+              <h4 className="font-semibold text-gray-900 group-hover:text-[#1e3a5f]">活动提交</h4>
+              <p className="mt-1 text-xs text-gray-500">提交活动基本信息、查看审核状态</p>
+            </Link>
+
+            <Link
+              href="/submit/scoring"
+              className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-[#1e3a5f] hover:shadow-md"
+            >
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                <Award className="h-5 w-5" />
+              </div>
+              <h4 className="font-semibold text-gray-900 group-hover:text-[#1e3a5f]">赋分材料提交</h4>
+              <p className="mt-1 text-xs text-gray-500">上传活动赋分表、备案表照片</p>
             </Link>
 
             <Link
@@ -85,8 +96,8 @@ export default function HomePage() {
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
                 <UserCheck className="h-5 w-5" />
               </div>
-              <h4 className="font-semibold text-gray-900 group-hover:text-[#1e3a5f]">学生</h4>
-              <p className="mt-1 text-xs text-gray-500">提交请假申请（含请假条图片）、查看请假审核状态</p>
+              <h4 className="font-semibold text-gray-900 group-hover:text-[#1e3a5f]">请假申请</h4>
+              <p className="mt-1 text-xs text-gray-500">提交请假申请（含请假条图片）、查看审核状态</p>
             </Link>
           </div>
         </div>

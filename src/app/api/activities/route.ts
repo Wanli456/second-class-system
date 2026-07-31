@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
-// GET /api/activities - 获取活动列表（管理员）
+// GET /api/activities - 获取活动列表（管理员/负责人）
 export async function GET(request: NextRequest) {
   try {
     const client = getSupabaseClient();
@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
     const level = searchParams.get('level');
     const keyword = searchParams.get('keyword');
+    const leader_phone = searchParams.get('leader_phone');
 
     let query = client
       .from('activities')
@@ -20,6 +21,7 @@ export async function GET(request: NextRequest) {
     if (status) query = query.eq('status', status);
     if (level) query = query.eq('level', level);
     if (keyword) query = query.ilike('full_name', `%${keyword}%`);
+    if (leader_phone) query = query.eq('leader_phone', leader_phone);
 
     const { data, error } = await query;
     if (error) throw new Error(`查询失败: ${error.message}`);

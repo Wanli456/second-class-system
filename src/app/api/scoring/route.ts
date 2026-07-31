@@ -42,7 +42,7 @@ export async function PUT(request: NextRequest) {
     // 先获取活动信息
     const { data: activity, error: fetchError } = await client
       .from('activities')
-      .select('id, full_name, level, record_file_url, scoring_status, leader_phone')
+      .select('id, full_name, level, record_file_url, scoring_status, scoring_table_url, leader_phone')
       .eq('id', id)
       .maybeSingle();
 
@@ -55,28 +55,27 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: '该活动已完成赋分' }, { status: 400 });
     }
 
-    // 校验赋分条件
+    // 校验赋分条件（赋分表和备案表由活动负责人上传）
     if (activity.level === '校级') {
       // 校级：需要活动备案表照片和活动赋分表
       if (!activity.record_file_url) {
-        return NextResponse.json({ success: false, error: '校级活动需要活动备案表才能赋分' }, { status: 400 });
+        return NextResponse.json({ success: false, error: '校级活动需要活动备案表，请等待负责人上传' }, { status: 400 });
       }
-      if (!scoring_table_url) {
-        return NextResponse.json({ success: false, error: '请上传活动赋分表' }, { status: 400 });
+      if (!activity.scoring_table_url) {
+        return NextResponse.json({ success: false, error: '请等待负责人上传活动赋分表' }, { status: 400 });
       }
     } else {
       // 院系级：只需要活动赋分表
-      if (!scoring_table_url) {
-        return NextResponse.json({ success: false, error: '请上传活动赋分表' }, { status: 400 });
+      if (!activity.scoring_table_url) {
+        return NextResponse.json({ success: false, error: '请等待负责人上传活动赋分表' }, { status: 400 });
       }
     }
 
-    // 执行赋分
+    // 执行赋分（只更新状态，不更新文件URL）
     const { error: updateError } = await client
       .from('activities')
       .update({
         scoring_status: '已赋分',
-        scoring_table_url,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id);

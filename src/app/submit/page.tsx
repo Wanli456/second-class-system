@@ -16,7 +16,6 @@ export default function SubmitPage() {
     leader_phone: '',
   });
   const [planFile, setPlanFile] = useState<File | null>(null);
-  const [recordFile, setRecordFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -39,13 +38,9 @@ export default function SubmitPage() {
     setSubmitting(true);
     try {
       let plan_file_url = '';
-      let record_file_url = '';
 
       if (planFile) {
         plan_file_url = await uploadFile(planFile);
-      }
-      if (recordFile) {
-        record_file_url = await uploadFile(recordFile);
       }
 
       const res = await fetch('/api/activities/submit', {
@@ -54,7 +49,6 @@ export default function SubmitPage() {
         body: JSON.stringify({
           ...form,
           plan_file_url,
-          record_file_url,
           start_time: new Date(form.start_time).toISOString(),
           end_time: new Date(form.end_time).toISOString(),
         }),
@@ -64,7 +58,6 @@ export default function SubmitPage() {
         setSuccess(true);
         setForm({ full_name: '', start_time: '', end_time: '', category: '', level: '', leader_name: '', leader_phone: '' });
         setPlanFile(null);
-        setRecordFile(null);
       } else {
         alert(data.error || '提交失败');
       }
@@ -183,37 +176,25 @@ export default function SubmitPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">活动策划书</label>
-                <div className="flex items-center gap-2">
-                  <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-md border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500 hover:border-[#1e3a5f] hover:text-[#1e3a5f]">
-                    <Upload className="h-4 w-4" />
-                    {planFile ? planFile.name : '选择文件'}
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                      onChange={(e) => setPlanFile(e.target.files?.[0] || null)}
-                    />
-                  </label>
-                </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">活动策划书（可选）</label>
+              <div className="flex items-center gap-2">
+                <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-md border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500 hover:border-[#1e3a5f] hover:text-[#1e3a5f]">
+                  <Upload className="h-4 w-4" />
+                  {planFile ? planFile.name : '选择文件'}
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    onChange={(e) => setPlanFile(e.target.files?.[0] || null)}
+                  />
+                </label>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">活动备案表</label>
-                <div className="flex items-center gap-2">
-                  <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-md border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500 hover:border-[#1e3a5f] hover:text-[#1e3a5f]">
-                    <Upload className="h-4 w-4" />
-                    {recordFile ? recordFile.name : '选择文件'}
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                      onChange={(e) => setRecordFile(e.target.files?.[0] || null)}
-                    />
-                  </label>
-                </div>
-              </div>
+              <p className="mt-2 text-xs text-amber-600">
+                注意：活动备案表和赋分表请在活动审核通过后，通过
+                <Link href="/submit/scoring" className="font-medium underline">赋分材料提交</Link>
+                入口上传
+              </p>
             </div>
           </div>
 

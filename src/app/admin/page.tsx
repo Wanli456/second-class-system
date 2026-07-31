@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   GraduationCap, Lock, LogOut, Table, FileCheck, UserCheck, Award,
   Plus, Pencil, Trash2, Eye, Check, X, Upload, FileText, Image as ImageIcon,
-  ChevronDown, ChevronUp, Search, AlertCircle,
+  ChevronDown, ChevronUp, Search, AlertCircle, Download,
 } from 'lucide-react';
 import {
   Activity, ActivitySubmission, LeaveRequest,
@@ -153,31 +153,38 @@ export default function AdminPage() {
   };
 
   const handleScoring = async (activityId: string, level: string) => {
-    if (!scoringFile) {
-      alert('请上传活动赋分表');
+    const activity = scoringList.find(a => a.id === activityId);
+    if (!activity) {
+      alert('活动不存在');
       return;
     }
 
-    if (level === '校级') {
-      const activity = scoringList.find(a => a.id === activityId);
-      if (!activity?.record_file_url) {
-        alert('校级活动需要活动备案表才能赋分');
-        return;
-      }
+    // 检查是否已上传赋分表
+    if (!activity.scoring_table_url) {
+      alert('活动负责人尚未上传赋分表，无法赋分');
+      return;
+    }
+
+    // 校级活动需要备案表
+    if (level === '校级' && !activity.record_file_url) {
+      alert('校级活动需要活动备案表才能赋分，请等待负责人上传');
+      return;
+    }
+
+    if (!confirm('确认该活动赋分材料齐全，完成赋分？')) {
+      return;
     }
 
     setScoringInProgress(true);
     try {
-      const url = await uploadFile(scoringFile);
       const res = await fetch('/api/scoring', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: activityId, scoring_table_url: url }),
+        body: JSON.stringify({ id: activityId }),
       });
       const data = await res.json();
       if (data.success) {
         alert(data.message || '赋分成功');
-        setScoringFile(null);
         setExpandedScoring(null);
         fetchScoring();
       } else {
@@ -789,55 +796,77 @@ export default function AdminPage() {
                                   onClick={() => setExpandedScoring(expandedScoring === a.id ? null : a.id)}
                                   className="flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-xs font-medium text-white hover:bg-amber-700"
                                 >
-                                  <Award className="h-3 w-3" /> 赋分
+                                  <Eye className="h-3 w-3" /> 查看材料
                                 </button>
                               ) : (
-                                <a href={a.scoring_table_url || '#'} target="_blank" className="text-xs text-[#1e3a5f] hover:underline">查看赋分表</a>
+                                <div className="flex gap-2">
+                                  {a.scoring_table_url && (
+                                    <a href={a.scoring_table_url} target="_blank" download className="flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline">
+                                      <FileText className="h-3 w-3" /> 赋分表
+                                    </a>
+                                  )}
+                                </div>
                               )}
                             </td>
                           </tr>
                           {expandedScoring === a.id && a.scoring_status === '待赋分' && (
                             <tr className="bg-amber-50/50">
                               <td colSpan={7} className="px-3 py-3">
-                                <div className="space-y-2">
+                                <div className="space-y-3">
+                                  <p className="text-xs font-medium text-gray-700">赋分材料（请查看并下载确认）：</p>
                                   <div className="flex flex-wrap gap-3 text-xs">
+                                    {/* 赋分表 */}
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-gray-500">赋分表:</span>
+                                      {a.scoring_table_url ? (
+                                        <div className="flex items-center gap-2">
+                                          <a href={a.scoring_table_url} target="_blank" className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[#1e3a5f] hover:bg-blue-50">
+                                            <FileText className="h-3 w-3" /> 查看
+                                          </a>
+                                          <a href={a.scoring_table_url} download className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-emerald-600 hover:bg-emerald-50">
+                                            <Download className="h-3 w-3" /> 下载
+                                          </a>
+                                        </div>
+                                      ) : (
+                                        <span className="text-red-500">负责人尚未上传赋分表</span>
+                                      )}
+                                    </div>
+                                    {/* 备案表（校级需要） */}
                                     {a.level === '校级' && (
-                                      <div className="flex items-center gap-1">
+                                      <div className="flex items-center gap-2">
                                         <span className="text-gray-500">备案表:</span>
                                         {a.record_file_url ? (
-                                          <a href={a.record_file_url} target="_blank" className="flex items-center gap-1 text-[#1e3a5f] hover:underline">
-                                            <FileText className="h-3 w-3" /> 查看备案表
-                                          </a>
+                                          <div className="flex items-center gap-2">
+                                            <a href={a.record_file_url} target="_blank" className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[#1e3a5f] hover:bg-blue-50">
+                                              <FileText className="h-3 w-3" /> 查看
+                                            </a>
+                                            <a href={a.record_file_url} download className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-emerald-600 hover:bg-emerald-50">
+                                              <Download className="h-3 w-3" /> 下载
+                                            </a>
+                                          </div>
                                         ) : (
                                           <span className="text-red-500">未上传备案表（无法赋分）</span>
                                         )}
                                       </div>
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <label className="flex items-center gap-2 cursor-pointer rounded border border-dashed border-gray-300 px-3 py-1.5 text-xs text-gray-500 hover:border-amber-600 hover:text-amber-600">
-                                      <Upload className="h-3 w-3" />
-                                      {scoringFile ? scoringFile.name : '上传赋分表'}
-                                      <input
-                                        type="file"
-                                        className="hidden"
-                                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx"
-                                        onChange={(e) => setScoringFile(e.target.files?.[0] || null)}
-                                      />
-                                    </label>
+                                  <div className="flex items-center gap-2 border-t border-gray-200 pt-3">
                                     <button
                                       onClick={() => handleScoring(a.id, a.level)}
-                                      disabled={scoringInProgress}
-                                      className="rounded bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                                      disabled={scoringInProgress || !a.scoring_table_url || (a.level === '校级' && !a.record_file_url)}
+                                      className="rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                                     >
                                       {scoringInProgress ? '处理中...' : '确认赋分'}
                                     </button>
                                     <button
-                                      onClick={() => { setExpandedScoring(null); setScoringFile(null); }}
+                                      onClick={() => setExpandedScoring(null)}
                                       className="text-xs text-gray-500 hover:text-gray-700"
                                     >
                                       取消
                                     </button>
+                                    {(!a.scoring_table_url || (a.level === '校级' && !a.record_file_url)) && (
+                                      <span className="text-xs text-amber-600">请等待负责人上传完整材料</span>
+                                    )}
                                   </div>
                                 </div>
                               </td>
