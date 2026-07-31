@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, Fragment } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  GraduationCap, Lock, LogOut, Table, FileCheck, UserCheck, Award,
+  GraduationCap, Lock, LogOut, Table, FileCheck, UserCheck, Award, Users,
   Plus, Pencil, Trash2, Eye, Check, X, Upload, FileText, Image as ImageIcon,
   ChevronDown, ChevronUp, Search, AlertCircle, Download,
 } from 'lucide-react';
@@ -66,6 +66,7 @@ export default function AdminPage() {
   const [submissions, setSubmissions] = useState<ActivitySubmission[]>([]);
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
   const [scoringList, setScoringList] = useState<ScoringActivity[]>([]);
+  const [users, setUsers] = useState<Array<{id: string; username: string; role: string; created_at: string}>>([]);
   const [loading, setLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState('');
@@ -140,6 +141,12 @@ export default function AdminPage() {
     if (data.success) setScoringList(data.data);
   }, []);
 
+  const fetchUsers = useCallback(async () => {
+    const res = await fetch('/api/auth?list=all');
+    const data = await res.json();
+    if (data.success) setUsers(data.data);
+  }, []);
+
   useEffect(() => {
     if (!authenticated || !role) return;
     setLoading(true);
@@ -148,8 +155,9 @@ export default function AdminPage() {
       (role === 'admin' || role === 'publisher') ? fetchSubmissions() : Promise.resolve(),
       role === 'admin' ? fetchLeaves() : Promise.resolve(),
       (role === 'admin' || role === 'scorer') ? fetchScoring() : Promise.resolve(),
+      role === 'admin' ? fetchUsers() : Promise.resolve(),
     ]).finally(() => setLoading(false));
-  }, [authenticated, role, fetchActivities, fetchSubmissions, fetchLeaves, fetchScoring]);
+  }, [authenticated, role, fetchActivities, fetchSubmissions, fetchLeaves, fetchScoring, fetchUsers]);
 
   const handleLoginSuccess = (userData: UserData) => {
     setUser(userData);
@@ -229,6 +237,25 @@ export default function AdminPage() {
       }
     } finally {
       setScoringInProgress(false);
+    }
+  };
+
+  const handleUpdateRole = async (userId: string, newRole: string) => {
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: userId, role: newRole }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchUsers();
+      } else {
+        alert(data.error || '更新角色失败');
+      }
+    } catch (error) {
+      console.error('更新角色失败:', error);
+      alert('更新角色失败');
     }
   };
 
@@ -342,6 +369,7 @@ export default function AdminPage() {
         { key: 'review', label: '活动审核', icon: FileCheck, count: pendingSubmissions.length },
         { key: 'leave', label: '请假审核', icon: UserCheck, count: pendingLeaves.length },
         { key: 'scoring', label: '活动赋分', icon: Award, count: scoringList.filter(s => s.scoring_status === '待赋分').length },
+        { key: 'users', label: '用户管理', icon: Users, count: 0 },
       ]
     : role === 'publisher'
     ? [
@@ -902,6 +930,60 @@ export default function AdminPage() {
                       ))}
                       {scoringList.length === 0 && (
                         <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400">暂无可赋分活动</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Users Tab */}
+            {activeTab === 'users' && (
+              <div className="rounded-lg border border-gray-200 bg-white p-4">
+                <h2 className="mb-4 text-base font-semibold text-gray-800">用户管理</h2>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50">
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">用户名</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">当前角色</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">注册时间</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map((u) => (
+                        <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="px-3 py-2 text-gray-800">{u.username}</td>
+                          <td className="px-3 py-2">
+                            <span className={`rounded px-2 py-0.5 text-xs font-medium ${
+                              u.role === 'admin' ? 'bg-red-100 text-red-700' :
+                              u.role === 'publisher' ? 'bg-blue-100 text-blue-700' :
+                              u.role === 'scorer' ? 'bg-purple-100 text-purple-700' :
+                              u.role === 'leader' ? 'bg-emerald-100 text-emerald-700' :
+                              'bg-gray-100 text-gray-600'
+                            }`}>
+                              {ROLE_LABELS[u.role as AdminRole] || '学生'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-gray-500">{new Date(u.created_at).toLocaleDateString('zh-CN')}</td>
+                          <td className="px-3 py-2">
+                            <select
+                              value={u.role}
+                              onChange={(e) => handleUpdateRole(u.id, e.target.value)}
+                              className="rounded border border-gray-200 px-2 py-1 text-xs"
+                            >
+                              <option value="student">学生</option>
+                              <option value="leader">活动负责人</option>
+                              <option value="publisher">发布干事</option>
+                              <option value="scorer">赋分干事</option>
+                              <option value="admin">管理员</option>
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                      {users.length === 0 && (
+                        <tr><td colSpan={4} className="px-3 py-8 text-center text-gray-400">暂无用户</td></tr>
                       )}
                     </tbody>
                   </table>

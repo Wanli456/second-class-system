@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,8 +18,6 @@ export default function LoginPage() {
   const [registerUsername, setRegisterUsername] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
   const [registerConfirm, setRegisterConfirm] = useState("");
-  const [registerDisplayName, setRegisterDisplayName] = useState("");
-  const [registerRole, setRegisterRole] = useState("student");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -72,8 +70,6 @@ export default function LoginPage() {
         body: JSON.stringify({
           username: registerUsername,
           password: registerPassword,
-          displayName: registerDisplayName || registerUsername,
-          role: registerRole,
         }),
       });
       const data = await res.json();
@@ -140,6 +136,7 @@ export default function LoginPage() {
             </TabsContent>
 
             <TabsContent value="register" className="space-y-4">
+              <p className="text-xs text-gray-500">注册后默认为学生身份，如需其他角色请联系管理员设置</p>
               <div className="space-y-2">
                 <label className="text-sm font-medium">用户名</label>
                 <Input
@@ -148,29 +145,6 @@ export default function LoginPage() {
                   value={registerUsername}
                   onChange={(e) => setRegisterUsername(e.target.value)}
                 />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">显示名称</label>
-                <Input
-                  type="text"
-                  placeholder="可选，如：张三"
-                  value={registerDisplayName}
-                  onChange={(e) => setRegisterDisplayName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">角色</label>
-                <select
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  value={registerRole}
-                  onChange={(e) => setRegisterRole(e.target.value)}
-                >
-                  <option value="student">学生</option>
-                  <option value="leader">活动负责人</option>
-                  <option value="publisher">发布干事</option>
-                  <option value="scorer">赋分干事</option>
-                  <option value="admin">管理员</option>
-                </select>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">密码</label>
