@@ -477,7 +477,7 @@ export default function AdminPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={handleGoHome} className="rounded p-1.5 text-sm text-blue-200 hover:bg-white/10 hover:text-white">首页</button>
+              <button onClick={handleGoHome} className="rounded p-1.5 text-sm text-blue-200 hover:bg-white/10 hover:text-white">返回</button>
               <button onClick={handleLogout} className="flex items-center gap-1 rounded p-1.5 text-sm text-blue-200 hover:bg-white/10 hover:text-white">
                 <LogOut className="h-4 w-4" /> 退出
               </button>

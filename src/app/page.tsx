@@ -36,6 +36,7 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
@@ -58,8 +59,12 @@ export default function Home() {
   };
 
   const handleChangePassword = async () => {
+    if (!oldPassword) {
+      setPasswordMessage('请输入旧密码');
+      return;
+    }
     if (newPassword.length < 6) {
-      setPasswordMessage('密码至少6位');
+      setPasswordMessage('新密码至少6位');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -70,11 +75,12 @@ export default function Home() {
       const res = await fetch('/api/auth', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: user!.id, password: newPassword }),
+        body: JSON.stringify({ id: user!.id, password: newPassword, oldPassword }),
       });
       const data = await res.json();
       if (data.success) {
         setPasswordMessage('密码修改成功');
+        setOldPassword('');
         setNewPassword('');
         setConfirmPassword('');
         setTimeout(() => {
@@ -105,7 +111,7 @@ export default function Home() {
         <header className="border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
           <div className="mx-auto flex max-w-5xl items-center justify-between">
             <button
-              onClick={() => { setShowPasswordModal(false); setPasswordMessage(''); setNewPassword(''); setConfirmPassword(''); }}
+              onClick={() => { setShowPasswordModal(false); setPasswordMessage(''); setOldPassword(''); setNewPassword(''); setConfirmPassword(''); }}
               className="flex items-center gap-1 text-sm text-[#1e3a5f] hover:underline"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -130,6 +136,17 @@ export default function Home() {
               onSubmit={(e) => { e.preventDefault(); handleChangePassword(); }}
               className="space-y-4"
             >
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">旧密码</label>
+                <input
+                  type="password"
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+                  placeholder="请输入旧密码"
+                  required
+                />
+              </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">新密码</label>
                 <input

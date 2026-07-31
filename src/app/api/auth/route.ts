@@ -138,17 +138,36 @@ export async function PATCH(request: NextRequest) {
   try {
     const client = getSupabaseClient();
     const body = await request.json();
-    const { id, role, canPublish, canScore, password } = body;
+    const { id, role, canPublish, canScore, password, oldPassword } = body;
 
     if (!id) {
       return NextResponse.json({ success: false, error: '参数不完整' }, { status: 400 });
     }
 
-    // 修改密码
+    // 修改密码（需要验证旧密码）
     if (password !== undefined) {
-      if (password.length < 6) {
-        return NextResponse.json({ success: false, error: '密码长度至少6位' }, { status: 400 });
+      if (!oldPassword) {
+        return NextResponse.json({ success: false, error: '请输入旧密码' }, { status: 400 });
       }
+      if (password.length < 6) {
+        return NextResponse.json({ success: false, error: '新密码长度至少6位' }, { status: 400 });
+      }
+      
+      // 验证旧密码
+      const { data: userData, error: verifyError } = await client
+        .from('users')
+        .select('password')
+        .eq('id', id)
+        .single();
+      
+      if (verifyError || !userData) {
+        return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
+      }
+      
+      if (userData.password !== oldPassword) {
+        return NextResponse.json({ success: false, error: '旧密码错误' }, { status: 400 });
+      }
+      
       const { error } = await client
         .from('users')
         .update({ password })
