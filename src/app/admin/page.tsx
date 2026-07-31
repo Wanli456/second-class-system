@@ -58,6 +58,7 @@ export default function AdminPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const roleParam = searchParams.get('role') as AdminRole | null;
+  const tabParam = searchParams.get('tab') as string | null;
 
   const [user, setUser] = useState<UserData | null>(null);
   const [authenticated, setAuthenticated] = useState(false);
@@ -72,7 +73,7 @@ export default function AdminPage() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState('');
+  const [activeTab, setActiveTab] = useState(tabParam || '');
   const [editActivity, setEditActivity] = useState<Activity | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [reviewNote, setReviewNote] = useState('');
@@ -301,6 +302,47 @@ export default function AdminPage() {
     } catch (error) {
       console.error('更新权限失败:', error);
       alert('更新权限失败');
+    }
+  };
+
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    if (!confirm(`确定要删除用户"${userName}"吗？此操作不可恢复。`)) return;
+    try {
+      const res = await fetch(`/api/auth?id=${userId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        fetchUsers();
+      } else {
+        alert(data.error || '删除用户失败');
+      }
+    } catch (error) {
+      console.error('删除用户失败:', error);
+      alert('删除用户失败');
+    }
+  };
+
+  const handleChangePassword = async (userId: string, userName: string) => {
+    const newPassword = prompt(`请输入"${userName}"的新密码（至少6位）：`);
+    if (!newPassword) return;
+    if (newPassword.length < 6) {
+      alert('密码长度至少6位');
+      return;
+    }
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: userId, password: newPassword }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('密码修改成功');
+      } else {
+        alert(data.error || '修改密码失败');
+      }
+    } catch (error) {
+      console.error('修改密码失败:', error);
+      alert('修改密码失败');
     }
   };
 
@@ -1043,10 +1085,26 @@ export default function AdminPage() {
                               <option value="admin">管理员</option>
                             </select>
                           </td>
+                          <td className="px-3 py-2">
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => handleChangePassword(u.id, u.name)}
+                                className="text-xs text-blue-600 hover:text-blue-800 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-50"
+                              >
+                                改密
+                              </button>
+                              <button
+                                onClick={() => handleDeleteUser(u.id, u.name)}
+                                className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
+                              >
+                                删除
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                       {users.length === 0 && (
-                        <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400">暂无用户</td></tr>
+                        <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400">暂无用户</td></tr>
                       )}
                     </tbody>
                   </table>

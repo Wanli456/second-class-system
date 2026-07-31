@@ -1,22 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
-// GET /api/activities/submit - 负责人查看自己提交的活动
+// GET /api/activities/submit - 负责人查看自己提交的活动（支持按活动名称搜索）
 export async function GET(request: NextRequest) {
   try {
     const client = getSupabaseClient();
     const { searchParams } = new URL(request.url);
     const phone = searchParams.get('phone');
+    const keyword = searchParams.get('keyword');
 
-    if (!phone) {
-      return NextResponse.json({ success: false, error: '缺少负责人手机号' }, { status: 400 });
+    let query = client.from('activity_submissions').select('*');
+
+    if (phone) {
+      query = query.eq('leader_phone', phone);
+    }
+    if (keyword) {
+      query = query.ilike('full_name', `%${keyword}%`);
     }
 
-    const { data, error } = await client
-      .from('activity_submissions')
-      .select('*')
-      .eq('leader_phone', phone)
-      .order('created_at', { ascending: false });
+    if (!phone && !keyword) {
+      return NextResponse.json({ success: false, error: '缺少查询条件' }, { status: 400 });
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) throw new Error(`查询失败: ${error.message}`);
 

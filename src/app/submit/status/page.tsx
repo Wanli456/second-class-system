@@ -1,125 +1,108 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { GraduationCap, ArrowLeft, Search, RefreshCw, LogIn } from 'lucide-react';
-import { ActivitySubmission, CATEGORY_COLORS, STATUS_COLORS } from '@/lib/types';
+import { useRouter } from 'next/navigation';
+import { Search, RefreshCw, Lock } from 'lucide-react';
+import { CATEGORIES, LEVELS, REVIEW_STATUSES, STATUS_COLORS, CATEGORY_COLORS } from '@/lib/types';
+
+interface Submission {
+  id: string;
+  full_name: string;
+  start_time: string;
+  end_time: string;
+  category: string;
+  level: string;
+  leader_name: string;
+  leader_phone: string;
+  review_status: string;
+  review_note?: string;
+  plan_file_url?: string;
+  record_file_url?: string;
+  created_at: string;
+}
 
 export default function SubmitStatusPage() {
-  const [user, setUser] = useState<any>(null);
-  const [checking, setChecking] = useState(true);
-  const [submissions, setSubmissions] = useState<ActivitySubmission[]>([]);
+  const router = useRouter();
+  const [user, setUser] = useState<{ name: string; role: string } | null>(null);
+  const [keyword, setKeyword] = useState('');
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      setUser(JSON.parse(userData));
+    const saved = localStorage.getItem('user');
+    if (saved) {
+      setUser(JSON.parse(saved));
+    } else {
+      router.push('/login');
     }
-    setChecking(false);
-  }, []);
+  }, [router]);
 
   const handleSearch = async () => {
-    if (!user?.phone) {
-      alert('请先完善个人资料中的手机号');
-      return;
-    }
+    if (!keyword.trim()) return;
     setLoading(true);
     setSearched(true);
     try {
-      const res = await fetch(`/api/activities/submit?phone=${encodeURIComponent(user.phone)}`);
-      const data = await res.json();
-      if (data.success) setSubmissions(data.data);
-      else alert(data.error || '查询失败');
+      const res = await fetch(`/api/activities/submit?keyword=${encodeURIComponent(keyword.trim())}`);
+      const result = await res.json();
+      if (result.success) {
+        setSubmissions(result.data);
+      }
+    } catch (err) {
+      console.error('查询失败:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // 登录检查
-  if (checking) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0]">
-        <p className="text-gray-500">加载中...</p>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0] p-4">
-        <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#1e3a5f]/10">
-            <LogIn className="h-6 w-6 text-[#1e3a5f]" />
-          </div>
-          <h2 className="mb-2 text-lg font-semibold text-gray-900">需要登录</h2>
-          <p className="mb-6 text-sm text-gray-500">活动负责人需要登录后才能查看提交状态</p>
-          <Link
-            href="/login?redirect=/submit/status"
-            className="inline-flex w-full items-center justify-center rounded-md bg-[#1e3a5f] px-4 py-2 text-sm font-medium text-white hover:bg-[#1e3a5f]/90"
-          >
-            登录/注册
-          </Link>
-          <Link href="/" className="mt-3 block text-sm text-gray-500 hover:text-[#1e3a5f]">返回首页</Link>
-        </div>
-      </div>
-    );
-  }
+  if (!user) return null;
 
   return (
     <div className="min-h-screen bg-[#f5f5f0]">
-      <header className="bg-[#1e3a5f] text-white">
-        <div className="mx-auto max-w-6xl px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Link href="/" className="rounded p-1 hover:bg-white/10">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-              <GraduationCap className="h-6 w-6" />
-              <h1 className="text-lg font-bold">提交状态查询</h1>
-            </div>
-            <span className="text-sm text-white/80">{user.displayName || user.username}</span>
-          </div>
+      {/* Header */}
+      <header className="border-b border-gray-200 bg-white shadow-sm">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+          <button onClick={() => router.push('/')} className="flex items-center gap-2 text-[#1e3a5f] hover:underline">
+            <span className="text-lg">←</span>
+            <span className="font-medium">返回首页</span>
+          </button>
+          <h1 className="text-lg font-semibold text-gray-900">提交状态查询</h1>
+          <div className="text-sm text-gray-600">欢迎，{user.name}</div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-8">
+      <main className="mx-auto max-w-5xl px-4 py-6">
         {/* Search */}
-        <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="flex items-end gap-3">
-            <div className="flex-1">
-              <label className="mb-1 block text-sm font-medium text-gray-700">负责人手机号</label>
-              <input
-                type="text"
-                value={user.phone || ''}
-                readOnly
-                className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600"
-                placeholder="请先在个人资料中填写手机号"
-              />
-            </div>
+        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+          <label className="mb-2 block text-sm font-medium text-gray-700">按活动名称查询</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={keyword}
+              onChange={e => setKeyword(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSearch()}
+              placeholder="输入活动名称关键字..."
+              className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+            />
             <button
               onClick={handleSearch}
-              disabled={loading || !user.phone}
+              disabled={loading || !keyword.trim()}
               className="flex items-center gap-1 rounded-md bg-[#1e3a5f] px-4 py-2 text-sm text-white hover:bg-[#1e3a5f]/90 disabled:opacity-50"
             >
               <Search className="h-4 w-4" />
               查询
             </button>
           </div>
-          {!user.phone && (
-            <p className="mt-2 text-xs text-amber-600">请先在个人资料中填写手机号</p>
-          )}
         </div>
 
         {/* Results */}
         {searched && (
-          <div className="space-y-3">
+          <div className="mt-4 space-y-3">
             {loading ? (
               <div className="py-8 text-center text-gray-400">查询中...</div>
             ) : submissions.length === 0 ? (
               <div className="rounded-lg border border-gray-200 bg-white py-8 text-center shadow-sm">
-                <p className="text-gray-400">未找到该手机号提交的记录</p>
+                <p className="text-gray-400">未找到相关提交记录</p>
               </div>
             ) : (
               <>

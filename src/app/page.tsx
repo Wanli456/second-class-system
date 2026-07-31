@@ -153,9 +153,9 @@ export default function Home() {
               {adminState === 'grayed' && <p className="mt-1 text-xs text-gray-400">（无此权限）</p>}
             </Link>
 
-            {/* 发布干事 */}
+            {/* 发布活动 */}
             <Link
-              href={publisherState === 'active' ? "/admin?role=publisher" : "#"}
+              href={publisherState === 'active' ? "/admin?tab=review" : "#"}
               onClick={(e) => {
                 if (publisherState === 'locked') { e.preventDefault(); handleRoleClick('publisher'); }
                 if (publisherState === 'grayed') { e.preventDefault(); }
@@ -183,7 +183,7 @@ export default function Home() {
 
             {/* 赋分干事 */}
             <Link
-              href={scorerState === 'active' ? "/admin?role=scorer" : "#"}
+              href={scorerState === 'active' ? "/admin?tab=scoring" : "#"}
               onClick={(e) => {
                 if (scorerState === 'locked') { e.preventDefault(); handleRoleClick('scorer'); }
                 if (scorerState === 'grayed') { e.preventDefault(); }

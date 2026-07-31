@@ -133,16 +133,31 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PATCH /api/auth - 更新用户角色和权限
+// PATCH /api/auth - 更新用户角色、权限或密码
 export async function PATCH(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const { id, role, canPublish, canScore } = await request.json();
+    const body = await request.json();
+    const { id, role, canPublish, canScore, password } = body;
 
     if (!id) {
       return NextResponse.json({ success: false, error: '参数不完整' }, { status: 400 });
     }
 
+    // 修改密码
+    if (password !== undefined) {
+      if (password.length < 6) {
+        return NextResponse.json({ success: false, error: '密码长度至少6位' }, { status: 400 });
+      }
+      const { error } = await client
+        .from('users')
+        .update({ password })
+        .eq('id', id);
+      if (error) throw new Error(`修改密码失败: ${error.message}`);
+      return NextResponse.json({ success: true, message: '密码修改成功' });
+    }
+
+    // 更新角色和权限
     const validRoles = ['student', 'leader', 'admin'];
     if (role && !validRoles.includes(role)) {
       return NextResponse.json({ success: false, error: '无效的角色' }, { status: 400 });
@@ -176,5 +191,30 @@ export async function PATCH(request: NextRequest) {
   } catch (error) {
     console.error('更新用户失败:', error);
     return NextResponse.json({ success: false, error: '更新用户失败' }, { status: 500 });
+  }
+}
+
+// DELETE /api/auth - 删除用户
+export async function DELETE(request: NextRequest) {
+  try {
+    const client = getSupabaseClient();
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: '缺少用户ID' }, { status: 400 });
+    }
+
+    const { error } = await client
+      .from('users')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw new Error(`删除失败: ${error.message}`);
+
+    return NextResponse.json({ success: true, message: '删除成功' });
+  } catch (error) {
+    console.error('删除用户失败:', error);
+    return NextResponse.json({ success: false, error: '删除用户失败' }, { status: 500 });
   }
 }
