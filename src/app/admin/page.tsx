@@ -162,7 +162,13 @@ export default function AdminPage() {
   const handleLoginSuccess = (userData: UserData) => {
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
-    if (roleParam && userData.role === roleParam) {
+    // Admin can access all roles and see all tabs
+    if (userData.role === 'admin') {
+      setAuthenticated(true);
+      setRole('admin'); // Admin sees all tabs
+      setLoginError('');
+      setShowLoginModal(false);
+    } else if (roleParam && userData.role === roleParam) {
       setAuthenticated(true);
       setLoginError('');
       setShowLoginModal(false);
