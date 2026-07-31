@@ -1,18 +1,63 @@
 'use client';
 
 import Link from 'next/link';
-import { FileText, UserCheck, GraduationCap, ClipboardList, Award, Send, Moon } from 'lucide-react';
+import { FileText, UserCheck, GraduationCap, ClipboardList, Award, Send, Moon, LogIn, LogOut } from 'lucide-react';
+import { useEffect, useState } from 'react';
+
+interface User {
+  id: string;
+  username: string;
+  displayName: string;
+}
 
 export default function HomePage() {
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('user');
+    if (stored) {
+      setUser(JSON.parse(stored));
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('user');
+    setUser(null);
+  };
+
   return (
     <div className="min-h-screen">
       <header className="bg-[#1e3a5f] text-white">
         <div className="mx-auto max-w-6xl px-4 py-6">
-          <div className="flex items-center gap-3">
-            <GraduationCap className="h-8 w-8" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <GraduationCap className="h-8 w-8" />
+              <div>
+                <h1 className="text-2xl font-bold">二课活动管理系统</h1>
+                <p className="text-sm text-blue-200">第二课堂活动管理与请假申请</p>
+              </div>
+            </div>
             <div>
-              <h1 className="text-2xl font-bold">二课活动管理系统</h1>
-              <p className="text-sm text-blue-200">第二课堂活动管理与请假申请</p>
+              {user ? (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-blue-200">欢迎，{user.displayName}</span>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center gap-1 rounded-lg bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    退出
+                  </button>
+                </div>
+              ) : (
+                <Link
+                  href="/login"
+                  className="flex items-center gap-1 rounded-lg bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors"
+                >
+                  <LogIn className="h-4 w-4" />
+                  登录/注册
+                </Link>
+              )}
             </div>
           </div>
         </div>

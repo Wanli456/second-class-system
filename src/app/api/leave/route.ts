@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
     const client = getSupabaseClient();
     const { searchParams } = new URL(request.url);
     const studentId = searchParams.get('student_id');
+    const studentName = searchParams.get('name');
     const status = searchParams.get('status');
     const role = searchParams.get('role'); // admin or student
     const className = searchParams.get('class'); // 按班级查询
@@ -17,6 +18,21 @@ export async function GET(request: NextRequest) {
         .from('leave_requests')
         .select('*')
         .ilike('class_name', `%${className}%`)
+        .order('created_at', { ascending: false });
+
+      if (status) query = query.eq('review_status', status);
+
+      const { data, error } = await query;
+      if (error) throw new Error(`查询失败: ${error.message}`);
+      return NextResponse.json({ success: true, data });
+    }
+
+    // 按姓名查询（晚自习查询用）
+    if (studentName) {
+      let query = client
+        .from('leave_requests')
+        .select('*')
+        .ilike('student_name', `%${studentName}%`)
         .order('created_at', { ascending: false });
 
       if (status) query = query.eq('review_status', status);
