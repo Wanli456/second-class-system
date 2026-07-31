@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
-  ClipboardList, Send, Award, FileText, UserCheck, Moon, Lock, LogOut,
+  ClipboardList, Send, Award, FileText, UserCheck, Moon, Lock, LogOut, Key, ArrowLeft,
 } from 'lucide-react';
 
 interface User {
@@ -35,6 +35,10 @@ function getLeaderButtonState(user: User | null): 'active' | 'grayed' | 'locked'
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordMessage, setPasswordMessage] = useState('');
 
   useEffect(() => {
     const saved = localStorage.getItem('user');
@@ -53,6 +57,38 @@ export default function Home() {
     setUser(null);
   };
 
+  const handleChangePassword = async () => {
+    if (newPassword.length < 6) {
+      setPasswordMessage('密码至少6位');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordMessage('两次密码不一致');
+      return;
+    }
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: user!.id, password: newPassword }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPasswordMessage('密码修改成功');
+        setNewPassword('');
+        setConfirmPassword('');
+        setTimeout(() => {
+          setShowPasswordModal(false);
+          setPasswordMessage('');
+        }, 1500);
+      } else {
+        setPasswordMessage(data.error || '修改失败');
+      }
+    } catch {
+      setPasswordMessage('网络错误');
+    }
+  };
+
   const handleRoleClick = (_role: string) => {
     setShowLoginModal(true);
   };
@@ -61,6 +97,82 @@ export default function Home() {
   const publisherState = getButtonState(user, 'publisher');
   const scorerState = getButtonState(user, 'scorer');
   const leaderState = getLeaderButtonState(user);
+
+  // 修改密码页面
+  if (showPasswordModal) {
+    return (
+      <div className="min-h-screen bg-[#f5f5f0]">
+        <header className="border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
+          <div className="mx-auto flex max-w-5xl items-center justify-between">
+            <button
+              onClick={() => { setShowPasswordModal(false); setPasswordMessage(''); setNewPassword(''); setConfirmPassword(''); }}
+              className="flex items-center gap-1 text-sm text-[#1e3a5f] hover:underline"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              返回首页
+            </button>
+            <h1 className="text-lg font-bold text-gray-900">修改密码</h1>
+            <div className="w-20" />
+          </div>
+        </header>
+
+        <main className="mx-auto max-w-md px-6 py-12">
+          <div className="rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
+            <div className="mb-6 text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#1e3a5f]/10">
+                <Key className="h-6 w-6 text-[#1e3a5f]" />
+              </div>
+              <h2 className="text-lg font-bold text-gray-900">修改密码</h2>
+              <p className="mt-1 text-sm text-gray-500">欢迎，{user?.name}</p>
+            </div>
+
+            <form
+              onSubmit={(e) => { e.preventDefault(); handleChangePassword(); }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">新密码</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+                  placeholder="请输入新密码（至少6位）"
+                  required
+                  minLength={6}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">确认新密码</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+                  placeholder="请再次输入新密码"
+                  required
+                  minLength={6}
+                />
+              </div>
+
+              {passwordMessage && (
+                <p className={`text-sm ${passwordMessage.includes('成功') ? 'text-green-500' : 'text-red-500'}`}>
+                  {passwordMessage}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                className="w-full rounded-lg bg-[#1e3a5f] py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#2a4f7f]"
+              >
+                确认修改
+              </button>
+            </form>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f5f5f0]">
@@ -80,6 +192,13 @@ export default function Home() {
             {user ? (
               <>
                 <span className="text-sm text-gray-600">欢迎，{user.name}</span>
+                <button
+                  onClick={() => setShowPasswordModal(true)}
+                  className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-50"
+                >
+                  <Key className="h-4 w-4" />
+                  修改密码
+                </button>
                 <button
                   onClick={handleLogout}
                   className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-50"
