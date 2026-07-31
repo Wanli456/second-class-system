@@ -7,7 +7,8 @@ import { useEffect, useState } from 'react';
 interface User {
   id: string;
   username: string;
-  displayName: string;
+  studentId?: string;
+  role?: string;
 }
 
 export default function HomePage() {
@@ -59,7 +60,7 @@ export default function HomePage() {
             <div>
               {user ? (
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-blue-200">欢迎，{user.displayName}</span>
+                  <span className="text-sm text-blue-200">欢迎，{user.username}</span>
                   <button
                     onClick={handleLogout}
                     className="flex items-center gap-1 rounded-lg bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20 transition-colors"
