@@ -44,15 +44,23 @@ interface ScoringActivity {
   status: string;
 }
 
+interface UserData {
+  id: string;
+  username: string;
+  displayName: string;
+  role: string;
+}
+
 export default function AdminPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const roleParam = searchParams.get('role') as AdminRole | null;
 
+  const [user, setUser] = useState<UserData | null>(null);
   const [authenticated, setAuthenticated] = useState(false);
   const [role, setRole] = useState<AdminRole | null>(roleParam);
-  const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   const [activities, setActivities] = useState<Activity[]>([]);
   const [submissions, setSubmissions] = useState<ActivitySubmission[]>([]);
@@ -75,6 +83,24 @@ export default function AdminPage() {
   useEffect(() => {
     if (roleParam && ['admin', 'publisher', 'scorer'].includes(roleParam)) {
       setRole(roleParam as AdminRole);
+    }
+  }, [roleParam]);
+
+  // Check if user is logged in
+  useEffect(() => {
+    const stored = localStorage.getItem('user');
+    if (stored) {
+      const userData = JSON.parse(stored);
+      setUser(userData);
+      // Check if user has the required role
+      if (roleParam && userData.role === roleParam) {
+        setAuthenticated(true);
+      } else if (roleParam && userData.role !== roleParam) {
+        setLoginError(`当前账号不是${ROLE_LABELS[roleParam]}角色`);
+        setShowLoginModal(true);
+      }
+    } else {
+      setShowLoginModal(true);
     }
   }, [roleParam]);
 
@@ -125,26 +151,30 @@ export default function AdminPage() {
     ]).finally(() => setLoading(false));
   }, [authenticated, role, fetchActivities, fetchSubmissions, fetchLeaves, fetchScoring]);
 
-  const handleLogin = () => {
-    if (!role) return;
-    if (password === ROLE_PASSWORDS[role]) {
+  const handleLoginSuccess = (userData: UserData) => {
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
+    if (roleParam && userData.role === roleParam) {
       setAuthenticated(true);
       setLoginError('');
-    } else {
-      setLoginError('密码错误');
+      setShowLoginModal(false);
+    } else if (roleParam && userData.role !== roleParam) {
+      setLoginError(`当前账号不是${ROLE_LABELS[roleParam]}角色`);
     }
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('user');
+    setUser(null);
     setAuthenticated(false);
-    setPassword('');
     setRole(null);
-    // 退出后回到登录页面（不跳转首页）
+    setShowLoginModal(true);
   };
 
   const handleGoHome = () => {
+    localStorage.removeItem('user');
+    setUser(null);
     setAuthenticated(false);
-    setPassword('');
     setRole(null);
     router.push('/');
   };
@@ -251,7 +281,7 @@ export default function AdminPage() {
   const pendingSubmissions = submissions.filter(s => s.review_status === '待审核');
   const pendingLeaves = leaves.filter(l => l.review_status === '待审核');
 
-  // Login screen
+  // Login modal when not authenticated
   if (!authenticated) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0]">
@@ -281,34 +311,23 @@ export default function AdminPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">密码</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setLoginError(''); }}
-                  onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
-                  placeholder="请输入密码"
-                  autoFocus
-                />
-                {loginError && <p className="mt-1 text-xs text-red-500">{loginError}</p>}
-              </div>
-              <button
-                onClick={handleLogin}
-                className="w-full rounded-md bg-[#1e3a5f] px-4 py-2 text-sm font-medium text-white hover:bg-[#1e3a5f]/90"
+              <p className="text-sm text-gray-600">请使用账号登录以访问{ROLE_LABELS[role]}功能</p>
+              <Link
+                href={`/login?redirect=/admin?role=${role}`}
+                className="block w-full rounded-md bg-[#1e3a5f] px-4 py-2 text-center text-sm font-medium text-white hover:bg-[#1e3a5f]/90"
               >
-                登录
-              </button>
+                登录/注册
+              </Link>
               <div className="flex items-center justify-between">
                 <button
-                  onClick={() => { setRole(null); setPassword(''); setLoginError(''); }}
+                  onClick={() => { setRole(null); setLoginError(''); }}
                   className="text-sm text-gray-500 hover:text-[#1e3a5f]"
                 >
                   切换角色
                 </button>
                 <Link href="/" className="text-sm text-gray-500 hover:text-[#1e3a5f]">返回首页</Link>
               </div>
+              {loginError && <p className="text-center text-xs text-red-500">{loginError}</p>}
             </div>
           )}
         </div>

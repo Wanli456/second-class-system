@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,12 +10,16 @@ import { User, Lock, UserPlus, LogIn } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get("redirect") || "/";
+  
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [registerUsername, setRegisterUsername] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
   const [registerConfirm, setRegisterConfirm] = useState("");
   const [registerDisplayName, setRegisterDisplayName] = useState("");
+  const [registerRole, setRegisterRole] = useState("student");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -34,10 +38,8 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (data.success) {
-        // 存储登录状态
         localStorage.setItem("user", JSON.stringify(data.data));
-        // 跳转到二课活动管理系统
-        router.push("/");
+        router.push(redirect);
       } else {
         setError(data.error || "登录失败");
       }
@@ -54,7 +56,11 @@ export default function LoginPage() {
       return;
     }
     if (registerPassword !== registerConfirm) {
-      setError("两次输入的密码不一致");
+      setError("两次密码不一致");
+      return;
+    }
+    if (registerPassword.length < 6) {
+      setError("密码至少6位");
       return;
     }
     setLoading(true);
@@ -67,13 +73,13 @@ export default function LoginPage() {
           username: registerUsername,
           password: registerPassword,
           displayName: registerDisplayName || registerUsername,
+          role: registerRole,
         }),
       });
       const data = await res.json();
       if (data.success) {
-        // 注册成功后自动登录
         localStorage.setItem("user", JSON.stringify(data.data));
-        router.push("/");
+        router.push(redirect);
       } else {
         setError(data.error || "注册失败");
       }
@@ -85,114 +91,112 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#f5f5f0] to-white flex items-center justify-center p-4">
-      <Card className="w-full max-w-md border-[#1e3a5f]/10">
+    <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0] p-4">
+      <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold text-[#1e3a5f]">二课活动管理系统</CardTitle>
-          <CardDescription>登录或注册账号以继续使用</CardDescription>
+          <CardTitle className="text-2xl">账号登录</CardTitle>
+          <CardDescription>登录后可使用完整功能</CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="login">
-            <TabsList className="grid w-full grid-cols-2 mb-4">
-              <TabsTrigger value="login">
-                <LogIn className="h-4 w-4 mr-2" />
-                登录
-              </TabsTrigger>
-              <TabsTrigger value="register">
-                <UserPlus className="h-4 w-4 mr-2" />
-                注册
-              </TabsTrigger>
+          <Tabs defaultValue="login" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="login">登录</TabsTrigger>
+              <TabsTrigger value="register">注册</TabsTrigger>
             </TabsList>
-
+            
             <TabsContent value="login" className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">用户名</label>
+                <label className="text-sm font-medium">用户名</label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <Input
+                    type="text"
                     placeholder="请输入用户名"
+                    className="pl-10"
                     value={loginUsername}
                     onChange={(e) => setLoginUsername(e.target.value)}
-                    className="pl-10"
                   />
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">密码</label>
+                <label className="text-sm font-medium">密码</label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <Input
                     type="password"
                     placeholder="请输入密码"
+                    className="pl-10"
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
-                    className="pl-10"
+                    onKeyDown={(e) => e.key === "Enter" && handleLogin()}
                   />
                 </div>
               </div>
               {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button
-                onClick={handleLogin}
-                disabled={loading}
-                className="w-full bg-[#1e3a5f] hover:bg-[#152a45]"
-              >
+              <Button className="w-full" onClick={handleLogin} disabled={loading}>
+                <LogIn className="mr-2 h-4 w-4" />
                 {loading ? "登录中..." : "登录"}
               </Button>
             </TabsContent>
 
             <TabsContent value="register" className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">用户名</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="请输入用户名"
-                    value={registerUsername}
-                    onChange={(e) => setRegisterUsername(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
+                <label className="text-sm font-medium">用户名</label>
+                <Input
+                  type="text"
+                  placeholder="请输入用户名"
+                  value={registerUsername}
+                  onChange={(e) => setRegisterUsername(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">显示名称（可选）</label>
+                <label className="text-sm font-medium">显示名称</label>
                 <Input
-                  placeholder="请输入显示名称"
+                  type="text"
+                  placeholder="可选，如：张三"
                   value={registerDisplayName}
                   onChange={(e) => setRegisterDisplayName(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">密码</label>
+                <label className="text-sm font-medium">角色</label>
+                <select
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  value={registerRole}
+                  onChange={(e) => setRegisterRole(e.target.value)}
+                >
+                  <option value="student">学生</option>
+                  <option value="leader">活动负责人</option>
+                  <option value="publisher">发布干事</option>
+                  <option value="scorer">赋分干事</option>
+                  <option value="admin">管理员</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">密码</label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <Input
                     type="password"
-                    placeholder="请输入密码"
+                    placeholder="请输入密码（至少6位）"
+                    className="pl-10"
                     value={registerPassword}
                     onChange={(e) => setRegisterPassword(e.target.value)}
-                    className="pl-10"
                   />
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">确认密码</label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    type="password"
-                    placeholder="请再次输入密码"
-                    value={registerConfirm}
-                    onChange={(e) => setRegisterConfirm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
+                <label className="text-sm font-medium">确认密码</label>
+                <Input
+                  type="password"
+                  placeholder="请再次输入密码"
+                  value={registerConfirm}
+                  onChange={(e) => setRegisterConfirm(e.target.value)}
+                />
               </div>
               {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button
-                onClick={handleRegister}
-                disabled={loading}
-                className="w-full bg-[#1e3a5f] hover:bg-[#152a45]"
-              >
+              <Button className="w-full" onClick={handleRegister} disabled={loading}>
+                <UserPlus className="mr-2 h-4 w-4" />
                 {loading ? "注册中..." : "注册"}
               </Button>
             </TabsContent>

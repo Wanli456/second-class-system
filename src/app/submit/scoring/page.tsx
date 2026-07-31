@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { GraduationCap, ArrowLeft, Upload, FileText, Search, CheckCircle2, AlertCircle } from 'lucide-react';
+import { GraduationCap, ArrowLeft, Upload, FileText, Search, CheckCircle2, AlertCircle, LogIn } from 'lucide-react';
 import { LEVELS, SCORING_STATUSES } from '@/lib/types';
 
 interface Activity {
@@ -18,6 +18,8 @@ interface Activity {
 }
 
 export default function SubmitScoringPage() {
+  const [user, setUser] = useState<any>(null);
+  const [checking, setChecking] = useState(true);
   const [activityName, setActivityName] = useState('');
   const [searched, setSearched] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -28,6 +30,14 @@ export default function SubmitScoringPage() {
   const [selectedActivityId, setSelectedActivityId] = useState<string>('');
   const [submittedActivityId, setSubmittedActivityId] = useState<string | null>(null);
   const [showResubmit, setShowResubmit] = useState(false);
+
+  useEffect(() => {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      setUser(JSON.parse(userData));
+    }
+    setChecking(false);
+  }, []);
 
   const handleSearch = async () => {
     if (!activityName) {
@@ -121,16 +131,49 @@ export default function SubmitScoringPage() {
 
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
 
+  // 登录检查
+  if (checking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0]">
+        <p className="text-gray-500">加载中...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0] p-4">
+        <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#1e3a5f]/10">
+            <LogIn className="h-6 w-6 text-[#1e3a5f]" />
+          </div>
+          <h2 className="mb-2 text-lg font-semibold text-gray-900">需要登录</h2>
+          <p className="mb-6 text-sm text-gray-500">活动负责人需要登录后才能提交赋分材料</p>
+          <Link
+            href="/login?redirect=/submit/scoring"
+            className="inline-flex w-full items-center justify-center rounded-md bg-[#1e3a5f] px-4 py-2 text-sm font-medium text-white hover:bg-[#1e3a5f]/90"
+          >
+            登录/注册
+          </Link>
+          <Link href="/" className="mt-3 block text-sm text-gray-500 hover:text-[#1e3a5f]">返回首页</Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f5f5f0]">
       <header className="bg-[#1e3a5f] text-white">
         <div className="mx-auto max-w-6xl px-4 py-4">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="rounded p-1 hover:bg-white/10">
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-            <GraduationCap className="h-6 w-6" />
-            <h1 className="text-lg font-bold">赋分材料提交</h1>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Link href="/" className="rounded p-1 hover:bg-white/10">
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
+              <GraduationCap className="h-6 w-6" />
+              <h1 className="text-lg font-bold">赋分材料提交</h1>
+            </div>
+            <span className="text-sm text-white/80">{user.displayName || user.username}</span>
           </div>
         </div>
       </header>

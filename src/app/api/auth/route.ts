@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
-// POST /api/auth/register - 注册
+// POST /api/auth - 注册
 export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const { username, password, displayName } = await request.json();
+    const { username, password, displayName, role } = await request.json();
 
     if (!username || !password) {
       return NextResponse.json({ success: false, error: '用户名和密码不能为空' }, { status: 400 });
@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
         username,
         password, // 注意：实际生产环境应该加密密码
         display_name: displayName || username,
+        role: role || 'student',
       })
       .select()
       .single();
@@ -40,7 +41,8 @@ export async function POST(request: NextRequest) {
       data: { 
         id: data.id, 
         username: data.username, 
-        displayName: data.display_name 
+        displayName: data.display_name,
+        role: data.role,
       } 
     });
   } catch (error) {
@@ -49,7 +51,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// POST /api/auth/login - 登录
+// PUT /api/auth - 登录
 export async function PUT(request: NextRequest) {
   try {
     const client = getSupabaseClient();
@@ -77,7 +79,8 @@ export async function PUT(request: NextRequest) {
       data: { 
         id: data.id, 
         username: data.username, 
-        displayName: data.display_name 
+        displayName: data.display_name,
+        role: data.role,
       } 
     });
   } catch (error) {
