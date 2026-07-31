@@ -129,9 +129,12 @@ export default function HomePage() {
             </Link>
 
             <Link
-              href={user ? "/admin?role=publisher" : "#"}
-              onClick={(e) => { if (!user) { e.preventDefault(); handleRoleClick('publisher'); } }}
-              className={`group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-[#1e3a5f] hover:shadow-md ${!user ? 'relative' : ''}`}
+              href={user && user.role !== 'admin' ? "/admin?role=publisher" : "#"}
+              onClick={(e) => { 
+                if (!user) { e.preventDefault(); handleRoleClick('publisher'); }
+                if (user?.role === 'admin') { e.preventDefault(); }
+              }}
+              className={`group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all ${user?.role === 'admin' ? 'opacity-50 cursor-not-allowed' : 'hover:border-[#1e3a5f] hover:shadow-md'} ${!user ? 'relative' : ''}`}
             >
               {!user && (
                 <div className="absolute top-2 right-2">
@@ -143,12 +146,16 @@ export default function HomePage() {
               </div>
               <h4 className="font-semibold text-gray-900 group-hover:text-[#1e3a5f]">发布干事</h4>
               <p className="mt-1 text-xs text-gray-500">活动审核（含策划书、备案表查看）</p>
+              {user?.role === 'admin' && <p className="mt-1 text-xs text-gray-400">（管理员已包含此权限）</p>}
             </Link>
 
             <Link
-              href={user ? "/admin?role=scorer" : "#"}
-              onClick={(e) => { if (!user) { e.preventDefault(); handleRoleClick('scorer'); } }}
-              className={`group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-[#1e3a5f] hover:shadow-md ${!user ? 'relative' : ''}`}
+              href={user && user.role !== 'admin' ? "/admin?role=scorer" : "#"}
+              onClick={(e) => { 
+                if (!user) { e.preventDefault(); handleRoleClick('scorer'); }
+                if (user?.role === 'admin') { e.preventDefault(); }
+              }}
+              className={`group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all ${user?.role === 'admin' ? 'opacity-50 cursor-not-allowed' : 'hover:border-[#1e3a5f] hover:shadow-md'} ${!user ? 'relative' : ''}`}
             >
               {!user && (
                 <div className="absolute top-2 right-2">
@@ -160,6 +167,7 @@ export default function HomePage() {
               </div>
               <h4 className="font-semibold text-gray-900 group-hover:text-[#1e3a5f]">赋分干事</h4>
               <p className="mt-1 text-xs text-gray-500">活动赋分管理</p>
+              {user?.role === 'admin' && <p className="mt-1 text-xs text-gray-400">（管理员已包含此权限）</p>}
             </Link>
           </div>
         </div>
