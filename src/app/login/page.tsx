@@ -6,14 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User, Lock, UserPlus, LogIn, Hash } from "lucide-react";
+import { User, Lock, LogIn, Hash } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect") || "/";
   
-  const [loginUsername, setLoginUsername] = useState("");
+  const [loginStudentId, setLoginStudentId] = useState("");
+  const [loginName, setLoginName] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [registerStudentId, setRegisterStudentId] = useState("");
   const [registerName, setRegisterName] = useState("");
@@ -23,8 +24,8 @@ export default function LoginPage() {
   const [error, setError] = useState("");
 
   const handleLogin = async () => {
-    if (!loginUsername || !loginPassword) {
-      setError("请输入学号和密码");
+    if (!loginStudentId || !loginName || !loginPassword) {
+      setError("请输入学号、姓名和密码");
       return;
     }
     setLoading(true);
@@ -33,7 +34,11 @@ export default function LoginPage() {
       const res = await fetch("/api/auth", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: loginUsername, password: loginPassword }),
+        body: JSON.stringify({ 
+          studentId: loginStudentId, 
+          name: loginName, 
+          password: loginPassword 
+        }),
       });
       const data = await res.json();
       if (data.success) {
@@ -111,8 +116,21 @@ export default function LoginPage() {
                     type="text"
                     placeholder="请输入学号"
                     className="pl-10"
-                    value={loginUsername}
-                    onChange={(e) => setLoginUsername(e.target.value)}
+                    value={loginStudentId}
+                    onChange={(e) => setLoginStudentId(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">姓名</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    type="text"
+                    placeholder="请输入姓名"
+                    className="pl-10"
+                    value={loginName}
+                    onChange={(e) => setLoginName(e.target.value)}
                   />
                 </div>
               </div>
@@ -180,16 +198,20 @@ export default function LoginPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">确认密码</label>
-                <Input
-                  type="password"
-                  placeholder="请再次输入密码"
-                  value={registerConfirm}
-                  onChange={(e) => setRegisterConfirm(e.target.value)}
-                />
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    type="password"
+                    placeholder="请再次输入密码"
+                    className="pl-10"
+                    value={registerConfirm}
+                    onChange={(e) => setRegisterConfirm(e.target.value)}
+                  />
+                </div>
               </div>
               {error && <p className="text-sm text-red-500">{error}</p>}
               <Button className="w-full" onClick={handleRegister} disabled={loading}>
-                <UserPlus className="mr-2 h-4 w-4" />
+                <User className="mr-2 h-4 w-4" />
                 {loading ? "注册中..." : "注册"}
               </Button>
             </TabsContent>

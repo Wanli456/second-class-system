@@ -57,30 +57,32 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const { username, password } = await request.json();
+    const { studentId, name, password } = await request.json();
 
-    if (!username || !password) {
-      return NextResponse.json({ success: false, error: '用户名和密码不能为空' }, { status: 400 });
+    if (!studentId || !name || !password) {
+      return NextResponse.json({ success: false, error: '学号、姓名和密码不能为空' }, { status: 400 });
     }
 
     const { data, error } = await client
       .from('users')
       .select('*')
-      .eq('username', username)
+      .eq('student_id', studentId)
+      .eq('username', name)
       .eq('password', password)
       .maybeSingle();
 
     if (error) throw new Error(`登录失败: ${error.message}`);
 
     if (!data) {
-      return NextResponse.json({ success: false, error: '用户名或密码错误' }, { status: 401 });
+      return NextResponse.json({ success: false, error: '学号、姓名或密码错误' }, { status: 401 });
     }
 
     return NextResponse.json({ 
       success: true, 
       data: { 
         id: data.id, 
-        username: data.username, 
+        studentId: data.student_id,
+        name: data.username, 
         role: data.role,
       } 
     });
