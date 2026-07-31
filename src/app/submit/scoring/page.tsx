@@ -26,6 +26,8 @@ export default function SubmitScoringPage() {
   const [scoringFile, setScoringFile] = useState<File | null>(null);
   const [recordFile, setRecordFile] = useState<File | null>(null);
   const [selectedActivityId, setSelectedActivityId] = useState<string>('');
+  const [submittedActivityId, setSubmittedActivityId] = useState<string | null>(null);
+  const [showResubmit, setShowResubmit] = useState(false);
 
   const handleSearch = async () => {
     if (!activityName) {
@@ -102,9 +104,11 @@ export default function SubmitScoringPage() {
       const data = await res.json();
       if (data.success) {
         alert('赋分材料提交成功！');
+        setSubmittedActivityId(selectedActivityId);
         setScoringFile(null);
         setRecordFile(null);
         setSelectedActivityId('');
+        setShowResubmit(false);
         // Refresh activities
         handleSearch();
       } else {
@@ -274,6 +278,28 @@ export default function SubmitScoringPage() {
               >
                 {uploadingId ? '提交中...' : '提交赋分材料'}
               </button>
+
+              {/* 重新提交按钮 */}
+              {submittedActivityId && !showResubmit && (
+                <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="flex items-center gap-2 text-emerald-700">
+                    <CheckCircle2 className="h-5 w-5" />
+                    <span className="text-sm font-medium">赋分材料已提交</span>
+                  </div>
+                  <p className="mt-2 text-xs text-emerald-600">
+                    如发现提交材料有误，可点击下方按钮重新提交
+                  </p>
+                  <button
+                    onClick={() => {
+                      setShowResubmit(true);
+                      setSelectedActivityId(submittedActivityId);
+                    }}
+                    className="mt-3 w-full rounded-md border border-emerald-300 bg-white py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
+                  >
+                    重新提交
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="rounded-lg border border-gray-200 bg-white p-6">

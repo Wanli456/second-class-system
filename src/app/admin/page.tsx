@@ -139,6 +139,13 @@ export default function AdminPage() {
     setAuthenticated(false);
     setPassword('');
     setRole(null);
+    // 退出后回到登录页面（不跳转首页）
+  };
+
+  const handleGoHome = () => {
+    setAuthenticated(false);
+    setPassword('');
+    setRole(null);
     router.push('/');
   };
 
@@ -339,7 +346,7 @@ export default function AdminPage() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Link href="/" className="rounded p-1.5 text-sm text-blue-200 hover:bg-white/10 hover:text-white">首页</Link>
+              <button onClick={handleGoHome} className="rounded p-1.5 text-sm text-blue-200 hover:bg-white/10 hover:text-white">首页</button>
               <button onClick={handleLogout} className="flex items-center gap-1 rounded p-1.5 text-sm text-blue-200 hover:bg-white/10 hover:text-white">
                 <LogOut className="h-4 w-4" /> 退出
               </button>
