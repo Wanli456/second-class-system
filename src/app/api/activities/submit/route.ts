@@ -34,7 +34,11 @@ export async function GET(request: NextRequest) {
       let filtered = activitiesQuery.data;
       if (phone) filtered = filtered.filter((a: any) => a.leader_phone === phone);
       if (keyword) filtered = filtered.filter((a: any) => a.full_name.includes(keyword));
-      results = results.concat(filtered.map((a: any) => ({ ...a, source: 'activity', review_status: '已通过' })));
+      results = results.concat(filtered.map((a: any) => ({ 
+        ...a, 
+        source: 'activity', 
+        review_status: a.status === '活动取消' ? '活动取消' : '已通过' 
+      })));
     }
 
     return NextResponse.json({ success: true, data: results });
