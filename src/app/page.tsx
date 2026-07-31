@@ -155,7 +155,7 @@ export default function Home() {
 
             {/* 发布活动 */}
             <Link
-              href={publisherState === 'active' ? "/admin?tab=review" : "#"}
+              href={publisherState === 'active' ? "/admin?role=admin&tab=review" : "#"}
               onClick={(e) => {
                 if (publisherState === 'locked') { e.preventDefault(); handleRoleClick('publisher'); }
                 if (publisherState === 'grayed') { e.preventDefault(); }
@@ -183,7 +183,7 @@ export default function Home() {
 
             {/* 赋分干事 */}
             <Link
-              href={scorerState === 'active' ? "/admin?tab=scoring" : "#"}
+              href={scorerState === 'active' ? "/admin?role=admin&tab=scoring" : "#"}
               onClick={(e) => {
                 if (scorerState === 'locked') { e.preventDefault(); handleRoleClick('scorer'); }
                 if (scorerState === 'grayed') { e.preventDefault(); }
