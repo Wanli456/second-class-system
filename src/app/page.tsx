@@ -111,6 +111,9 @@ export default function HomePage() {
             <Link href="/leave/status" className="rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:border-[#1e3a5f] hover:text-[#1e3a5f]">
               查询请假状态
             </Link>
+            <Link href="/evening-study" className="rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:border-[#1e3a5f] hover:text-[#1e3a5f]">
+              晚自习查询
+            </Link>
           </div>
         </div>
       </main>
