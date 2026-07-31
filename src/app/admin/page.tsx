@@ -286,12 +286,15 @@ export default function AdminPage() {
               >
                 登录
               </button>
-              <button
-                onClick={() => { setRole(null); setPassword(''); setLoginError(''); }}
-                className="w-full text-center text-sm text-gray-500 hover:text-[#1e3a5f]"
-              >
-                切换角色
-              </button>
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => { setRole(null); setPassword(''); setLoginError(''); }}
+                  className="text-sm text-gray-500 hover:text-[#1e3a5f]"
+                >
+                  切换角色
+                </button>
+                <Link href="/" className="text-sm text-gray-500 hover:text-[#1e3a5f]">返回首页</Link>
+              </div>
             </div>
           )}
         </div>
