@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
         leader_name,
         leader_phone,
         status: status || '正常活动',
+        scoring_status: '待赋分',
       })
       .select()
       .single();

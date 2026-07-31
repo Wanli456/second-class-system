@@ -10,6 +10,8 @@ export interface Activity {
   leader_name: string;
   leader_phone: string;
   status: '正常活动' | '活动取消';
+  scoring_status: '待赋分' | '已赋分';
+  scoring_table_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -50,6 +52,14 @@ export const LEVELS = ['院系级', '校级'] as const;
 export const ACTIVITY_STATUSES = ['正常活动', '活动取消'] as const;
 export const LEAVE_TYPES = ['事假', '病假', '活动公假'] as const;
 export const REVIEW_STATUSES = ['待审核', '已通过', '已驳回'] as const;
+export const SCORING_STATUSES = ['待赋分', '已赋分'] as const;
+export const ADMIN_ROLES = ['admin', 'publisher', 'scorer'] as const;
+export type AdminRole = typeof ADMIN_ROLES[number];
+export const ROLE_LABELS: Record<AdminRole, string> = {
+  admin: '管理员',
+  publisher: '发布干事',
+  scorer: '赋分干事',
+};
 
 export const CATEGORY_COLORS: Record<string, string> = {
   '德': 'bg-indigo-100 text-indigo-700 border-indigo-200',
@@ -65,4 +75,6 @@ export const STATUS_COLORS: Record<string, string> = {
   '待审核': 'bg-amber-100 text-amber-700 border-amber-200',
   '已通过': 'bg-emerald-100 text-emerald-700 border-emerald-200',
   '已驳回': 'bg-red-100 text-red-700 border-red-200',
+  '待赋分': 'bg-amber-100 text-amber-700 border-amber-200',
+  '已赋分': 'bg-emerald-100 text-emerald-700 border-emerald-200',
 };

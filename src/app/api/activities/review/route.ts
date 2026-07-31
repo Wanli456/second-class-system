@@ -95,6 +95,7 @@ export async function PUT(request: NextRequest) {
           leader_name: submission.leader_name,
           leader_phone: submission.leader_phone,
           status: '正常活动',
+          scoring_status: '待赋分',
         });
 
       if (insertError) throw new Error(`写入总表失败: ${insertError.message}`);

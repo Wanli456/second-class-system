@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { GraduationCap, ArrowLeft, Send, Eye } from 'lucide-react';
+import { GraduationCap, ArrowLeft, Send, Eye, Upload, FileText } from 'lucide-react';
 import { CATEGORIES, LEVELS } from '@/lib/types';
 
 export default function SubmitPage() {
@@ -15,8 +15,20 @@ export default function SubmitPage() {
     leader_name: '',
     leader_phone: '',
   });
+  const [planFile, setPlanFile] = useState<File | null>(null);
+  const [recordFile, setRecordFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  const uploadFile = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('bucket', 'app-files');
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || '上传失败');
+    return data.url;
+  };
 
   const handleSubmit = async () => {
     if (!form.full_name || !form.start_time || !form.end_time || !form.category || !form.level || !form.leader_name || !form.leader_phone) {
@@ -26,11 +38,23 @@ export default function SubmitPage() {
 
     setSubmitting(true);
     try {
+      let plan_file_url = '';
+      let record_file_url = '';
+
+      if (planFile) {
+        plan_file_url = await uploadFile(planFile);
+      }
+      if (recordFile) {
+        record_file_url = await uploadFile(recordFile);
+      }
+
       const res = await fetch('/api/activities/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          plan_file_url,
+          record_file_url,
           start_time: new Date(form.start_time).toISOString(),
           end_time: new Date(form.end_time).toISOString(),
         }),
@@ -39,6 +63,8 @@ export default function SubmitPage() {
       if (data.success) {
         setSuccess(true);
         setForm({ full_name: '', start_time: '', end_time: '', category: '', level: '', leader_name: '', leader_phone: '' });
+        setPlanFile(null);
+        setRecordFile(null);
       } else {
         alert(data.error || '提交失败');
       }
@@ -74,7 +100,7 @@ export default function SubmitPage() {
 
         <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
           <h2 className="mb-1 text-lg font-semibold text-gray-900">提交活动信息</h2>
-          <p className="mb-6 text-sm text-gray-500">请填写活动信息，提交后将由管理员审核并录入活动总表</p>
+          <p className="mb-6 text-sm text-gray-500">请填写活动信息并上传相关文件，提交后将由管理员审核并录入活动总表</p>
 
           <div className="space-y-4">
             <div>
@@ -154,6 +180,39 @@ export default function SubmitPage() {
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
                   placeholder="请输入负责人电话"
                 />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">活动策划书</label>
+                <div className="flex items-center gap-2">
+                  <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-md border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500 hover:border-[#1e3a5f] hover:text-[#1e3a5f]">
+                    <Upload className="h-4 w-4" />
+                    {planFile ? planFile.name : '选择文件'}
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      onChange={(e) => setPlanFile(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">活动备案表</label>
+                <div className="flex items-center gap-2">
+                  <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-md border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500 hover:border-[#1e3a5f] hover:text-[#1e3a5f]">
+                    <Upload className="h-4 w-4" />
+                    {recordFile ? recordFile.name : '选择文件'}
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      onChange={(e) => setRecordFile(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                </div>
               </div>
             </div>
           </div>

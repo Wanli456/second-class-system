@@ -21,6 +21,8 @@ export const activities = pgTable(
     leader_name: varchar("leader_name", { length: 50 }).notNull(),
     leader_phone: varchar("leader_phone", { length: 20 }).notNull(),
     status: varchar("status", { length: 20 }).notNull().default("正常活动"), // 正常活动/活动取消
+    scoring_status: varchar("scoring_status", { length: 20 }).notNull().default("待赋分"), // 待赋分/已赋分
+    scoring_table_url: text("scoring_table_url"), // 活动赋分表
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -29,6 +31,7 @@ export const activities = pgTable(
     index("activities_status_idx").on(table.status),
     index("activities_leader_phone_idx").on(table.leader_phone),
     index("activities_start_time_idx").on(table.start_time),
+    index("activities_scoring_status_idx").on(table.scoring_status),
   ]
 );
 
