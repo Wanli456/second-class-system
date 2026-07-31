@@ -121,7 +121,7 @@ export default function AdminPage() {
       role === 'admin' ? fetchActivities() : Promise.resolve(),
       (role === 'admin' || role === 'publisher') ? fetchSubmissions() : Promise.resolve(),
       role === 'admin' ? fetchLeaves() : Promise.resolve(),
-      role === 'scorer' ? fetchScoring() : Promise.resolve(),
+      (role === 'admin' || role === 'scorer') ? fetchScoring() : Promise.resolve(),
     ]).finally(() => setLoading(false));
   }, [authenticated, role, fetchActivities, fetchSubmissions, fetchLeaves, fetchScoring]);
 
@@ -614,12 +614,12 @@ export default function AdminPage() {
                           {expandedSubmission === s.id && (
                             <div className="mt-2 flex flex-wrap gap-3 border-t pt-2">
                               {s.plan_file_url ? (
-                                <a href={s.plan_file_url} target="_blank" className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50">
+                                <a href={s.plan_file_url} target="_blank" download className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50">
                                   <FileText className="h-3 w-3" /> 策划书
                                 </a>
                               ) : <span className="text-xs text-gray-400">未上传策划书</span>}
                               {s.record_file_url ? (
-                                <a href={s.record_file_url} target="_blank" className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50">
+                                <a href={s.record_file_url} target="_blank" download className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50">
                                   <FileText className="h-3 w-3" /> 备案表
                                 </a>
                               ) : <span className="text-xs text-gray-400">未上传备案表</span>}
