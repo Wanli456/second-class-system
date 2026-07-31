@@ -35,18 +35,19 @@ export default function SubmitPage() {
       alert('请填写所有必填项');
       return;
     }
+    if (!planFile) {
+      alert('请上传活动策划书');
+      return;
+    }
+    if (!recordFile) {
+      alert('请上传活动备案表');
+      return;
+    }
 
     setSubmitting(true);
     try {
-      let plan_file_url = '';
-      let record_file_url = '';
-
-      if (planFile) {
-        plan_file_url = await uploadFile(planFile);
-      }
-      if (recordFile) {
-        record_file_url = await uploadFile(recordFile);
-      }
+      const plan_file_url = await uploadFile(planFile);
+      const record_file_url = await uploadFile(recordFile);
 
       const res = await fetch('/api/activities/submit', {
         method: 'POST',
@@ -185,8 +186,8 @@ export default function SubmitPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">活动策划书（可选）</label>
-                <label className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500 hover:border-[#1e3a5f] hover:text-[#1e3a5f]">
+                <label className="mb-1 block text-sm font-medium text-gray-700">活动策划书 *</label>
+                <label className={`flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm ${planFile ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-gray-300 text-gray-500 hover:border-[#1e3a5f] hover:text-[#1e3a5f]'}`}>
                   <Upload className="h-4 w-4" />
                   <span className="truncate">{planFile ? planFile.name : '选择文件'}</span>
                   <input
@@ -198,8 +199,8 @@ export default function SubmitPage() {
                 </label>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">活动备案表（可选）</label>
-                <label className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500 hover:border-[#1e3a5f] hover:text-[#1e3a5f]">
+                <label className="mb-1 block text-sm font-medium text-gray-700">活动备案表 *</label>
+                <label className={`flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm ${recordFile ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-gray-300 text-gray-500 hover:border-[#1e3a5f] hover:text-[#1e3a5f]'}`}>
                   <Upload className="h-4 w-4" />
                   <span className="truncate">{recordFile ? recordFile.name : '选择文件'}</span>
                   <input

@@ -18,7 +18,7 @@ interface Activity {
 }
 
 export default function SubmitScoringPage() {
-  const [phone, setPhone] = useState('');
+  const [activityName, setActivityName] = useState('');
   const [searched, setSearched] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(false);
@@ -28,14 +28,14 @@ export default function SubmitScoringPage() {
   const [selectedActivityId, setSelectedActivityId] = useState<string>('');
 
   const handleSearch = async () => {
-    if (!phone) {
-      alert('请输入负责人手机号');
+    if (!activityName) {
+      alert('请输入活动名称');
       return;
     }
     setLoading(true);
     setSearched(true);
     try {
-      const res = await fetch(`/api/activities?leader_phone=${encodeURIComponent(phone)}`);
+      const res = await fetch(`/api/activities?keyword=${encodeURIComponent(activityName)}`);
       const data = await res.json();
       if (data.success) {
         setActivities(data.data);
@@ -127,14 +127,14 @@ export default function SubmitScoringPage() {
 
       <main className="mx-auto max-w-2xl px-4 py-8">
         <div className="rounded-lg border border-gray-200 bg-white p-6">
-          <h2 className="mb-4 text-base font-semibold text-gray-900">查询我的活动</h2>
-          <p className="mb-4 text-sm text-gray-500">输入负责人手机号，查询已审核通过的活动，提交赋分材料</p>
+          <h2 className="mb-4 text-base font-semibold text-gray-900">查询活动</h2>
+          <p className="mb-4 text-sm text-gray-500">输入活动名称关键字，查询已审核通过的活动，提交赋分材料</p>
           <div className="flex gap-3">
             <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="负责人手机号"
+              type="text"
+              value={activityName}
+              onChange={(e) => setActivityName(e.target.value)}
+              placeholder="输入活动名称关键字"
               className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none"
             />
             <button
