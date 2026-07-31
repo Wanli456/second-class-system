@@ -46,12 +46,12 @@ interface ScoringActivity {
 
 interface UserData {
   id: string;
-  username: string;
-  displayName: string;
+  studentId: string;
+  name: string;
   role: string;
-  student_id?: string;
-  canPublish?: boolean;
-  canScore?: boolean;
+  canPublish: boolean;
+  canScore: boolean;
+  createdAt?: string;
 }
 
 export default function AdminPage() {
@@ -989,8 +989,8 @@ export default function AdminPage() {
                         <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-600">角色</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">发布活动</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">发布活动权限</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-600">注册时间</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
                       </tr>
@@ -998,8 +998,8 @@ export default function AdminPage() {
                     <tbody>
                       {users.map((u) => (
                         <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="px-3 py-2 text-gray-800">{u.username}</td>
-                          <td className="px-3 py-2 text-gray-500">{u.student_id || '-'}</td>
+                          <td className="px-3 py-2 text-gray-800">{u.name || '-'}</td>
+                          <td className="px-3 py-2 text-gray-500">{u.studentId || '-'}</td>
                           <td className="px-3 py-2">
                             <span className={`rounded px-2 py-0.5 text-xs font-medium ${
                               u.role === 'admin' ? 'bg-red-100 text-red-700' :
@@ -1031,7 +1031,7 @@ export default function AdminPage() {
                               <span className="text-xs text-gray-600">{u.canScore ? '已开启' : '未开启'}</span>
                             </label>
                           </td>
-                          <td className="px-3 py-2 text-gray-500">-</td>
+                          <td className="px-3 py-2 text-gray-500 text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString('zh-CN') : '-'}</td>
                           <td className="px-3 py-2">
                             <select
                               value={u.role}
