@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -776,8 +776,8 @@ export default function AdminPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {scoringList.map(a => (
-                        <>
-                          <tr key={a.id} className="hover:bg-gray-50">
+                        <Fragment key={a.id}>
+                          <tr className="hover:bg-gray-50">
                             <td className="px-3 py-2.5 font-mono text-xs">{a.id}</td>
                             <td className="px-3 py-2.5 font-medium">{a.full_name}</td>
                             <td className="px-3 py-2.5">
@@ -872,7 +872,7 @@ export default function AdminPage() {
                               </td>
                             </tr>
                           )}
-                        </>
+                        </Fragment>
                       ))}
                       {scoringList.length === 0 && (
                         <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400">暂无可赋分活动</td></tr>
