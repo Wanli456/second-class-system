@@ -165,12 +165,21 @@ export default function HomePage() {
 
         {/* 用户端入口 */}
         <div>
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">用户端</h3>
+          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">
+            用户端
+            {!user && <span className="text-xs text-amber-500 normal-case">（部分功能需登录）</span>}
+          </h3>
           <div className="grid gap-4 sm:grid-cols-3">
             <Link
-              href="/submit"
-              className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-[#1e3a5f] hover:shadow-md"
+              href={user ? "/submit" : "#"}
+              onClick={(e) => { if (!user) { e.preventDefault(); handleRoleClick('leader'); } }}
+              className={`group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-[#1e3a5f] hover:shadow-md ${!user ? 'relative' : ''}`}
             >
+              {!user && (
+                <div className="absolute top-2 right-2">
+                  <Lock className="h-4 w-4 text-gray-400" />
+                </div>
+              )}
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
                 <FileText className="h-5 w-5" />
               </div>
@@ -179,9 +188,15 @@ export default function HomePage() {
             </Link>
 
             <Link
-              href="/submit/scoring"
-              className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-[#1e3a5f] hover:shadow-md"
+              href={user ? "/submit/scoring" : "#"}
+              onClick={(e) => { if (!user) { e.preventDefault(); handleRoleClick('leader'); } }}
+              className={`group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-[#1e3a5f] hover:shadow-md ${!user ? 'relative' : ''}`}
             >
+              {!user && (
+                <div className="absolute top-2 right-2">
+                  <Lock className="h-4 w-4 text-gray-400" />
+                </div>
+              )}
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
                 <Award className="h-5 w-5" />
               </div>
@@ -206,9 +221,11 @@ export default function HomePage() {
           <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">快捷查询</h3>
           <div className="grid gap-4 sm:grid-cols-3">
             <Link
-              href="/submit/status"
-              className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 hover:border-[#1e3a5f] hover:bg-gray-50 transition-colors"
+              href={user ? "/submit/status" : "#"}
+              onClick={(e) => { if (!user) { e.preventDefault(); handleRoleClick('leader'); } }}
+              className={`flex items-center gap-3 rounded-lg border border-gray-200 p-3 hover:border-[#1e3a5f] hover:bg-gray-50 transition-colors ${!user ? 'relative' : ''}`}
             >
+              {!user && <Lock className="h-4 w-4 text-gray-400" />}
               <FileText className="h-5 w-5 text-gray-400" />
               <span className="text-sm text-gray-700">提交状态查询</span>
             </Link>
