@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
         role: 'student',
         can_publish: false,
         can_score: false,
+        can_review_leave: false,
       })
       .select()
       .single();
@@ -88,6 +89,7 @@ export async function PUT(request: NextRequest) {
         role: data.role,
         canPublish: data.can_publish,
         canScore: data.can_score,
+        canReviewLeave: data.can_review_leave,
       } 
     });
   } catch (error) {
@@ -110,7 +112,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await client
       .from('users')
-      .select('id, username, student_id, role, can_publish, can_score, created_at')
+      .select('id, username, student_id, role, can_publish, can_score, can_review_leave, created_at')
       .order('created_at', { ascending: false });
 
     if (error) throw new Error(`查询失败: ${error.message}`);
@@ -124,6 +126,7 @@ export async function GET(request: NextRequest) {
         role: u.role,
         canPublish: u.can_publish,
         canScore: u.can_score,
+        canReviewLeave: u.can_review_leave,
         createdAt: u.created_at,
       }))
     });
@@ -138,7 +141,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const client = getSupabaseClient();
     const body = await request.json();
-    const { id, role, canPublish, canScore, password, oldPassword } = body;
+    const { id, role, canPublish, canScore, canReviewLeave, password, oldPassword } = body;
 
     if (!id) {
       return NextResponse.json({ success: false, error: '参数不完整' }, { status: 400 });
@@ -186,6 +189,7 @@ export async function PATCH(request: NextRequest) {
     if (role !== undefined) updateData.role = role;
     if (canPublish !== undefined) updateData.can_publish = canPublish;
     if (canScore !== undefined) updateData.can_score = canScore;
+    if (canReviewLeave !== undefined) updateData.can_review_leave = canReviewLeave;
 
     const { data, error } = await client
       .from('users')
@@ -205,6 +209,7 @@ export async function PATCH(request: NextRequest) {
         role: data.role,
         canPublish: data.can_publish,
         canScore: data.can_score,
+        canReviewLeave: data.can_review_leave,
       }
     });
   } catch (error) {

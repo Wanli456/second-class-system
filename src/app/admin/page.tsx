@@ -17,18 +17,20 @@ import {
 type ReviewStatus = '待审核' | '已通过' | '已驳回';
 type LeaveStatus = '待审核' | '已通过' | '已驳回';
 type ScoringStatus = '待赋分' | '已赋分';
-type AdminRole = 'admin' | 'publisher' | 'scorer';
+type AdminRole = 'admin' | 'publisher' | 'scorer' | 'leave_reviewer';
 
 const ROLE_LABELS: Record<AdminRole, string> = {
   admin: '管理员',
   publisher: '发布干事',
   scorer: '赋分干事',
+  leave_reviewer: '请假审核',
 };
 
 const ROLE_PASSWORDS: Record<AdminRole, string> = {
   admin: 'admin123',
   publisher: 'pub123',
   scorer: 'score123',
+  leave_reviewer: 'leave123',
 };
 
 interface ScoringActivity {
@@ -51,6 +53,7 @@ interface UserData {
   role: string;
   canPublish: boolean;
   canScore: boolean;
+  canReviewLeave: boolean;
   createdAt?: string;
 }
 
@@ -87,7 +90,7 @@ export default function AdminPage() {
   const [scoringInProgress, setScoringInProgress] = useState(false);
 
   useEffect(() => {
-    if (roleParam && ['admin', 'publisher', 'scorer'].includes(roleParam)) {
+    if (roleParam && ['admin', 'publisher', 'scorer', 'leave_reviewer'].includes(roleParam)) {
       setRole(roleParam as AdminRole);
     }
   }, [roleParam]);
@@ -108,6 +111,9 @@ export default function AdminPage() {
       } else if (roleParam === 'scorer' && userData.canScore) {
         setAuthenticated(true);
         setRole('scorer');
+      } else if (roleParam === 'leave_reviewer' && userData.canReviewLeave) {
+        setAuthenticated(true);
+        setRole('leave_reviewer');
       } else if (roleParam && userData.role === roleParam) {
         setAuthenticated(true);
       } else if (roleParam) {
@@ -286,8 +292,13 @@ export default function AdminPage() {
     }
   };
 
-  const handleUpdatePermission = async (userId: string, permission: 'canPublish' | 'canScore', value: boolean) => {
-    const apiField = permission === 'canPublish' ? 'can_publish' : 'can_score';
+  const handleUpdatePermission = async (userId: string, permission: 'canPublish' | 'canScore' | 'canReviewLeave', value: boolean) => {
+    const apiFieldMap = {
+      canPublish: 'can_publish',
+      canScore: 'can_score',
+      canReviewLeave: 'can_review_leave',
+    };
+    const apiField = apiFieldMap[permission];
     try {
       const res = await fetch('/api/auth', {
         method: 'PATCH',
@@ -454,11 +465,12 @@ export default function AdminPage() {
   const isAdmin = role === 'admin';
   const canPublish = isAdmin || user?.canPublish === true;
   const canScore = isAdmin || user?.canScore === true;
+  const canReviewLeave = isAdmin || user?.canReviewLeave === true;
 
   const tabs = [
     ...(isAdmin ? [{ key: 'activities', label: '活动总表', icon: Table, count: activities.length }] : []),
     ...(canPublish ? [{ key: 'review', label: '活动审核', icon: FileCheck, count: pendingSubmissions.length }] : []),
-    ...(isAdmin ? [{ key: 'leave', label: '请假审核', icon: UserCheck, count: pendingLeaves.length }] : []),
+    ...(canReviewLeave ? [{ key: 'leave', label: '请假审核', icon: UserCheck, count: pendingLeaves.length }] : []),
     ...(canScore ? [{ key: 'scoring', label: '活动赋分', icon: Award, count: scoringList.filter(s => s.scoring_status === '待赋分').length }] : []),
     ...(isAdmin ? [{ key: 'users', label: '用户管理', icon: Users, count: 0 }] : []),
   ];
@@ -770,7 +782,7 @@ export default function AdminPage() {
             )}
 
             {/* ===== 请假审核 ===== */}
-            {activeTab === 'leave' && role === 'admin' && (
+            {activeTab === 'leave' && canReviewLeave && (
               <div>
                 <h2 className="mb-4 text-base font-semibold text-gray-800">请假审核</h2>
 
@@ -1045,6 +1057,7 @@ export default function AdminPage() {
                         <th className="px-3 py-2 text-left font-medium text-gray-600">角色</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-600">发布活动权限</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-600">注册时间</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
                       </tr>
@@ -1083,6 +1096,17 @@ export default function AdminPage() {
                                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                               />
                               <span className="text-xs text-gray-600">{u.canScore ? '已开启' : '未开启'}</span>
+                            </label>
+                          </td>
+                          <td className="px-3 py-2">
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={u.canReviewLeave || false}
+                                onChange={(e) => handleUpdatePermission(u.id, 'canReviewLeave', e.target.checked)}
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-xs text-gray-600">{u.canReviewLeave ? '已开启' : '未开启'}</span>
                             </label>
                           </td>
                           <td className="px-3 py-2 text-gray-500 text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString('zh-CN') : '-'}</td>

@@ -14,6 +14,7 @@ interface User {
   role: string;
   canPublish?: boolean;
   canScore?: boolean;
+  canReviewLeave?: boolean;
 }
 
 function getButtonState(user: User | null, requiredRole: string): 'active' | 'grayed' | 'locked' {
@@ -22,6 +23,7 @@ function getButtonState(user: User | null, requiredRole: string): 'active' | 'gr
   if (requiredRole === 'admin') return 'grayed';
   if (requiredRole === 'publisher') return user.canPublish ? 'active' : 'grayed';
   if (requiredRole === 'scorer') return user.canScore ? 'active' : 'grayed';
+  if (requiredRole === 'leave_reviewer') return user.canReviewLeave ? 'active' : 'grayed';
   return 'grayed';
 }
 
@@ -102,6 +104,7 @@ export default function Home() {
   const adminState = getButtonState(user, 'admin');
   const publisherState = getButtonState(user, 'publisher');
   const scorerState = getButtonState(user, 'scorer');
+  const leaveReviewerState = getButtonState(user, 'leave_reviewer');
   const leaderState = getLeaderButtonState(user);
 
   // 修改密码页面
@@ -260,7 +263,7 @@ export default function Home() {
             管理端
             {!user && <span className="text-xs text-amber-500 normal-case">（需登录）</span>}
           </h3>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-4">
             {/* 管理员 */}
             <Link
               href={adminState === 'active' ? "/admin?role=admin" : "#"}
@@ -317,7 +320,7 @@ export default function Home() {
               {publisherState === 'grayed' && <p className="mt-1 text-xs text-gray-400">（无此权限）</p>}
             </Link>
 
-            {/* 赋分干事 */}
+            {/* 活动赋分 */}
             <Link
               href={scorerState === 'active' ? "/admin?role=admin&tab=scoring" : "#"}
               onClick={(e) => {
@@ -343,6 +346,34 @@ export default function Home() {
               <h4 className="font-semibold text-gray-900">活动赋分</h4>
               <p className="mt-1 text-xs text-gray-500">活动赋分管理</p>
               {scorerState === 'grayed' && <p className="mt-1 text-xs text-gray-400">（无此权限）</p>}
+            </Link>
+
+            {/* 请假审核 */}
+            <Link
+              href={leaveReviewerState === 'active' ? "/admin?role=admin&tab=leave" : "#"}
+              onClick={(e) => {
+                if (leaveReviewerState === 'locked') { e.preventDefault(); handleRoleClick('leave_reviewer'); }
+                if (leaveReviewerState === 'grayed') { e.preventDefault(); }
+              }}
+              className={`group rounded-lg border p-5 shadow-sm transition-all ${
+                leaveReviewerState === 'active'
+                  ? 'border-gray-200 bg-white hover:border-[#1e3a5f] hover:shadow-md'
+                  : leaveReviewerState === 'grayed'
+                  ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
+                  : 'border-gray-200 bg-white relative'
+              }`}
+            >
+              {leaveReviewerState === 'locked' && (
+                <div className="absolute top-2 right-2">
+                  <Lock className="h-4 w-4 text-gray-400" />
+                </div>
+              )}
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
+                <UserCheck className="h-5 w-5" />
+              </div>
+              <h4 className="font-semibold text-gray-900">请假审核</h4>
+              <p className="mt-1 text-xs text-gray-500">审核请假申请（含请假条截图）</p>
+              {leaveReviewerState === 'grayed' && <p className="mt-1 text-xs text-gray-400">（无此权限）</p>}
             </Link>
           </div>
         </div>
