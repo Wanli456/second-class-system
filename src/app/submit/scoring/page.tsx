@@ -70,6 +70,12 @@ export default function SubmitScoringPage() {
     const activity = activities.find(a => a.id === selectedActivityId);
     if (!activity) return;
 
+    // 检查是否已赋分
+    if (activity.scoring_status === '已赋分') {
+      alert('该活动已赋分，不可重复提交');
+      return;
+    }
+
     // 校级活动需要备案表
     if (activity.level === '校级' && !recordFile && !activity.record_file_url) {
       alert('校级活动需要上传备案表照片');
@@ -169,9 +175,9 @@ export default function SubmitScoringPage() {
                 >
                   <option value="">请选择活动</option>
                   {activities.map((a) => (
-                    <option key={a.id} value={a.id}>
+                    <option key={a.id} value={a.id} disabled={a.scoring_status === '已赋分'}>
                       {a.id} - {a.full_name} ({a.level})
-                      {a.scoring_status === '已赋分' ? ' [已赋分]' : ''}
+                      {a.scoring_status === '已赋分' ? ' [已赋分，不可提交]' : ''}
                     </option>
                   ))}
                 </select>
@@ -209,14 +215,14 @@ export default function SubmitScoringPage() {
 
               <div className="mb-4">
                 <label className="mb-1 block text-sm font-medium text-gray-700">
-                  活动赋分表 *
+                  活动赋分表 *（Excel格式）
                 </label>
                 <div className="rounded-lg border-2 border-dashed border-gray-200 p-4 text-center">
                   <Upload className="mx-auto mb-2 h-8 w-8 text-gray-300" />
                   <input
                     type="file"
                     id="scoring-file"
-                    accept=".pdf,.jpg,.jpeg,.png"
+                    accept=".xlsx,.xls"
                     onChange={(e) => setScoringFile(e.target.files?.[0] || null)}
                     className="hidden"
                   />
@@ -226,7 +232,7 @@ export default function SubmitScoringPage() {
                   >
                     点击上传赋分表
                   </label>
-                  <p className="mt-1 text-xs text-gray-400">支持 PDF、JPG、PNG 格式</p>
+                  <p className="mt-1 text-xs text-gray-400">仅支持 Excel 格式（.xlsx, .xls）</p>
                   {scoringFile && (
                     <p className="mt-2 text-xs text-emerald-600">已选择: {scoringFile.name}</p>
                   )}
