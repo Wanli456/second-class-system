@@ -180,10 +180,6 @@ export default function AdminPage() {
   };
 
   const handleGoHome = () => {
-    localStorage.removeItem('user');
-    setUser(null);
-    setAuthenticated(false);
-    setRole(null);
     router.push('/');
   };
 

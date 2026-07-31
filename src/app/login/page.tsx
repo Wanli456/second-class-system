@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User, Lock, UserPlus, LogIn } from "lucide-react";
+import { User, Lock, UserPlus, LogIn, Hash } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,7 +15,8 @@ export default function LoginPage() {
   
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-  const [registerUsername, setRegisterUsername] = useState("");
+  const [registerStudentId, setRegisterStudentId] = useState("");
+  const [registerName, setRegisterName] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
   const [registerConfirm, setRegisterConfirm] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,7 +24,7 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     if (!loginUsername || !loginPassword) {
-      setError("请输入用户名和密码");
+      setError("请输入学号和密码");
       return;
     }
     setLoading(true);
@@ -49,8 +50,8 @@ export default function LoginPage() {
   };
 
   const handleRegister = async () => {
-    if (!registerUsername || !registerPassword) {
-      setError("请输入用户名和密码");
+    if (!registerStudentId || !registerName || !registerPassword) {
+      setError("请输入学号、姓名和密码");
       return;
     }
     if (registerPassword !== registerConfirm) {
@@ -68,7 +69,8 @@ export default function LoginPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username: registerUsername,
+          studentId: registerStudentId,
+          name: registerName,
           password: registerPassword,
         }),
       });
@@ -102,12 +104,12 @@ export default function LoginPage() {
             
             <TabsContent value="login" className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">用户名</label>
+                <label className="text-sm font-medium">学号</label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Hash className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <Input
                     type="text"
-                    placeholder="请输入用户名"
+                    placeholder="请输入学号"
                     className="pl-10"
                     value={loginUsername}
                     onChange={(e) => setLoginUsername(e.target.value)}
@@ -138,13 +140,30 @@ export default function LoginPage() {
             <TabsContent value="register" className="space-y-4">
               <p className="text-xs text-gray-500">注册后默认为学生身份，如需其他角色请联系管理员设置</p>
               <div className="space-y-2">
-                <label className="text-sm font-medium">用户名</label>
-                <Input
-                  type="text"
-                  placeholder="请输入用户名"
-                  value={registerUsername}
-                  onChange={(e) => setRegisterUsername(e.target.value)}
-                />
+                <label className="text-sm font-medium">学号</label>
+                <div className="relative">
+                  <Hash className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    type="text"
+                    placeholder="请输入学号"
+                    className="pl-10"
+                    value={registerStudentId}
+                    onChange={(e) => setRegisterStudentId(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">姓名</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    type="text"
+                    placeholder="请输入姓名"
+                    className="pl-10"
+                    value={registerName}
+                    onChange={(e) => setRegisterName(e.target.value)}
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">密码</label>

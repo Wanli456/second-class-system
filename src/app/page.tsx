@@ -237,9 +237,11 @@ export default function HomePage() {
               <span className="text-sm text-gray-700">请假状态查询</span>
             </Link>
             <Link
-              href="/evening-study"
-              className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 hover:border-[#1e3a5f] hover:bg-gray-50 transition-colors"
+              href={user ? "/evening-study" : "#"}
+              onClick={(e) => { if (!user) { e.preventDefault(); setShowLoginModal(true); } }}
+              className={`flex items-center gap-3 rounded-lg border border-gray-200 p-3 hover:border-[#1e3a5f] hover:bg-gray-50 transition-colors ${!user ? 'relative' : ''}`}
             >
+              {!user && <Lock className="h-4 w-4 text-gray-400" />}
               <Moon className="h-5 w-5 text-gray-400" />
               <span className="text-sm text-gray-700">晚自习请假查询</span>
             </Link>

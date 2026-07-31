@@ -5,29 +5,31 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 export async function POST(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const { username, password } = await request.json();
+    const { studentId, name, password } = await request.json();
 
-    if (!username || !password) {
-      return NextResponse.json({ success: false, error: '用户名和密码不能为空' }, { status: 400 });
+    if (!studentId || !name || !password) {
+      return NextResponse.json({ success: false, error: '学号、姓名和密码不能为空' }, { status: 400 });
     }
 
-    // 检查用户名是否已存在
+    // 检查学号是否已存在
     const { data: existing } = await client
       .from('users')
       .select('id')
-      .eq('username', username)
+      .eq('student_id', studentId)
       .maybeSingle();
 
     if (existing) {
-      return NextResponse.json({ success: false, error: '用户名已存在' }, { status: 400 });
+      return NextResponse.json({ success: false, error: '该学号已注册' }, { status: 400 });
     }
 
-    // 创建用户，默认角色为学生
+    // 创建用户，默认角色为学生，用户名使用学号
     const { data, error } = await client
       .from('users')
       .insert({
-        username,
+        username: studentId, // 用户名使用学号
         password,
+        student_id: studentId,
+        display_name: name, // 姓名存储在display_name字段
         role: 'student', // 默认角色为学生
       })
       .select()
@@ -39,7 +41,9 @@ export async function POST(request: NextRequest) {
       success: true, 
       data: { 
         id: data.id, 
-        username: data.username, 
+        username: data.username,
+        studentId: data.student_id,
+        name: data.display_name,
         role: data.role,
       } 
     });
