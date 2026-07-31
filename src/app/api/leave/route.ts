@@ -9,6 +9,22 @@ export async function GET(request: NextRequest) {
     const studentId = searchParams.get('student_id');
     const status = searchParams.get('status');
     const role = searchParams.get('role'); // admin or student
+    const className = searchParams.get('class'); // 按班级查询
+
+    // 按班级查询（晚自习查询用）
+    if (className) {
+      let query = client
+        .from('leave_requests')
+        .select('*')
+        .ilike('class_name', `%${className}%`)
+        .order('created_at', { ascending: false });
+
+      if (status) query = query.eq('review_status', status);
+
+      const { data, error } = await query;
+      if (error) throw new Error(`查询失败: ${error.message}`);
+      return NextResponse.json({ success: true, data });
+    }
 
     if (role === 'admin') {
       // 管理员查看所有
