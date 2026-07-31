@@ -58,6 +58,12 @@ export default function EveningStudyPage() {
     setToday(dateStr);
   }, []);
 
+  // 当查询条件变化时清空结果
+  useEffect(() => {
+    setLeaveRequests([]);
+    setSearched(false);
+  }, [searchKeyword, searchType]);
+
   const fetchLeaveRequests = async () => {
     if (!searchKeyword.trim()) {
       alert("请输入查询内容");
