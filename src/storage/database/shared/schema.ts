@@ -84,3 +84,47 @@ export const leave_requests = pgTable(
     index("leave_requests_created_at_idx").on(table.created_at),
   ]
 );
+
+// 晚自习安排表
+export const evening_study_schedules = pgTable(
+  "evening_study_schedules",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    date: varchar("date", { length: 10 }).notNull(), // 日期 YYYY-MM-DD
+    weekday: varchar("weekday", { length: 10 }).notNull(), // 星期几
+    class_name: varchar("class_name", { length: 50 }).notNull(), // 班级
+    classroom: varchar("classroom", { length: 50 }).notNull(), // 教室
+    checker_name: varchar("checker_name", { length: 50 }), // 检查人员
+    checker_phone: varchar("checker_phone", { length: 20 }), // 检查人员电话
+    notes: text("notes"), // 备注
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("evening_study_date_idx").on(table.date),
+    index("evening_study_class_idx").on(table.class_name),
+  ]
+);
+
+// 晚自习考勤记录表
+export const evening_study_attendance = pgTable(
+  "evening_study_attendance",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    schedule_id: varchar("schedule_id", { length: 36 }).notNull(), // 关联的安排ID
+    date: varchar("date", { length: 10 }).notNull(), // 日期
+    class_name: varchar("class_name", { length: 50 }).notNull(), // 班级
+    total_count: serial("total_count").notNull(), // 应到人数
+    present_count: serial("present_count").notNull(), // 实到人数
+    absent_count: serial("absent_count").notNull().default(0), // 缺勤人数
+    discipline_status: varchar("discipline_status", { length: 20 }).notNull().default("良好"), // 纪律状况：优秀/良好/一般/较差
+    notes: text("notes"), // 备注
+    checker_name: varchar("checker_name", { length: 50 }).notNull(), // 检查人员
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("evening_attendance_date_idx").on(table.date),
+    index("evening_attendance_class_idx").on(table.class_name),
+    index("evening_attendance_schedule_idx").on(table.schedule_id),
+  ]
+);

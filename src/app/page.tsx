@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { FileText, UserCheck, GraduationCap, ClipboardList, Award, Send } from 'lucide-react';
+import { FileText, UserCheck, GraduationCap, ClipboardList, Award, Send, Moon } from 'lucide-react';
 
 export default function HomePage() {
   return (
