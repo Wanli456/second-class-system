@@ -154,7 +154,7 @@ export default function AdminPage() {
   }, []);
 
   const fetchUsers = useCallback(async () => {
-    const res = await fetch('/api/auth?list=all');
+    const res = await fetch('/api/auth?admin=true');
     const data = await res.json();
     if (data.success) setUsers(data.data);
   }, []);
