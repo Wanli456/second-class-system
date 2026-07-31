@@ -54,6 +54,11 @@ export default function LeavePage() {
       return;
     }
 
+    if (!imageFile) {
+      alert('请上传请假条图片');
+      return;
+    }
+
     setSubmitting(true);
     try {
       // Upload image first if exists
@@ -198,7 +203,7 @@ export default function LeavePage() {
             )}
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">请假条图片</label>
+              <label className="mb-1 block text-sm font-medium text-gray-700">请假条图片 *</label>
               <div className="flex items-center gap-4">
                 <label className="cursor-pointer rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
                   选择图片
@@ -213,6 +218,7 @@ export default function LeavePage() {
                   <img src={imagePreview} alt="预览" className="h-16 w-auto rounded border" />
                 )}
               </div>
+              <p className="mt-1 text-xs text-gray-500">请上传请假条截图（必填）</p>
             </div>
           </div>
 

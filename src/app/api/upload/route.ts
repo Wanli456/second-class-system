@@ -7,7 +7,6 @@ export async function POST(request: NextRequest) {
     const client = getSupabaseClient();
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    const bucket = formData.get('bucket') as string || 'public-files';
 
     if (!file) {
       return NextResponse.json({ success: false, error: '缺少文件' }, { status: 400 });
@@ -21,7 +20,7 @@ export async function POST(request: NextRequest) {
     // 生成唯一文件名
     const ext = file.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const filePath = `${bucket}/${fileName}`;
+    const filePath = `leave-images/${fileName}`;
 
     // 上传到 Supabase Storage
     const arrayBuffer = await file.arrayBuffer();
