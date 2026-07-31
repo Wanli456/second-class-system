@@ -1,0 +1,125 @@
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
+import { GraduationCap, ArrowLeft, Search, RefreshCw } from 'lucide-react';
+import { ActivitySubmission, CATEGORY_COLORS, STATUS_COLORS } from '@/lib/types';
+
+export default function SubmitStatusPage() {
+  const [phone, setPhone] = useState('');
+  const [submissions, setSubmissions] = useState<ActivitySubmission[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+
+  const handleSearch = async () => {
+    if (!phone.trim()) {
+      alert('请输入负责人手机号');
+      return;
+    }
+    setLoading(true);
+    setSearched(true);
+    try {
+      const res = await fetch(`/api/activities/submit?phone=${encodeURIComponent(phone)}`);
+      const data = await res.json();
+      if (data.success) setSubmissions(data.data);
+      else alert(data.error || '查询失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#f5f5f0]">
+      <header className="bg-[#1e3a5f] text-white">
+        <div className="mx-auto max-w-6xl px-4 py-4">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="rounded p-1 hover:bg-white/10">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <GraduationCap className="h-6 w-6" />
+            <h1 className="text-lg font-bold">提交状态查询</h1>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-3xl px-4 py-8">
+        {/* Search */}
+        <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <label className="mb-1 block text-sm font-medium text-gray-700">负责人手机号</label>
+              <input
+                type="text"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+                placeholder="请输入提交时填写的负责人手机号"
+              />
+            </div>
+            <button
+              onClick={handleSearch}
+              disabled={loading}
+              className="flex items-center gap-1 rounded-md bg-[#1e3a5f] px-4 py-2 text-sm text-white hover:bg-[#1e3a5f]/90 disabled:opacity-50"
+            >
+              <Search className="h-4 w-4" />
+              查询
+            </button>
+          </div>
+        </div>
+
+        {/* Results */}
+        {searched && (
+          <div className="space-y-3">
+            {loading ? (
+              <div className="py-8 text-center text-gray-400">查询中...</div>
+            ) : submissions.length === 0 ? (
+              <div className="rounded-lg border border-gray-200 bg-white py-8 text-center shadow-sm">
+                <p className="text-gray-400">未找到该手机号提交的记录</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-gray-700">共 {submissions.length} 条提交记录</h3>
+                  <button
+                    onClick={handleSearch}
+                    className="flex items-center gap-1 text-sm text-gray-500 hover:text-[#1e3a5f]"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" /> 刷新
+                  </button>
+                </div>
+                {submissions.map(s => (
+                  <div key={s.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-medium text-gray-900">{s.full_name}</h4>
+                          <span className={`rounded border px-1.5 py-0.5 text-xs ${CATEGORY_COLORS[s.category]}`}>
+                            {s.category}
+                          </span>
+                          <span className="text-xs text-gray-500">{s.level}</span>
+                        </div>
+                        <div className="mt-2 text-sm text-gray-500">
+                          <div>{new Date(s.start_time).toLocaleString('zh-CN')} ~ {new Date(s.end_time).toLocaleString('zh-CN')}</div>
+                          <div className="mt-1">提交时间：{new Date(s.created_at).toLocaleString('zh-CN')}</div>
+                        </div>
+                        {s.review_note && (
+                          <div className="mt-2 rounded bg-gray-50 px-2 py-1.5 text-xs text-gray-600">
+                            <span className="font-medium">审核备注：</span>{s.review_note}
+                          </div>
+                        )}
+                      </div>
+                      <span className={`shrink-0 rounded border px-2 py-1 text-xs font-medium ${STATUS_COLORS[s.review_status]}`}>
+                        {s.review_status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
