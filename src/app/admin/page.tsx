@@ -93,8 +93,11 @@ export default function AdminPage() {
     if (stored) {
       const userData = JSON.parse(stored);
       setUser(userData);
-      // Check if user has the required role
-      if (roleParam && userData.role === roleParam) {
+      // Admin can access all roles
+      if (userData.role === 'admin') {
+        setAuthenticated(true);
+        setRole('admin');
+      } else if (roleParam && userData.role === roleParam) {
         setAuthenticated(true);
       } else if (roleParam && userData.role !== roleParam) {
         setLoginError(`当前账号不是${ROLE_LABELS[roleParam]}角色`);
@@ -170,6 +173,7 @@ export default function AdminPage() {
       setShowLoginModal(false);
     } else if (roleParam && userData.role === roleParam) {
       setAuthenticated(true);
+      setRole(roleParam);
       setLoginError('');
       setShowLoginModal(false);
     } else if (roleParam && userData.role !== roleParam) {
