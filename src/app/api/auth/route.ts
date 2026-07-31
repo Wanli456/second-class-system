@@ -22,15 +22,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: '该学号已注册' }, { status: 400 });
     }
 
-    // 创建用户，默认角色为学生，用户名使用学号
+    // 创建用户，默认角色为学生，默认无权限
     const { data, error } = await client
       .from('users')
       .insert({
-        username: studentId, // 用户名使用学号
+        username: name,
         password,
         student_id: studentId,
-        display_name: name, // 姓名存储在display_name字段
-        role: 'student', // 默认角色为学生
+        role: 'student',
+        can_publish: false,
+        can_score: false,
       })
       .select()
       .single();
@@ -41,10 +42,11 @@ export async function POST(request: NextRequest) {
       success: true, 
       data: { 
         id: data.id, 
-        username: data.username,
         studentId: data.student_id,
-        name: data.display_name,
+        name: data.username,
         role: data.role,
+        canPublish: data.can_publish,
+        canScore: data.can_score,
       } 
     });
   } catch (error) {
@@ -84,6 +86,8 @@ export async function PUT(request: NextRequest) {
         studentId: data.student_id,
         name: data.username, 
         role: data.role,
+        canPublish: data.can_publish,
+        canScore: data.can_score,
       } 
     });
   } catch (error) {
@@ -106,43 +110,69 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await client
       .from('users')
-      .select('id, username, role, created_at')
+      .select('id, username, student_id, role, can_publish, can_score, created_at')
       .order('created_at', { ascending: false });
 
     if (error) throw new Error(`查询失败: ${error.message}`);
 
-    return NextResponse.json({ success: true, data: data || [] });
+    return NextResponse.json({ 
+      success: true, 
+      data: (data || []).map(u => ({
+        id: u.id,
+        studentId: u.student_id,
+        name: u.username,
+        role: u.role,
+        canPublish: u.can_publish,
+        canScore: u.can_score,
+        createdAt: u.created_at,
+      }))
+    });
   } catch (error) {
     console.error('查询用户失败:', error);
     return NextResponse.json({ success: false, error: '查询用户失败' }, { status: 500 });
   }
 }
 
-// PATCH /api/auth - 更新用户角色
+// PATCH /api/auth - 更新用户角色和权限
 export async function PATCH(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const { id, role } = await request.json();
+    const { id, role, canPublish, canScore } = await request.json();
 
-    if (!id || !role) {
+    if (!id) {
       return NextResponse.json({ success: false, error: '参数不完整' }, { status: 400 });
     }
 
-    const validRoles = ['student', 'leader', 'publisher', 'scorer', 'admin'];
-    if (!validRoles.includes(role)) {
+    const validRoles = ['student', 'leader', 'admin'];
+    if (role && !validRoles.includes(role)) {
       return NextResponse.json({ success: false, error: '无效的角色' }, { status: 400 });
     }
 
+    const updateData: any = {};
+    if (role !== undefined) updateData.role = role;
+    if (canPublish !== undefined) updateData.can_publish = canPublish;
+    if (canScore !== undefined) updateData.can_score = canScore;
+
     const { data, error } = await client
       .from('users')
-      .update({ role })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();
 
     if (error) throw new Error(`更新失败: ${error.message}`);
 
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ 
+      success: true, 
+      data: {
+        id: data.id,
+        studentId: data.student_id,
+        name: data.username,
+        role: data.role,
+        canPublish: data.can_publish,
+        canScore: data.can_score,
+      }
+    });
   } catch (error) {
     console.error('更新用户失败:', error);
     return NextResponse.json({ success: false, error: '更新用户失败' }, { status: 500 });

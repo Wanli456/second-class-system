@@ -49,6 +49,9 @@ interface UserData {
   username: string;
   displayName: string;
   role: string;
+  student_id?: string;
+  canPublish?: boolean;
+  canScore?: boolean;
 }
 
 export default function AdminPage() {
@@ -66,7 +69,7 @@ export default function AdminPage() {
   const [submissions, setSubmissions] = useState<ActivitySubmission[]>([]);
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
   const [scoringList, setScoringList] = useState<ScoringActivity[]>([]);
-  const [users, setUsers] = useState<Array<{id: string; username: string; role: string; created_at: string}>>([]);
+  const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState('');
@@ -97,10 +100,16 @@ export default function AdminPage() {
       if (userData.role === 'admin') {
         setAuthenticated(true);
         setRole('admin');
+      } else if (roleParam === 'publisher' && userData.canPublish) {
+        setAuthenticated(true);
+        setRole('publisher');
+      } else if (roleParam === 'scorer' && userData.canScore) {
+        setAuthenticated(true);
+        setRole('scorer');
       } else if (roleParam && userData.role === roleParam) {
         setAuthenticated(true);
-      } else if (roleParam && userData.role !== roleParam) {
-        setLoginError(`当前账号不是${ROLE_LABELS[roleParam]}角色`);
+      } else if (roleParam) {
+        setLoginError(`当前账号没有${ROLE_LABELS[roleParam]}权限`);
         setShowLoginModal(true);
       }
     } else {
@@ -171,13 +180,23 @@ export default function AdminPage() {
       setRole('admin'); // Admin sees all tabs
       setLoginError('');
       setShowLoginModal(false);
+    } else if (roleParam === 'publisher' && userData.canPublish) {
+      setAuthenticated(true);
+      setRole('publisher');
+      setLoginError('');
+      setShowLoginModal(false);
+    } else if (roleParam === 'scorer' && userData.canScore) {
+      setAuthenticated(true);
+      setRole('scorer');
+      setLoginError('');
+      setShowLoginModal(false);
     } else if (roleParam && userData.role === roleParam) {
       setAuthenticated(true);
       setRole(roleParam);
       setLoginError('');
       setShowLoginModal(false);
-    } else if (roleParam && userData.role !== roleParam) {
-      setLoginError(`当前账号不是${ROLE_LABELS[roleParam]}角色`);
+    } else if (roleParam) {
+      setLoginError(`当前账号没有${ROLE_LABELS[roleParam]}权限`);
     }
   };
 
@@ -262,6 +281,26 @@ export default function AdminPage() {
     } catch (error) {
       console.error('更新角色失败:', error);
       alert('更新角色失败');
+    }
+  };
+
+  const handleUpdatePermission = async (userId: string, permission: 'canPublish' | 'canScore', value: boolean) => {
+    const apiField = permission === 'canPublish' ? 'can_publish' : 'can_score';
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: userId, [apiField]: value }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchUsers();
+      } else {
+        alert(data.error || '更新权限失败');
+      }
+    } catch (error) {
+      console.error('更新权限失败:', error);
+      alert('更新权限失败');
     }
   };
 
@@ -368,22 +407,18 @@ export default function AdminPage() {
     );
   }
 
-  // Build tabs based on role
-  const tabs = role === 'admin'
-    ? [
-        { key: 'activities', label: '活动总表', icon: Table, count: activities.length },
-        { key: 'review', label: '活动审核', icon: FileCheck, count: pendingSubmissions.length },
-        { key: 'leave', label: '请假审核', icon: UserCheck, count: pendingLeaves.length },
-        { key: 'scoring', label: '活动赋分', icon: Award, count: scoringList.filter(s => s.scoring_status === '待赋分').length },
-        { key: 'users', label: '用户管理', icon: Users, count: 0 },
-      ]
-    : role === 'publisher'
-    ? [
-        { key: 'review', label: '活动审核', icon: FileCheck, count: pendingSubmissions.length },
-      ]
-    : [
-        { key: 'scoring', label: '活动赋分', icon: Award, count: scoringList.filter(s => s.scoring_status === '待赋分').length },
-      ];
+  // Build tabs based on role and permissions
+  const isAdmin = role === 'admin';
+  const canPublish = isAdmin || user?.canPublish === true;
+  const canScore = isAdmin || user?.canScore === true;
+
+  const tabs = [
+    ...(isAdmin ? [{ key: 'activities', label: '活动总表', icon: Table, count: activities.length }] : []),
+    ...(canPublish ? [{ key: 'review', label: '活动审核', icon: FileCheck, count: pendingSubmissions.length }] : []),
+    ...(isAdmin ? [{ key: 'leave', label: '请假审核', icon: UserCheck, count: pendingLeaves.length }] : []),
+    ...(canScore ? [{ key: 'scoring', label: '活动赋分', icon: Award, count: scoringList.filter(s => s.scoring_status === '待赋分').length }] : []),
+    ...(isAdmin ? [{ key: 'users', label: '用户管理', icon: Users, count: 0 }] : []),
+  ];
 
   return (
     <div className="min-h-screen bg-[#f5f5f0]">
@@ -951,8 +986,11 @@ export default function AdminPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">用户名</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">当前角色</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">角色</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">发布活动</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-600">注册时间</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
                       </tr>
@@ -961,18 +999,39 @@ export default function AdminPage() {
                       {users.map((u) => (
                         <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
                           <td className="px-3 py-2 text-gray-800">{u.username}</td>
+                          <td className="px-3 py-2 text-gray-500">{u.student_id || '-'}</td>
                           <td className="px-3 py-2">
                             <span className={`rounded px-2 py-0.5 text-xs font-medium ${
                               u.role === 'admin' ? 'bg-red-100 text-red-700' :
-                              u.role === 'publisher' ? 'bg-blue-100 text-blue-700' :
-                              u.role === 'scorer' ? 'bg-purple-100 text-purple-700' :
                               u.role === 'leader' ? 'bg-emerald-100 text-emerald-700' :
                               'bg-gray-100 text-gray-600'
                             }`}>
-                              {ROLE_LABELS[u.role as AdminRole] || '学生'}
+                              {u.role === 'admin' ? '管理员' : u.role === 'leader' ? '活动负责人' : '学生'}
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-gray-500">{new Date(u.created_at).toLocaleDateString('zh-CN')}</td>
+                          <td className="px-3 py-2">
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={u.canPublish || false}
+                                onChange={(e) => handleUpdatePermission(u.id, 'canPublish', e.target.checked)}
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-xs text-gray-600">{u.canPublish ? '已开启' : '未开启'}</span>
+                            </label>
+                          </td>
+                          <td className="px-3 py-2">
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={u.canScore || false}
+                                onChange={(e) => handleUpdatePermission(u.id, 'canScore', e.target.checked)}
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-xs text-gray-600">{u.canScore ? '已开启' : '未开启'}</span>
+                            </label>
+                          </td>
+                          <td className="px-3 py-2 text-gray-500">-</td>
                           <td className="px-3 py-2">
                             <select
                               value={u.role}
@@ -981,15 +1040,13 @@ export default function AdminPage() {
                             >
                               <option value="student">学生</option>
                               <option value="leader">活动负责人</option>
-                              <option value="publisher">发布干事</option>
-                              <option value="scorer">赋分干事</option>
                               <option value="admin">管理员</option>
                             </select>
                           </td>
                         </tr>
                       ))}
                       {users.length === 0 && (
-                        <tr><td colSpan={4} className="px-3 py-8 text-center text-gray-400">暂无用户</td></tr>
+                        <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400">暂无用户</td></tr>
                       )}
                     </tbody>
                   </table>

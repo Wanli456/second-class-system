@@ -12,22 +12,22 @@ interface User {
   name: string;
   studentId?: string;
   role: string;
+  canPublish?: boolean;
+  canScore?: boolean;
 }
 
 function getButtonState(user: User | null, requiredRole: string): 'active' | 'grayed' | 'locked' {
   if (!user) return 'locked';
-  if (user.role === requiredRole) return 'active';
-  // Admin can access admin button, but publisher/scorer/leader buttons are grayed for admin
-  if (user.role === 'admin') {
-    if (requiredRole === 'admin') return 'active';
-    return 'grayed';
-  }
-  // Other roles: only their own button is active
+  if (user.role === 'admin') return 'active';
+  if (requiredRole === 'admin') return 'grayed';
+  if (requiredRole === 'publisher') return user.canPublish ? 'active' : 'grayed';
+  if (requiredRole === 'scorer') return user.canScore ? 'active' : 'grayed';
   return 'grayed';
 }
 
 function getLeaderButtonState(user: User | null): 'active' | 'grayed' | 'locked' {
   if (!user) return 'locked';
+  if (user.role === 'admin' || user.role === 'publisher' || user.canPublish || user.canScore) return 'active';
   if (user.role === 'leader') return 'active';
   return 'grayed';
 }
@@ -176,7 +176,7 @@ export default function Home() {
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
                 <Send className="h-5 w-5" />
               </div>
-              <h4 className="font-semibold text-gray-900">发布干事</h4>
+              <h4 className="font-semibold text-gray-900">发布活动</h4>
               <p className="mt-1 text-xs text-gray-500">活动审核（含策划书、备案表查看）</p>
               {publisherState === 'grayed' && <p className="mt-1 text-xs text-gray-400">（无此权限）</p>}
             </Link>
@@ -204,7 +204,7 @@ export default function Home() {
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
                 <Award className="h-5 w-5" />
               </div>
-              <h4 className="font-semibold text-gray-900">赋分干事</h4>
+              <h4 className="font-semibold text-gray-900">活动赋分</h4>
               <p className="mt-1 text-xs text-gray-500">活动赋分管理</p>
               {scorerState === 'grayed' && <p className="mt-1 text-xs text-gray-400">（无此权限）</p>}
             </Link>
