@@ -48,7 +48,17 @@ export default function Home() {
   useEffect(() => {
     const saved = localStorage.getItem('user');
     if (saved) {
-      try { setUser(JSON.parse(saved)); } catch {}
+      try {
+        const parsed = JSON.parse(saved);
+        // 管理员自动拥有所有权限
+        if (parsed.role === 'admin') {
+          parsed.canPublish = true;
+          parsed.canScore = true;
+          parsed.canReviewLeave = true;
+          parsed.canViewEveningStudy = true;
+        }
+        setUser(parsed);
+      } catch {}
     }
   }, []);
 
