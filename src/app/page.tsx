@@ -254,11 +254,6 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="mb-8 text-center">
-          <h2 className="text-xl font-semibold text-gray-700">请选择您的身份入口</h2>
-          <p className="mt-2 text-sm text-gray-500">根据角色选择对应功能入口</p>
-        </div>
-
         {/* 管理端入口 */}
         <div className="mb-6">
           <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">
