@@ -63,6 +63,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: '学号、姓名或密码错误' }, { status: 401 });
     }
 
+    // 管理员自动拥有所有权限
+    const isAdmin = user.role === 'admin';
+
     return NextResponse.json({ 
       success: true, 
       data: { 
@@ -70,10 +73,10 @@ export async function PUT(request: NextRequest) {
         studentId: user.student_id,
         name: user.username, 
         role: user.role,
-        canPublish: user.can_publish,
-        canScore: user.can_score,
-        canReviewLeave: user.can_review_leave,
-        canViewEveningStudy: user.can_view_evening_study,
+        canPublish: isAdmin ? true : user.can_publish,
+        canScore: isAdmin ? true : user.can_score,
+        canReviewLeave: isAdmin ? true : user.can_review_leave,
+        canViewEveningStudy: isAdmin ? true : user.can_view_evening_study,
       } 
     });
   } catch (error) {

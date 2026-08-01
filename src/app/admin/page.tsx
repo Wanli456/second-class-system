@@ -295,10 +295,10 @@ function AdminPage() {
 
   const handleUpdatePermission = async (userId: string, permission: 'canPublish' | 'canScore' | 'canReviewLeave' | 'canViewEveningStudy', value: boolean) => {
     const apiFieldMap = {
-      canPublish: 'can_publish',
-      canScore: 'can_score',
-      canReviewLeave: 'can_review_leave',
-      canViewEveningStudy: 'can_view_evening_study',
+      canPublish: 'canPublish',
+      canScore: 'canScore',
+      canReviewLeave: 'canReviewLeave',
+      canViewEveningStudy: 'canViewEveningStudy',
     };
     const apiField = apiFieldMap[permission];
     try {
