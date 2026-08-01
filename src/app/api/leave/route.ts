@@ -11,12 +11,19 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
     const role = searchParams.get('role');
     const className = searchParams.get('class');
+    const date = searchParams.get('date'); // 日期筛选
 
     // 按班级查询
     if (className) {
       let sql = 'SELECT * FROM leave_requests WHERE class_name ILIKE $1';
       const params: any[] = [`%${className}%`];
       let paramIndex = 2;
+
+      // 日期筛选
+      if (date) {
+        sql += ` AND created_at::date = $${paramIndex++}`;
+        params.push(date);
+      }
 
       if (status) {
         sql += ` AND review_status = $${paramIndex++}`;
@@ -26,7 +33,20 @@ export async function GET(request: NextRequest) {
       sql += ' ORDER BY created_at DESC';
 
       const data = await query(sql, params);
-      return NextResponse.json({ success: true, data });
+      
+      // 统计今日请假人数
+      const today = new Date().toISOString().split('T')[0];
+      const todayCount = await queryOne(
+        'SELECT COUNT(*) as count FROM leave_requests WHERE class_name ILIKE $1 AND created_at::date = $2',
+        [`%${className}%`, today]
+      );
+      
+      return NextResponse.json({ 
+        success: true, 
+        data,
+        todayCount: todayCount?.count || 0,
+        today
+      });
     }
 
     // 按姓名查询

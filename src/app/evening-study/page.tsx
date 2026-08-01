@@ -24,6 +24,13 @@ interface LeaveRequest {
   created_at: string;
 }
 
+interface LeaveQueryResult {
+  success: boolean;
+  data: LeaveRequest[];
+  todayCount?: number;
+  today?: string;
+}
+
 const STATUS_COLORS: Record<string, string> = {
   "待审核": "bg-amber-50 text-amber-700 border-amber-200",
   "已通过": "bg-green-50 text-green-700 border-green-200",
@@ -52,6 +59,8 @@ export default function EveningStudyPage() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [today, setToday] = useState("");
+  const [selectedDate, setSelectedDate] = useState("");
+  const [todayCount, setTodayCount] = useState<number>(0);
 
   useEffect(() => {
     const dateStr = new Date().toISOString().split("T")[0];
@@ -75,15 +84,21 @@ export default function EveningStudyPage() {
       const params = new URLSearchParams();
       if (searchType === "class") {
         params.set("class", searchKeyword.trim());
+        if (selectedDate) {
+          params.set("date", selectedDate);
+        }
       } else if (searchType === "name") {
         params.set("name", searchKeyword.trim());
       } else {
         params.set("student_id", searchKeyword.trim());
       }
       const res = await fetch(`/api/leave?${params.toString()}`);
-      const data = await res.json();
+      const data: LeaveQueryResult = await res.json();
       if (data.success) {
         setLeaveRequests(data.data);
+        if (searchType === "class") {
+          setTodayCount(data.todayCount || 0);
+        }
       } else {
         alert(data.error || "查询失败");
       }
@@ -167,6 +182,27 @@ export default function EveningStudyPage() {
               </Button>
             </div>
 
+            {/* 日期选择（仅班级查询时显示） */}
+            {searchType === "class" && (
+              <div className="flex items-center gap-2 mb-3">
+                <Calendar className="h-4 w-4 text-gray-500" />
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedDate("")}
+                  className="text-xs"
+                >
+                  全部日期
+                </Button>
+              </div>
+            )}
+
             {/* 搜索框 */}
             <div className="flex gap-2">
               <Input
@@ -222,6 +258,12 @@ export default function EveningStudyPage() {
                           ))}
                         </div>
                       </div>
+                      {todayCount > 0 && (
+                        <div className="mt-2 pt-2 border-t border-[#1e3a5f]/10 flex items-center justify-between text-xs">
+                          <span className="text-gray-600">今日请假人数</span>
+                          <span className="font-bold text-[#1e3a5f] text-base">{todayCount} 人</span>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 )}
