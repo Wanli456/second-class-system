@@ -27,6 +27,7 @@ interface LeaveRequest {
 interface LeaveQueryResult {
   success: boolean;
   data: LeaveRequest[];
+  error?: string;
   todayCount?: number;
   today?: string;
 }
