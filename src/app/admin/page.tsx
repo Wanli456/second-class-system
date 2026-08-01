@@ -1080,47 +1080,47 @@ function AdminPage() {
                               <td className="px-3 py-2 text-gray-800">{u.name || '-'}</td>
                               <td className="px-3 py-2 text-gray-500">{u.studentId || '-'}</td>
                               <td className="px-3 py-2">
-                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                <label className="flex items-center gap-1.5">
                                   <input
                                     type="checkbox"
-                                    checked={u.canPublish || false}
-                                    onChange={(e) => handleUpdatePermission(u.id, 'canPublish', e.target.checked)}
-                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    checked={true}
+                                    disabled
+                                    className="rounded border-gray-300 text-blue-600"
                                   />
-                                  <span className="text-xs text-gray-600">{u.canPublish ? '已开启' : '未开启'}</span>
+                                  <span className="text-xs text-gray-500">已开启</span>
                                 </label>
                               </td>
                               <td className="px-3 py-2">
-                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                <label className="flex items-center gap-1.5">
                                   <input
                                     type="checkbox"
-                                    checked={u.canScore || false}
-                                    onChange={(e) => handleUpdatePermission(u.id, 'canScore', e.target.checked)}
-                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    checked={true}
+                                    disabled
+                                    className="rounded border-gray-300 text-blue-600"
                                   />
-                                  <span className="text-xs text-gray-600">{u.canScore ? '已开启' : '未开启'}</span>
+                                  <span className="text-xs text-gray-500">已开启</span>
                                 </label>
                               </td>
                               <td className="px-3 py-2">
-                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                <label className="flex items-center gap-1.5">
                                   <input
                                     type="checkbox"
-                                    checked={u.canReviewLeave || false}
-                                    onChange={(e) => handleUpdatePermission(u.id, 'canReviewLeave', e.target.checked)}
-                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    checked={true}
+                                    disabled
+                                    className="rounded border-gray-300 text-blue-600"
                                   />
-                                  <span className="text-xs text-gray-600">{u.canReviewLeave ? '已开启' : '未开启'}</span>
+                                  <span className="text-xs text-gray-500">已开启</span>
                                 </label>
                               </td>
                               <td className="px-3 py-2">
-                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                <label className="flex items-center gap-1.5">
                                   <input
                                     type="checkbox"
-                                    checked={u.canViewEveningStudy || false}
-                                    onChange={(e) => handleUpdatePermission(u.id, 'canViewEveningStudy', e.target.checked)}
-                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    checked={true}
+                                    disabled
+                                    className="rounded border-gray-300 text-blue-600"
                                   />
-                                  <span className="text-xs text-gray-600">{u.canViewEveningStudy ? '已开启' : '未开启'}</span>
+                                  <span className="text-xs text-gray-500">已开启</span>
                                 </label>
                               </td>
                               <td className="px-3 py-2 text-gray-500 text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString('zh-CN') : '-'}</td>
@@ -1132,19 +1132,15 @@ function AdminPage() {
                                   >
                                     改密
                                   </button>
-                                  <button
-                                    onClick={() => {
-                                      const newRole = prompt(`将"${u.name}"的角色变更为：\n1. 管理员 (admin)\n2. 活动负责人 (leader)\n3. 学生 (student)\n\n请输入角色名称：`, u.role);
-                                      if (newRole && ['admin', 'leader', 'student'].includes(newRole)) {
-                                        handleUpdateRole(u.id, newRole);
-                                      } else if (newRole !== null) {
-                                        alert('无效的角色名称，请输入：admin、leader 或 student');
-                                      }
-                                    }}
-                                    className="text-xs text-purple-600 hover:text-purple-800 px-1.5 py-0.5 rounded border border-purple-200 hover:bg-purple-50"
+                                  <select
+                                    value={u.role}
+                                    onChange={(e) => handleUpdateRole(u.id, e.target.value)}
+                                    className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
                                   >
-                                    角色
-                                  </button>
+                                    <option value="admin">管理员</option>
+                                    <option value="leader">活动负责人</option>
+                                    <option value="student">学生</option>
+                                  </select>
                                   <button
                                     onClick={() => handleDeleteUser(u.id, u.name)}
                                     className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
@@ -1189,11 +1185,11 @@ function AdminPage() {
                                 <label className="flex items-center gap-1.5 cursor-pointer">
                                   <input
                                     type="checkbox"
-                                    checked={u.canPublish || false}
-                                    onChange={(e) => handleUpdatePermission(u.id, 'canPublish', e.target.checked)}
-                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    checked={true}
+                                    disabled
+                                    className="rounded border-gray-300 text-blue-600"
                                   />
-                                  <span className="text-xs text-gray-600">{u.canPublish ? '已开启' : '未开启'}</span>
+                                  <span className="text-xs text-gray-500">已开启</span>
                                 </label>
                               </td>
                               <td className="px-3 py-2">
@@ -1238,19 +1234,15 @@ function AdminPage() {
                                   >
                                     改密
                                   </button>
-                                  <button
-                                    onClick={() => {
-                                      const newRole = prompt(`将"${u.name}"的角色变更为：\n1. 管理员 (admin)\n2. 活动负责人 (leader)\n3. 学生 (student)\n\n请输入角色名称：`, u.role);
-                                      if (newRole && ['admin', 'leader', 'student'].includes(newRole)) {
-                                        handleUpdateRole(u.id, newRole);
-                                      } else if (newRole !== null) {
-                                        alert('无效的角色名称，请输入：admin、leader 或 student');
-                                      }
-                                    }}
-                                    className="text-xs text-purple-600 hover:text-purple-800 px-1.5 py-0.5 rounded border border-purple-200 hover:bg-purple-50"
+                                  <select
+                                    value={u.role}
+                                    onChange={(e) => handleUpdateRole(u.id, e.target.value)}
+                                    className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
                                   >
-                                    角色
-                                  </button>
+                                    <option value="admin">管理员</option>
+                                    <option value="leader">活动负责人</option>
+                                    <option value="student">学生</option>
+                                  </select>
                                   <button
                                     onClick={() => handleDeleteUser(u.id, u.name)}
                                     className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
@@ -1344,19 +1336,15 @@ function AdminPage() {
                                   >
                                     改密
                                   </button>
-                                  <button
-                                    onClick={() => {
-                                      const newRole = prompt(`将"${u.name}"的角色变更为：\n1. 管理员 (admin)\n2. 活动负责人 (leader)\n3. 学生 (student)\n\n请输入角色名称：`, u.role);
-                                      if (newRole && ['admin', 'leader', 'student'].includes(newRole)) {
-                                        handleUpdateRole(u.id, newRole);
-                                      } else if (newRole !== null) {
-                                        alert('无效的角色名称，请输入：admin、leader 或 student');
-                                      }
-                                    }}
-                                    className="text-xs text-purple-600 hover:text-purple-800 px-1.5 py-0.5 rounded border border-purple-200 hover:bg-purple-50"
+                                  <select
+                                    value={u.role}
+                                    onChange={(e) => handleUpdateRole(u.id, e.target.value)}
+                                    className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
                                   >
-                                    角色
-                                  </button>
+                                    <option value="admin">管理员</option>
+                                    <option value="leader">活动负责人</option>
+                                    <option value="student">学生</option>
+                                  </select>
                                   <button
                                     onClick={() => handleDeleteUser(u.id, u.name)}
                                     className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
