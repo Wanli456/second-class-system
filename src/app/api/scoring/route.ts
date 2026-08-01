@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/storage/database/supabase-client';
+import { createNotification } from '@/app/api/notifications/route';
 
 // GET /api/scoring - 获取赋分列表
 export async function GET(request: NextRequest) {
@@ -73,9 +74,25 @@ export async function PUT(request: NextRequest) {
       [id]
     );
 
+    // 查找负责人并发送通知
+    const leader = await queryOne(
+      `SELECT id FROM users WHERE username = $1 OR student_id = $2 LIMIT 1`,
+      [activity.leader_name, activity.leader_phone]
+    );
+
+    if (leader) {
+      await createNotification(
+        leader.id,
+        'activity_scored',
+        '活动赋分完成',
+        `您的活动「${activity.full_name}」（ID: ${id}）已完成赋分`,
+        id
+      );
+    }
+
     return NextResponse.json({
       success: true,
-      message: `赋分成功，已通知负责人（${activity.leader_phone}）`,
+      message: `赋分成功，已通知负责人`,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : '未知错误';

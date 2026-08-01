@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/storage/database/supabase-client';
+import { createNotification } from '@/app/api/notifications/route';
 
 // GET /api/activities/review - 管理员获取待审核提交
 export async function GET(request: NextRequest) {
@@ -56,7 +57,7 @@ export async function PUT(request: NextRequest) {
       [review_status, review_note || null, id]
     );
 
-    // 如果审核通过，自动写入活动总表
+    // 如果审核通过，自动写入活动总表并通知负责人
     if (review_status === '已通过') {
       const now = new Date();
       const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -80,6 +81,38 @@ export async function PUT(request: NextRequest) {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, '正常活动', '待赋分')`,
         [activityId, submission.full_name, submission.start_time, submission.end_time, submission.category, submission.level, submission.plan_file_url, submission.record_file_url, submission.leader_name, submission.leader_phone]
       );
+
+      // 查找负责人的用户 ID 并发送通知
+      const leader = await queryOne(
+        `SELECT id FROM users WHERE username = $1 OR student_id = $2 LIMIT 1`,
+        [submission.leader_name, submission.leader_phone]
+      );
+
+      if (leader) {
+        await createNotification(
+          leader.id,
+          'activity_approved',
+          '活动审核通过',
+          `您提交的活动「${submission.full_name}」已审核通过，活动ID：${activityId}`,
+          activityId
+        );
+      }
+    } else if (review_status === '已驳回') {
+      // 驳回时也通知负责人
+      const leader = await queryOne(
+        `SELECT id FROM users WHERE username = $1 OR student_id = $2 LIMIT 1`,
+        [submission.leader_name, submission.leader_phone]
+      );
+
+      if (leader) {
+        await createNotification(
+          leader.id,
+          'activity_rejected',
+          '活动审核被驳回',
+          `您提交的活动「${submission.full_name}」审核未通过。${review_note ? '原因：' + review_note : ''}`,
+          submission.id
+        );
+      }
     }
 
     return NextResponse.json({ success: true });

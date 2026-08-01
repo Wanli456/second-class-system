@@ -128,3 +128,23 @@ export const evening_study_attendance = pgTable(
     index("evening_attendance_schedule_idx").on(table.schedule_id),
   ]
 );
+
+// 通知表
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    user_id: varchar("user_id", { length: 36 }).notNull(), // 接收通知的用户 ID
+    type: varchar("type", { length: 50 }).notNull(), // activity_approved / activity_scored / leave_approved / leave_rejected
+    title: varchar("title", { length: 200 }).notNull(),
+    content: text("content").notNull(),
+    is_read: varchar("is_read", { length: 5 }).notNull().default("false"), // "true" / "false"
+    related_id: varchar("related_id", { length: 50 }), // 关联的业务 ID（活动 ID 或请假 ID）
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("notifications_user_id_idx").on(table.user_id),
+    index("notifications_is_read_idx").on(table.is_read),
+    index("notifications_created_at_idx").on(table.created_at),
+  ]
+);

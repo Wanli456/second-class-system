@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/storage/database/supabase-client';
+import { createNotification } from '@/app/api/notifications/route';
 
 // GET /api/leave - 查询请假记录
 export async function GET(request: NextRequest) {
@@ -139,6 +140,27 @@ export async function PUT(request: NextRequest) {
       `UPDATE leave_requests SET review_status = $1, review_note = $2, updated_at = NOW() WHERE id = $3 RETURNING *`,
       [review_status, review_note || null, id]
     );
+
+    // 查找请假学生并发送通知
+    const student = await queryOne(
+      `SELECT id FROM users WHERE student_id = $1 LIMIT 1`,
+      [data.student_id]
+    );
+
+    if (student) {
+      const title = review_status === '已通过' ? '请假审核通过' : '请假审核被驳回';
+      const content = review_status === '已通过'
+        ? `您的${data.leave_type}请假申请已审核通过`
+        : `您的${data.leave_type}请假申请审核未通过。${review_note ? '原因：' + review_note : ''}`;
+
+      await createNotification(
+        student.id,
+        review_status === '已通过' ? 'leave_approved' : 'leave_rejected',
+        title,
+        content,
+        data.id
+      );
+    }
 
     return NextResponse.json({ success: true, data });
   } catch (err) {

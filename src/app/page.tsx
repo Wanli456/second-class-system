@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   ClipboardList, Send, Award, FileText, UserCheck, Moon, Lock, LogOut, Key, ArrowLeft,
 } from 'lucide-react';
+import { NotificationBell } from '@/components/NotificationBell';
 
 interface User {
   id: string;
@@ -211,6 +212,7 @@ export default function Home() {
           <div className="flex items-center gap-3">
             {user ? (
               <>
+                <NotificationBell userId={user.id} />
                 <span className="text-sm text-gray-600">欢迎，{user.name}</span>
                 <button
                   onClick={() => setShowPasswordModal(true)}
