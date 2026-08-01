@@ -1,58 +1,63 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { query, queryOne } from '@/storage/database/supabase-client';
 
 // GET /api/leave - 查询请假记录
 export async function GET(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
     const { searchParams } = new URL(request.url);
     const studentId = searchParams.get('student_id');
     const studentName = searchParams.get('name');
     const status = searchParams.get('status');
-    const role = searchParams.get('role'); // admin or student
-    const className = searchParams.get('class'); // 按班级查询
+    const role = searchParams.get('role');
+    const className = searchParams.get('class');
 
-    // 按班级查询（晚自习查询用）
+    // 按班级查询
     if (className) {
-      let query = client
-        .from('leave_requests')
-        .select('*')
-        .ilike('class_name', `%${className}%`)
-        .order('created_at', { ascending: false });
+      let sql = 'SELECT * FROM leave_requests WHERE class_name ILIKE $1';
+      const params: any[] = [`%${className}%`];
+      let paramIndex = 2;
 
-      if (status) query = query.eq('review_status', status);
+      if (status) {
+        sql += ` AND review_status = $${paramIndex++}`;
+        params.push(status);
+      }
 
-      const { data, error } = await query;
-      if (error) throw new Error(`查询失败: ${error.message}`);
+      sql += ' ORDER BY created_at DESC';
+
+      const data = await query(sql, params);
       return NextResponse.json({ success: true, data });
     }
 
-    // 按姓名查询（晚自习查询用）
+    // 按姓名查询
     if (studentName) {
-      let query = client
-        .from('leave_requests')
-        .select('*')
-        .ilike('student_name', `%${studentName}%`)
-        .order('created_at', { ascending: false });
+      let sql = 'SELECT * FROM leave_requests WHERE student_name ILIKE $1';
+      const params: any[] = [`%${studentName}%`];
+      let paramIndex = 2;
 
-      if (status) query = query.eq('review_status', status);
+      if (status) {
+        sql += ` AND review_status = $${paramIndex++}`;
+        params.push(status);
+      }
 
-      const { data, error } = await query;
-      if (error) throw new Error(`查询失败: ${error.message}`);
+      sql += ' ORDER BY created_at DESC';
+
+      const data = await query(sql, params);
       return NextResponse.json({ success: true, data });
     }
 
     if (role === 'admin') {
-      // 管理员查看所有
-      let query = client
-        .from('leave_requests')
-        .select('*')
-        .order('created_at', { ascending: false });
+      let sql = 'SELECT * FROM leave_requests';
+      const params: any[] = [];
+      let paramIndex = 1;
 
-      if (status) query = query.eq('review_status', status);
+      if (status) {
+        sql += ` WHERE review_status = $${paramIndex++}`;
+        params.push(status);
+      }
 
-      const { data, error } = await query;
-      if (error) throw new Error(`查询失败: ${error.message}`);
+      sql += ' ORDER BY created_at DESC';
+
+      const data = await query(sql, params);
       return NextResponse.json({ success: true, data });
     }
 
@@ -60,13 +65,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: '缺少学号' }, { status: 400 });
     }
 
-    const { data, error } = await client
-      .from('leave_requests')
-      .select('*')
-      .eq('student_id', studentId)
-      .order('created_at', { ascending: false });
-
-    if (error) throw new Error(`查询失败: ${error.message}`);
+    const data = await query(
+      'SELECT * FROM leave_requests WHERE student_id = $1 ORDER BY created_at DESC',
+      [studentId]
+    );
 
     return NextResponse.json({ success: true, data });
   } catch (err) {
@@ -78,7 +80,6 @@ export async function GET(request: NextRequest) {
 // POST /api/leave - 学生提交请假申请
 export async function POST(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
     const body = await request.json();
     const { student_id, class_name, student_name, leave_type, leave_image_url, activity_name } = body;
 
@@ -86,24 +87,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: '缺少必填字段' }, { status: 400 });
     }
 
-    // 活动公假需要填写活动全称
     if (leave_type === '活动公假' && !activity_name) {
       return NextResponse.json({ success: false, error: '活动公假必须填写活动全称' }, { status: 400 });
     }
 
-    let reviewStatus: string = '待审核';
+    let reviewStatus = '待审核';
     let reviewNote: string | null = null;
 
     // 活动公假：检查活动是否存在
     if (leave_type === '活动公假' && activity_name) {
-      const { data: activity, error: actError } = await client
-        .from('activities')
-        .select('id')
-        .eq('full_name', activity_name)
-        .eq('status', '正常活动')
-        .maybeSingle();
-
-      if (actError) throw new Error(`查询活动失败: ${actError.message}`);
+      const activity = await queryOne(
+        `SELECT id FROM activities WHERE full_name = $1 AND status = '正常活动'`,
+        [activity_name]
+      );
 
       if (!activity) {
         reviewStatus = '已驳回';
@@ -111,22 +107,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { data, error } = await client
-      .from('leave_requests')
-      .insert({
-        student_id,
-        class_name,
-        student_name,
-        leave_type,
-        leave_image_url: leave_image_url || null,
-        activity_name: leave_type === '活动公假' ? activity_name : null,
-        review_status: reviewStatus,
-        review_note: reviewNote,
-      })
-      .select()
-      .single();
-
-    if (error) throw new Error(`提交失败: ${error.message}`);
+    const data = await queryOne(
+      `INSERT INTO leave_requests (student_id, class_name, student_name, leave_type, leave_image_url, activity_name, review_status, review_note)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [student_id, class_name, student_name, leave_type, leave_image_url || null, leave_type === '活动公假' ? activity_name : null, reviewStatus, reviewNote]
+    );
 
     return NextResponse.json({ success: true, data });
   } catch (err) {
@@ -138,7 +124,6 @@ export async function POST(request: NextRequest) {
 // PUT /api/leave - 管理员审核请假
 export async function PUT(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
     const body = await request.json();
     const { id, review_status, review_note } = body;
 
@@ -150,14 +135,10 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: '无效的审核状态' }, { status: 400 });
     }
 
-    const { data, error } = await client
-      .from('leave_requests')
-      .update({ review_status, review_note: review_note || null, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) throw new Error(`更新失败: ${error.message}`);
+    const data = await queryOne(
+      `UPDATE leave_requests SET review_status = $1, review_note = $2, updated_at = NOW() WHERE id = $3 RETURNING *`,
+      [review_status, review_note || null, id]
+    );
 
     return NextResponse.json({ success: true, data });
   } catch (err) {

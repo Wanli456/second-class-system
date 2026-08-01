@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { query, queryOne } from '@/storage/database/supabase-client';
 
 // GET /api/activities - 获取活动列表（管理员/负责人）
 export async function GET(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
     const status = searchParams.get('status');
@@ -12,19 +11,34 @@ export async function GET(request: NextRequest) {
     const keyword = searchParams.get('keyword');
     const leader_phone = searchParams.get('leader_phone');
 
-    let query = client
-      .from('activities')
-      .select('*')
-      .order('created_at', { ascending: false });
+    let sql = 'SELECT * FROM activities WHERE 1=1';
+    const params: any[] = [];
+    let paramIndex = 1;
 
-    if (category) query = query.eq('category', category);
-    if (status) query = query.eq('status', status);
-    if (level) query = query.eq('level', level);
-    if (keyword) query = query.ilike('full_name', `%${keyword}%`);
-    if (leader_phone) query = query.eq('leader_phone', leader_phone);
+    if (category) {
+      sql += ` AND category = $${paramIndex++}`;
+      params.push(category);
+    }
+    if (status) {
+      sql += ` AND status = $${paramIndex++}`;
+      params.push(status);
+    }
+    if (level) {
+      sql += ` AND level = $${paramIndex++}`;
+      params.push(level);
+    }
+    if (keyword) {
+      sql += ` AND full_name ILIKE $${paramIndex++}`;
+      params.push(`%${keyword}%`);
+    }
+    if (leader_phone) {
+      sql += ` AND leader_phone = $${paramIndex++}`;
+      params.push(leader_phone);
+    }
 
-    const { data, error } = await query;
-    if (error) throw new Error(`查询失败: ${error.message}`);
+    sql += ' ORDER BY created_at DESC';
+
+    const data = await query(sql, params);
 
     return NextResponse.json({ success: true, data });
   } catch (err) {
@@ -36,7 +50,6 @@ export async function GET(request: NextRequest) {
 // POST /api/activities - 管理员创建活动
 export async function POST(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
     const body = await request.json();
     const { full_name, start_time, end_time, category, level, plan_file_url, record_file_url, leader_name, leader_phone, status } = body;
 
@@ -49,12 +62,10 @@ export async function POST(request: NextRequest) {
     const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
     const prefix = `EK${yearMonth}`;
 
-    const { data: existing } = await client
-      .from('activities')
-      .select('id')
-      .like('id', `${prefix}%`)
-      .order('id', { ascending: false })
-      .limit(1);
+    const existing = await query(
+      `SELECT id FROM activities WHERE id LIKE $1 ORDER BY id DESC LIMIT 1`,
+      [`${prefix}%`]
+    );
 
     let seq = 1;
     if (existing && existing.length > 0) {
@@ -64,26 +75,12 @@ export async function POST(request: NextRequest) {
     }
     const id = `${prefix}${String(seq).padStart(3, '0')}`;
 
-    const { data, error } = await client
-      .from('activities')
-      .insert({
-        id,
-        full_name,
-        start_time,
-        end_time,
-        category,
-        level,
-        plan_file_url: plan_file_url || null,
-        record_file_url: record_file_url || null,
-        leader_name,
-        leader_phone,
-        status: status || '正常活动',
-        scoring_status: '待赋分',
-      })
-      .select()
-      .single();
-
-    if (error) throw new Error(`创建失败: ${error.message}`);
+    const data = await queryOne(
+      `INSERT INTO activities (id, full_name, start_time, end_time, category, level, plan_file_url, record_file_url, leader_name, leader_phone, status, scoring_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, '待赋分')
+       RETURNING *`,
+      [id, full_name, start_time, end_time, category, level, plan_file_url || null, record_file_url || null, leader_name, leader_phone, status || '正常活动']
+    );
 
     return NextResponse.json({ success: true, data });
   } catch (err) {
@@ -95,7 +92,6 @@ export async function POST(request: NextRequest) {
 // PUT /api/activities - 管理员更新活动（不能修改ID）
 export async function PUT(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
     const body = await request.json();
     const { id, ...updates } = body;
 
@@ -106,14 +102,22 @@ export async function PUT(request: NextRequest) {
     // 禁止修改ID
     delete updates.id;
 
-    const { data, error } = await client
-      .from('activities')
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select()
-      .single();
+    const setClauses: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
 
-    if (error) throw new Error(`更新失败: ${error.message}`);
+    for (const [key, value] of Object.entries(updates)) {
+      setClauses.push(`${key} = $${paramIndex++}`);
+      params.push(value);
+    }
+
+    setClauses.push(`updated_at = NOW()`);
+    params.push(id);
+
+    const data = await queryOne(
+      `UPDATE activities SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+      params
+    );
 
     return NextResponse.json({ success: true, data });
   } catch (err) {
@@ -125,7 +129,6 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/activities - 管理员删除活动
 export async function DELETE(request: NextRequest) {
   try {
-    const client = getSupabaseClient();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -133,12 +136,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: '缺少活动ID' }, { status: 400 });
     }
 
-    const { error } = await client
-      .from('activities')
-      .delete()
-      .eq('id', id);
-
-    if (error) throw new Error(`删除失败: ${error.message}`);
+    await query('DELETE FROM activities WHERE id = $1', [id]);
 
     return NextResponse.json({ success: true });
   } catch (err) {
