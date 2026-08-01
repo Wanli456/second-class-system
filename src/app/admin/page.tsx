@@ -1162,6 +1162,7 @@ function AdminPage() {
                       <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                         <span className="rounded bg-emerald-100 text-emerald-700 px-2 py-0.5 text-xs font-medium">活动负责人</span>
                         <span className="text-gray-500 font-normal">({users.filter(u => u.role === 'leader').length}人)</span>
+                        <span className="text-xs text-gray-400">（默认拥有录入活动权限）</span>
                       </h4>
                       <table className="w-full text-sm">
                         <thead>
@@ -1185,11 +1186,11 @@ function AdminPage() {
                                 <label className="flex items-center gap-1.5 cursor-pointer">
                                   <input
                                     type="checkbox"
-                                    checked={true}
-                                    disabled
-                                    className="rounded border-gray-300 text-blue-600"
+                                    checked={u.canPublish || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canPublish', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                                   />
-                                  <span className="text-xs text-gray-500">已开启</span>
+                                  <span className="text-xs text-gray-600">{u.canPublish ? '已开启' : '未开启'}</span>
                                 </label>
                               </td>
                               <td className="px-3 py-2">
