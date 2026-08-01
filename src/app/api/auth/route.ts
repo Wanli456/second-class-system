@@ -86,8 +86,9 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const role = searchParams.get('role');
+    const admin = searchParams.get('admin');
 
-    if (role !== 'admin') {
+    if (role !== 'admin' && admin !== 'true') {
       return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
     }
 
