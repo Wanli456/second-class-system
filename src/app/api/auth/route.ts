@@ -159,7 +159,7 @@ export async function PATCH(request: NextRequest) {
 
     params.push(userId);
     const user = await queryOne(
-      `UPDATE users SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${paramIndex} RETURNING *`,
+      `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
       params
     );
 
@@ -177,10 +177,11 @@ export async function PATCH(request: NextRequest) {
         canPublish: user.can_publish,
         canScore: user.can_score,
         canReviewLeave: user.can_review_leave,
+        canViewEveningStudy: user.can_view_evening_study,
       }
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('更新用户失败:', error);
-    return NextResponse.json({ success: false, error: '更新用户失败' }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message || '更新用户失败' }, { status: 500 });
   }
 }
