@@ -136,14 +136,21 @@ body {
   @apply font-sans;
 }
 
-/* 隐藏左下角的 N 按钮（Coze 调试工具） */
-button[aria-label*="N"],
+/* 隐藏左下角的 N 按钮（Coze 调试工具）- 使用多种选择器确保覆盖 */
+button[aria-label*="N" i],
+button[title*="N" i],
+button[data-testid*="n" i],
 div[style*="bottom: 0"][style*="left: 0"] button,
+div[style*="bottom:0"][style*="left:0"] button,
 .fixed.bottom-0.left-0 button,
-[class*="coze-feedback"],
-[class*="feedback-button"] {
+[class*="coze-feedback" i],
+[class*="feedback-button" i],
+[class*="debug" i][class*="button" i] {
   display: none !important;
   pointer-events: none !important;
   opacity: 0 !important;
   visibility: hidden !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
 }
