@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Fragment } from 'react';
+import { useState, useEffect, useCallback, Fragment, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -57,7 +57,7 @@ interface UserData {
   createdAt?: string;
 }
 
-export default function AdminPage() {
+function AdminPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const roleParam = searchParams.get('role') as AdminRole | null;
@@ -1231,5 +1231,14 @@ function ActivityForm({ activity, onSubmit, onCancel }: {
         <button onClick={onCancel} className="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">取消</button>
       </div>
     </div>
+  );
+}
+
+// Wrapper component with Suspense boundary for useSearchParams
+export default function AdminPageWrapper() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="text-gray-500">加载中...</div></div>}>
+      <AdminPage />
+    </Suspense>
   );
 }
