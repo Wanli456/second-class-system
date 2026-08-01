@@ -135,3 +135,15 @@
 body {
   @apply font-sans;
 }
+
+/* 隐藏左下角的 N 按钮（Coze 调试工具） */
+button[aria-label*="N"],
+div[style*="bottom: 0"][style*="left: 0"] button,
+.fixed.bottom-0.left-0 button,
+[class*="coze-feedback"],
+[class*="feedback-button"] {
+  display: none !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
