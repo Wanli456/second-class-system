@@ -279,7 +279,7 @@ function AdminPage() {
       const res = await fetch('/api/auth', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: userId, role: newRole }),
+        body: JSON.stringify({ userId, role: newRole }),
       });
       const data = await res.json();
       if (data.success) {
@@ -309,7 +309,10 @@ function AdminPage() {
       });
       const data = await res.json();
       if (data.success) {
-        fetchUsers();
+        // 只更新本地状态，避免页面跳动
+        setUsers(prev => prev.map(u => 
+          u.id === userId ? { ...u, [permission]: value } : u
+        ));
       } else {
         alert(data.error || '更新权限失败');
       }
@@ -1051,113 +1054,327 @@ function AdminPage() {
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">角色</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">发布活动权限</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">晚自习查询权限</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">注册时间</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {users.filter(u => !userSearch || u.name?.includes(userSearch)).map((u) => (
-                        <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="px-3 py-2 text-gray-800">{u.name || '-'}</td>
-                          <td className="px-3 py-2 text-gray-500">{u.studentId || '-'}</td>
-                          <td className="px-3 py-2">
-                            <span className={`rounded px-2 py-0.5 text-xs font-medium ${
-                              u.role === 'admin' ? 'bg-red-100 text-red-700' :
-                              u.role === 'leader' ? 'bg-emerald-100 text-emerald-700' :
-                              'bg-gray-100 text-gray-600'
-                            }`}>
-                              {u.role === 'admin' ? '管理员' : u.role === 'leader' ? '活动负责人' : '学生'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2">
-                            <label className="flex items-center gap-1.5 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={u.canPublish || false}
-                                onChange={(e) => handleUpdatePermission(u.id, 'canPublish', e.target.checked)}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="text-xs text-gray-600">{u.canPublish ? '已开启' : '未开启'}</span>
-                            </label>
-                          </td>
-                          <td className="px-3 py-2">
-                            <label className="flex items-center gap-1.5 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={u.canScore || false}
-                                onChange={(e) => handleUpdatePermission(u.id, 'canScore', e.target.checked)}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="text-xs text-gray-600">{u.canScore ? '已开启' : '未开启'}</span>
-                            </label>
-                          </td>
-                          <td className="px-3 py-2">
-                            <label className="flex items-center gap-1.5 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={u.canReviewLeave || false}
-                                onChange={(e) => handleUpdatePermission(u.id, 'canReviewLeave', e.target.checked)}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="text-xs text-gray-600">{u.canReviewLeave ? '已开启' : '未开启'}</span>
-                            </label>
-                          </td>
-                          <td className="px-3 py-2">
-                            <label className="flex items-center gap-1.5 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={u.canViewEveningStudy || false}
-                                onChange={(e) => handleUpdatePermission(u.id, 'canViewEveningStudy', e.target.checked)}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <span className="text-xs text-gray-600">{u.canViewEveningStudy ? '已开启' : '未开启'}</span>
-                            </label>
-                          </td>
-                          <td className="px-3 py-2 text-gray-500 text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString('zh-CN') : '-'}</td>
-                          <td className="px-3 py-2">
-                            <select
-                              value={u.role}
-                              onChange={(e) => handleUpdateRole(u.id, e.target.value)}
-                              className="rounded border border-gray-200 px-2 py-1 text-xs"
-                            >
-                              <option value="student">学生</option>
-                              <option value="leader">活动负责人</option>
-                              <option value="admin">管理员</option>
-                            </select>
-                          </td>
-                          <td className="px-3 py-2">
-                            <div className="flex gap-1">
-                              <button
-                                onClick={() => handleChangePassword(u.id, u.name)}
-                                className="text-xs text-blue-600 hover:text-blue-800 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-50"
-                              >
-                                改密
-                              </button>
-                              <button
-                                onClick={() => handleDeleteUser(u.id, u.name)}
-                                className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
-                              >
-                                删除
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {users.length === 0 && (
-                        <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400">暂无用户</td></tr>
-                      )}
-                    </tbody>
-                  </table>
+                  {/* 管理员 */}
+                  {users.filter(u => u.role === 'admin' && (!userSearch || u.name?.includes(userSearch))).length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                        <span className="rounded bg-red-100 text-red-700 px-2 py-0.5 text-xs font-medium">管理员</span>
+                        <span className="text-gray-500 font-normal">({users.filter(u => u.role === 'admin').length}人)</span>
+                      </h4>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-200 bg-gray-50">
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">发布活动权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">晚自习查询权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">注册时间</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {users.filter(u => u.role === 'admin' && (!userSearch || u.name?.includes(userSearch))).map((u) => (
+                            <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
+                              <td className="px-3 py-2 text-gray-800">{u.name || '-'}</td>
+                              <td className="px-3 py-2 text-gray-500">{u.studentId || '-'}</td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canPublish || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canPublish', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canPublish ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canScore || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canScore', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canScore ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canReviewLeave || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canReviewLeave', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canReviewLeave ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canViewEveningStudy || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canViewEveningStudy', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canViewEveningStudy ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2 text-gray-500 text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString('zh-CN') : '-'}</td>
+                              <td className="px-3 py-2">
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => handleChangePassword(u.id, u.name)}
+                                    className="text-xs text-blue-600 hover:text-blue-800 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-50"
+                                  >
+                                    改密
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const newRole = prompt(`将"${u.name}"的角色变更为：\n1. 管理员 (admin)\n2. 活动负责人 (leader)\n3. 学生 (student)\n\n请输入角色名称：`, u.role);
+                                      if (newRole && ['admin', 'leader', 'student'].includes(newRole)) {
+                                        handleUpdateRole(u.id, newRole);
+                                      } else if (newRole !== null) {
+                                        alert('无效的角色名称，请输入：admin、leader 或 student');
+                                      }
+                                    }}
+                                    className="text-xs text-purple-600 hover:text-purple-800 px-1.5 py-0.5 rounded border border-purple-200 hover:bg-purple-50"
+                                  >
+                                    角色
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteUser(u.id, u.name)}
+                                    className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
+                                  >
+                                    删除
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* 活动负责人 */}
+                  {users.filter(u => u.role === 'leader' && (!userSearch || u.name?.includes(userSearch))).length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                        <span className="rounded bg-emerald-100 text-emerald-700 px-2 py-0.5 text-xs font-medium">活动负责人</span>
+                        <span className="text-gray-500 font-normal">({users.filter(u => u.role === 'leader').length}人)</span>
+                      </h4>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-200 bg-gray-50">
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">发布活动权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">晚自习查询权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">注册时间</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {users.filter(u => u.role === 'leader' && (!userSearch || u.name?.includes(userSearch))).map((u) => (
+                            <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
+                              <td className="px-3 py-2 text-gray-800">{u.name || '-'}</td>
+                              <td className="px-3 py-2 text-gray-500">{u.studentId || '-'}</td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canPublish || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canPublish', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canPublish ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canScore || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canScore', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canScore ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canReviewLeave || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canReviewLeave', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canReviewLeave ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canViewEveningStudy || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canViewEveningStudy', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canViewEveningStudy ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2 text-gray-500 text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString('zh-CN') : '-'}</td>
+                              <td className="px-3 py-2">
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => handleChangePassword(u.id, u.name)}
+                                    className="text-xs text-blue-600 hover:text-blue-800 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-50"
+                                  >
+                                    改密
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const newRole = prompt(`将"${u.name}"的角色变更为：\n1. 管理员 (admin)\n2. 活动负责人 (leader)\n3. 学生 (student)\n\n请输入角色名称：`, u.role);
+                                      if (newRole && ['admin', 'leader', 'student'].includes(newRole)) {
+                                        handleUpdateRole(u.id, newRole);
+                                      } else if (newRole !== null) {
+                                        alert('无效的角色名称，请输入：admin、leader 或 student');
+                                      }
+                                    }}
+                                    className="text-xs text-purple-600 hover:text-purple-800 px-1.5 py-0.5 rounded border border-purple-200 hover:bg-purple-50"
+                                  >
+                                    角色
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteUser(u.id, u.name)}
+                                    className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
+                                  >
+                                    删除
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* 学生 */}
+                  {users.filter(u => u.role === 'student' && (!userSearch || u.name?.includes(userSearch))).length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                        <span className="rounded bg-gray-100 text-gray-600 px-2 py-0.5 text-xs font-medium">学生</span>
+                        <span className="text-gray-500 font-normal">({users.filter(u => u.role === 'student').length}人)</span>
+                      </h4>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-200 bg-gray-50">
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">发布活动权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">晚自习查询权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">注册时间</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {users.filter(u => u.role === 'student' && (!userSearch || u.name?.includes(userSearch))).map((u) => (
+                            <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
+                              <td className="px-3 py-2 text-gray-800">{u.name || '-'}</td>
+                              <td className="px-3 py-2 text-gray-500">{u.studentId || '-'}</td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canPublish || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canPublish', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canPublish ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canScore || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canScore', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canScore ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canReviewLeave || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canReviewLeave', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canReviewLeave ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canViewEveningStudy || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canViewEveningStudy', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canViewEveningStudy ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2 text-gray-500 text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString('zh-CN') : '-'}</td>
+                              <td className="px-3 py-2">
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => handleChangePassword(u.id, u.name)}
+                                    className="text-xs text-blue-600 hover:text-blue-800 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-50"
+                                  >
+                                    改密
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const newRole = prompt(`将"${u.name}"的角色变更为：\n1. 管理员 (admin)\n2. 活动负责人 (leader)\n3. 学生 (student)\n\n请输入角色名称：`, u.role);
+                                      if (newRole && ['admin', 'leader', 'student'].includes(newRole)) {
+                                        handleUpdateRole(u.id, newRole);
+                                      } else if (newRole !== null) {
+                                        alert('无效的角色名称，请输入：admin、leader 或 student');
+                                      }
+                                    }}
+                                    className="text-xs text-purple-600 hover:text-purple-800 px-1.5 py-0.5 rounded border border-purple-200 hover:bg-purple-50"
+                                  >
+                                    角色
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteUser(u.id, u.name)}
+                                    className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
+                                  >
+                                    删除
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {users.length === 0 && (
+                    <div className="px-3 py-8 text-center text-gray-400">暂无用户</div>
+                  )}
                 </div>
               </div>
             )}
