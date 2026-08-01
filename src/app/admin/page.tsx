@@ -501,19 +501,19 @@ function AdminPage() {
       {/* Tabs */}
       <div className="border-b border-gray-200 bg-white">
         <div className="mx-auto max-w-7xl px-4">
-          <nav className="flex gap-6">
+          <nav className="flex gap-4 overflow-x-auto">
             {tabs.map(tab => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-1.5 border-b-2 py-3 text-sm font-medium transition-colors ${
+                className={`flex shrink-0 items-center gap-1.5 border-b-2 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
                   activeTab === tab.key
                     ? 'border-[#1e3a5f] text-[#1e3a5f]'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                <tab.icon className="h-4 w-4" />
-                {tab.label}
+                <tab.icon className="h-4 w-4 shrink-0" />
+                <span>{tab.label}</span>
                 {tab.count > 0 && (
                   <span className={`rounded-full px-1.5 py-0.5 text-xs ${
                     activeTab === tab.key ? 'bg-[#1e3a5f] text-white' : 'bg-gray-100 text-gray-600'
