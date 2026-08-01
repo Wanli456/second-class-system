@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
 
-    if (error) throw new Error(`注册失败: ${error.message}`);
+    if (error) throw new Error(`注册失败：${error.message}`);
 
     return NextResponse.json({ 
       success: true, 
@@ -74,7 +74,7 @@ export async function PUT(request: NextRequest) {
       .eq('password', password)
       .maybeSingle();
 
-    if (error) throw new Error(`登录失败: ${error.message}`);
+    if (error) throw new Error(`登录失败：${error.message}`);
 
     if (!data) {
       return NextResponse.json({ success: false, error: '学号、姓名或密码错误' }, { status: 401 });
@@ -98,28 +98,27 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// GET /api/auth - 获取用户列表（需要管理员权限）
+// GET /api/auth - 获取用户列表（管理员）
 export async function GET(request: NextRequest) {
   try {
     const client = getSupabaseClient();
     const { searchParams } = new URL(request.url);
-    const adminToken = searchParams.get('admin');
-    
-    // 简单验证管理员权限
-    if (adminToken !== 'true') {
+    const role = searchParams.get('role');
+
+    if (role !== 'admin') {
       return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
     }
 
-    const { data, error } = await client
+    const { data: userList, error } = await client
       .from('users')
-      .select('id, username, student_id, role, can_publish, can_score, can_review_leave, created_at')
+      .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) throw new Error(`查询失败: ${error.message}`);
+    if (error) throw new Error(`获取用户列表失败：${error.message}`);
 
     return NextResponse.json({ 
       success: true, 
-      data: (data || []).map(u => ({
+      data: (userList || []).map(u => ({
         id: u.id,
         studentId: u.student_id,
         name: u.username,
@@ -127,62 +126,22 @@ export async function GET(request: NextRequest) {
         canPublish: u.can_publish,
         canScore: u.can_score,
         canReviewLeave: u.can_review_leave,
-        createdAt: u.created_at,
       }))
     });
   } catch (error) {
-    console.error('查询用户失败:', error);
-    return NextResponse.json({ success: false, error: '查询用户失败' }, { status: 500 });
+    console.error('获取用户列表失败:', error);
+    return NextResponse.json({ success: false, error: '获取用户列表失败' }, { status: 500 });
   }
 }
 
-// PATCH /api/auth - 更新用户角色、权限或密码
+// PATCH /api/auth - 更新用户角色/权限
 export async function PATCH(request: NextRequest) {
   try {
     const client = getSupabaseClient();
-    const body = await request.json();
-    const { id, role, canPublish, canScore, canReviewLeave, password, oldPassword } = body;
+    const { userId, role, canPublish, canScore, canReviewLeave } = await request.json();
 
-    if (!id) {
-      return NextResponse.json({ success: false, error: '参数不完整' }, { status: 400 });
-    }
-
-    // 修改密码（需要验证旧密码）
-    if (password !== undefined) {
-      if (!oldPassword) {
-        return NextResponse.json({ success: false, error: '请输入旧密码' }, { status: 400 });
-      }
-      if (password.length < 6) {
-        return NextResponse.json({ success: false, error: '新密码长度至少6位' }, { status: 400 });
-      }
-      
-      // 验证旧密码
-      const { data: userData, error: verifyError } = await client
-        .from('users')
-        .select('password')
-        .eq('id', id)
-        .single();
-      
-      if (verifyError || !userData) {
-        return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
-      }
-      
-      if (userData.password !== oldPassword) {
-        return NextResponse.json({ success: false, error: '旧密码错误' }, { status: 400 });
-      }
-      
-      const { error } = await client
-        .from('users')
-        .update({ password })
-        .eq('id', id);
-      if (error) throw new Error(`修改密码失败: ${error.message}`);
-      return NextResponse.json({ success: true, message: '密码修改成功' });
-    }
-
-    // 更新角色和权限
-    const validRoles = ['student', 'leader', 'admin'];
-    if (role && !validRoles.includes(role)) {
-      return NextResponse.json({ success: false, error: '无效的角色' }, { status: 400 });
+    if (!userId) {
+      return NextResponse.json({ success: false, error: '用户 ID 不能为空' }, { status: 400 });
     }
 
     const updateData: any = {};
@@ -194,11 +153,15 @@ export async function PATCH(request: NextRequest) {
     const { data, error } = await client
       .from('users')
       .update(updateData)
-      .eq('id', id)
+      .eq('id', userId)
       .select()
       .single();
 
-    if (error) throw new Error(`更新失败: ${error.message}`);
+    if (error) throw new Error(`更新用户失败：${error.message}`);
+
+    if (!data) {
+      return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
+    }
 
     return NextResponse.json({ 
       success: true, 
@@ -215,30 +178,5 @@ export async function PATCH(request: NextRequest) {
   } catch (error) {
     console.error('更新用户失败:', error);
     return NextResponse.json({ success: false, error: '更新用户失败' }, { status: 500 });
-  }
-}
-
-// DELETE /api/auth - 删除用户
-export async function DELETE(request: NextRequest) {
-  try {
-    const client = getSupabaseClient();
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json({ success: false, error: '缺少用户ID' }, { status: 400 });
-    }
-
-    const { error } = await client
-      .from('users')
-      .delete()
-      .eq('id', id);
-
-    if (error) throw new Error(`删除失败: ${error.message}`);
-
-    return NextResponse.json({ success: true, message: '删除成功' });
-  } catch (error) {
-    console.error('删除用户失败:', error);
-    return NextResponse.json({ success: false, error: '删除用户失败' }, { status: 500 });
   }
 }
