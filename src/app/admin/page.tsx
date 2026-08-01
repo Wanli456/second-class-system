@@ -1070,7 +1070,6 @@ function AdminPage() {
                             <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">晚自习查询权限</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">权限状态</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
                           </tr>
                         </thead>
@@ -1123,18 +1122,6 @@ function AdminPage() {
                                   <span className="text-xs text-gray-500">已开启</span>
                                 </label>
                               </td>
-                              <td className="px-3 py-2 text-gray-500 text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString('zh-CN') : '-'}</td>
-                              <td className="px-3 py-2">
-                                <div className="flex flex-wrap gap-1">
-                                  {u.canPublish && <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">发布</span>}
-                                  {u.canScore && <span className="text-xs bg-green-50 text-green-600 px-1.5 py-0.5 rounded">赋分</span>}
-                                  {u.canReviewLeave && <span className="text-xs bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded">审核</span>}
-                                  {u.canViewEveningStudy && <span className="text-xs bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">晚自习</span>}
-                                  {!u.canPublish && !u.canScore && !u.canReviewLeave && !u.canViewEveningStudy && (
-                                    <span className="text-xs text-gray-400">无</span>
-                                  )}
-                                </div>
-                              </td>
                               <td className="px-3 py-2">
                                 <div className="flex gap-1">
                                   <button
@@ -1173,7 +1160,6 @@ function AdminPage() {
                       <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                         <span className="rounded bg-emerald-100 text-emerald-700 px-2 py-0.5 text-xs font-medium">活动负责人</span>
                         <span className="text-gray-500 font-normal">({users.filter(u => u.role === 'leader').length}人)</span>
-                        <span className="text-xs text-gray-400">（默认拥有录入活动权限）</span>
                       </h4>
                       <table className="w-full text-sm">
                         <thead>
@@ -1184,7 +1170,6 @@ function AdminPage() {
                             <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">晚自习查询权限</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">权限状态</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
                           </tr>
                         </thead>
@@ -1237,18 +1222,6 @@ function AdminPage() {
                                   <span className="text-xs text-gray-600">{u.canViewEveningStudy ? '已开启' : '未开启'}</span>
                                 </label>
                               </td>
-                              <td className="px-3 py-2 text-gray-500 text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString('zh-CN') : '-'}</td>
-                              <td className="px-3 py-2">
-                                <div className="flex flex-wrap gap-1">
-                                  {u.canPublish && <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">发布</span>}
-                                  {u.canScore && <span className="text-xs bg-green-50 text-green-600 px-1.5 py-0.5 rounded">赋分</span>}
-                                  {u.canReviewLeave && <span className="text-xs bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded">审核</span>}
-                                  {u.canViewEveningStudy && <span className="text-xs bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">晚自习</span>}
-                                  {!u.canPublish && !u.canScore && !u.canReviewLeave && !u.canViewEveningStudy && (
-                                    <span className="text-xs text-gray-400">无</span>
-                                  )}
-                                </div>
-                              </td>
                               <td className="px-3 py-2">
                                 <div className="flex gap-1">
                                   <button
@@ -1297,7 +1270,6 @@ function AdminPage() {
                             <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">晚自习查询权限</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">权限状态</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
                           </tr>
                         </thead>
@@ -1349,18 +1321,6 @@ function AdminPage() {
                                   />
                                   <span className="text-xs text-gray-600">{u.canViewEveningStudy ? '已开启' : '未开启'}</span>
                                 </label>
-                              </td>
-                              <td className="px-3 py-2 text-gray-500 text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString('zh-CN') : '-'}</td>
-                              <td className="px-3 py-2">
-                                <div className="flex flex-wrap gap-1">
-                                  {u.canPublish && <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">发布</span>}
-                                  {u.canScore && <span className="text-xs bg-green-50 text-green-600 px-1.5 py-0.5 rounded">赋分</span>}
-                                  {u.canReviewLeave && <span className="text-xs bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded">审核</span>}
-                                  {u.canViewEveningStudy && <span className="text-xs bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">晚自习</span>}
-                                  {!u.canPublish && !u.canScore && !u.canReviewLeave && !u.canViewEveningStudy && (
-                                    <span className="text-xs text-gray-400">无</span>
-                                  )}
-                                </div>
                               </td>
                               <td className="px-3 py-2">
                                 <div className="flex gap-1">
