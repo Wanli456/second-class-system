@@ -54,6 +54,7 @@ interface UserData {
   canPublish: boolean;
   canScore: boolean;
   canReviewLeave: boolean;
+  canViewEveningStudy: boolean;
   createdAt?: string;
 }
 
@@ -292,18 +293,19 @@ function AdminPage() {
     }
   };
 
-  const handleUpdatePermission = async (userId: string, permission: 'canPublish' | 'canScore' | 'canReviewLeave', value: boolean) => {
+  const handleUpdatePermission = async (userId: string, permission: 'canPublish' | 'canScore' | 'canReviewLeave' | 'canViewEveningStudy', value: boolean) => {
     const apiFieldMap = {
       canPublish: 'can_publish',
       canScore: 'can_score',
       canReviewLeave: 'can_review_leave',
+      canViewEveningStudy: 'can_view_evening_study',
     };
     const apiField = apiFieldMap[permission];
     try {
       const res = await fetch('/api/auth', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: userId, [apiField]: value }),
+        body: JSON.stringify({ userId, [apiField]: value }),
       });
       const data = await res.json();
       if (data.success) {
@@ -1058,6 +1060,7 @@ function AdminPage() {
                         <th className="px-3 py-2 text-left font-medium text-gray-600">发布活动权限</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-600">晚自习查询权限</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-600">注册时间</th>
                         <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
                       </tr>
@@ -1107,6 +1110,17 @@ function AdminPage() {
                                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                               />
                               <span className="text-xs text-gray-600">{u.canReviewLeave ? '已开启' : '未开启'}</span>
+                            </label>
+                          </td>
+                          <td className="px-3 py-2">
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={u.canViewEveningStudy || false}
+                                onChange={(e) => handleUpdatePermission(u.id, 'canViewEveningStudy', e.target.checked)}
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-xs text-gray-600">{u.canViewEveningStudy ? '已开启' : '未开启'}</span>
                             </label>
                           </td>
                           <td className="px-3 py-2 text-gray-500 text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString('zh-CN') : '-'}</td>

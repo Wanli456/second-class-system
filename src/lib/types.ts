@@ -79,3 +79,14 @@ export const STATUS_COLORS: Record<string, string> = {
   '待赋分': 'bg-amber-100 text-amber-700 border-amber-200',
   '已赋分': 'bg-emerald-100 text-emerald-700 border-emerald-200',
 };
+
+export interface UserData {
+  id: string;
+  studentId: string;
+  name: string;
+  role: 'student' | 'leader' | 'admin';
+  canPublish: boolean;
+  canScore: boolean;
+  canReviewLeave: boolean;
+  canViewEveningStudy: boolean;
+}

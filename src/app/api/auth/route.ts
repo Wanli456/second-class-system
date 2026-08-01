@@ -73,6 +73,7 @@ export async function PUT(request: NextRequest) {
         canPublish: user.can_publish,
         canScore: user.can_score,
         canReviewLeave: user.can_review_leave,
+        canViewEveningStudy: user.can_view_evening_study,
       } 
     });
   } catch (error) {
@@ -106,6 +107,7 @@ export async function GET(request: NextRequest) {
         canPublish: u.can_publish,
         canScore: u.can_score,
         canReviewLeave: u.can_review_leave,
+        canViewEveningStudy: u.can_view_evening_study,
       }))
     });
   } catch (error) {
@@ -117,7 +119,7 @@ export async function GET(request: NextRequest) {
 // PATCH /api/auth - 更新用户角色/权限
 export async function PATCH(request: NextRequest) {
   try {
-    const { userId, role, canPublish, canScore, canReviewLeave } = await request.json();
+    const { userId, role, canPublish, canScore, canReviewLeave, canViewEveningStudy } = await request.json();
 
     if (!userId) {
       return NextResponse.json({ success: false, error: '用户 ID 不能为空' }, { status: 400 });
@@ -142,6 +144,10 @@ export async function PATCH(request: NextRequest) {
     if (canReviewLeave !== undefined) {
       updates.push(`can_review_leave = $${paramIndex++}`);
       params.push(canReviewLeave);
+    }
+    if (canViewEveningStudy !== undefined) {
+      updates.push(`can_view_evening_study = $${paramIndex++}`);
+      params.push(canViewEveningStudy);
     }
 
     if (updates.length === 0) {
