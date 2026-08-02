@@ -10,6 +10,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const phone = searchParams.get('phone');
     const keyword = searchParams.get('keyword');
+    const submissionId = searchParams.get('submission_id');
+
+    if (submissionId) {
+      const submission = await queryOne('SELECT * FROM activity_submissions WHERE id = $1', [submissionId]);
+      return NextResponse.json({ success: true, data: submission ? [{ ...submission, source: 'submission' }] : [] });
+    }
 
     if (!phone && !keyword) {
       return NextResponse.json({ success: false, error: '缺少查询条件' }, { status: 400 });
@@ -52,10 +58,36 @@ export async function POST(request: NextRequest) {
     const auth = await requirePermission(request, 'publish');
     if (auth.response) return auth.response;
     const body = await request.json();
-    const { full_name, start_time, end_time, category, level, plan_file_url, record_file_url, leader_name, leader_phone } = body;
+    const { submission_id, full_name, start_time, end_time, category, level, plan_file_url, record_file_url, leader_name, leader_phone } = body;
 
     if (!full_name || !start_time || !end_time || !category || !level || !leader_name || !leader_phone) {
       return NextResponse.json({ success: false, error: '缺少必填字段' }, { status: 400 });
+    }
+
+    if (submission_id) {
+      const existing = await queryOne(
+        'SELECT id, review_status FROM activity_submissions WHERE id = $1',
+        [submission_id]
+      );
+
+      if (!existing) {
+        return NextResponse.json({ success: false, error: '原活动提交记录不存在' }, { status: 404 });
+      }
+      if (existing.review_status === '已通过') {
+        return NextResponse.json({ success: false, error: '该活动已审核通过，不能重新提交' }, { status: 400 });
+      }
+
+      const data = await queryOne(
+        `UPDATE activity_submissions
+         SET full_name = $1, start_time = $2, end_time = $3, category = $4, level = $5,
+             plan_file_url = $6, record_file_url = $7, leader_name = $8, leader_phone = $9,
+             review_status = '待审核', review_note = NULL, updated_at = NOW()
+         WHERE id = $10
+         RETURNING *`,
+        [full_name, start_time, end_time, category, level, plan_file_url || null, record_file_url || null, leader_name, leader_phone, submission_id]
+      );
+
+      return NextResponse.json({ success: true, data });
     }
 
     const data = await queryOne(

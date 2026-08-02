@@ -30,6 +30,7 @@ interface User {
   role: string;
   canPublish?: boolean;
   canScore?: boolean;
+  canSubmitScoring?: boolean;
   canReviewLeave?: boolean;
   canViewEveningStudy?: boolean;
 }
@@ -56,9 +57,9 @@ const NAV_ITEMS: NavItem[] = [
   { label: '活动赋分', href: '/admin?role=scorer&tab=scoring', icon: Award, requiredRole: 'scorer', requiredPermission: 'canScore' },
   { label: '请假审核', href: '/admin?role=leave_reviewer&tab=leave', icon: UserCheck, requiredRole: 'leave_reviewer', requiredPermission: 'canReviewLeave' },
   { label: '用户管理', href: '/admin?role=admin&tab=users', icon: Users, requiredRole: 'admin' },
-  { label: '活动提交', href: '/submit', icon: Send, requiredRole: 'leader', requiredPermission: 'canPublish' },
-  { label: '提交状态', href: '/submit/status', icon: FileCheck },
-  { label: '赋分材料', href: '/submit/scoring', icon: Award, requiredRole: 'leader', requiredPermission: 'canScore' },
+  { label: '活动提交', href: '/submit', icon: Send, requiredPermission: 'canPublish' },
+  { label: '提交状态', href: '/submit/status', icon: FileCheck, requiredPermission: 'canPublish' },
+  { label: '赋分材料', href: '/submit/scoring', icon: Award, requiredPermission: 'canSubmitScoring' },
   { label: '请假申请', href: '/leave', icon: FileCheck },
   { label: '请假状态', href: '/leave/status', icon: FileCheck },
   { label: '晚自习查询', href: '/evening-study', icon: Moon, requiredPermission: 'canViewEveningStudy' },
@@ -111,6 +112,14 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title 
   };
 
   const visibleItems = NAV_ITEMS.filter(canAccessItem);
+
+  const getNavGroup = (href: string) => {
+    if (href === '/') return '工作台';
+    if (href.startsWith('/leave')) return '请假';
+    if (href.startsWith('/submit')) return '活动';
+    if (href.startsWith('/admin')) return '管理';
+    return '查询';
+  };
 
   const roleLabel = user?.role === 'admin'
     ? '管理员'
@@ -177,30 +186,37 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title 
           工作区
         </div>
         <ul className="space-y-1">
-          {visibleItems.map((item) => {
+          {visibleItems.map((item, index) => {
             const Icon = item.icon;
             const isActive = isItemActive(item.href);
             return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  onClick={() => isMobile && setMobileOpen(false)}
-                  className={cn(
-                    "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-slate-900 text-white shadow-sm"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
-                    collapsed && "justify-center px-2"
-                  )}
-                  title={collapsed ? item.label : undefined}
-                >
-                  <Icon className={cn(
-                    "h-4 w-4 flex-shrink-0",
-                    isActive ? "text-teal-300" : "text-slate-400 group-hover:text-slate-700",
-                  )} />
-                  {!collapsed && <span>{item.label}</span>}
-                </Link>
-              </li>
+              <React.Fragment key={item.href}>
+                {!collapsed && (index === 0 || getNavGroup(item.href) !== getNavGroup(visibleItems[index - 1].href)) && (
+                  <li className={cn("px-3 pb-1 text-[10px] font-semibold text-slate-400", index > 0 && "pt-4")}>
+                    {getNavGroup(item.href)}
+                  </li>
+                )}
+                <li>
+                  <Link
+                    href={item.href}
+                    onClick={() => isMobile && setMobileOpen(false)}
+                    className={cn(
+                      "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-slate-900 text-white shadow-sm"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+                      collapsed && "justify-center px-2"
+                    )}
+                    title={collapsed ? item.label : undefined}
+                  >
+                    <Icon className={cn(
+                      "size-4 flex-shrink-0",
+                      isActive ? "text-teal-300" : "text-slate-400 group-hover:text-slate-700",
+                    )} />
+                    {!collapsed && <span>{item.label}</span>}
+                  </Link>
+                </li>
+              </React.Fragment>
             );
           })}
         </ul>
@@ -227,6 +243,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title 
                 onClick={handleLogout}
                 className="h-8 w-8 text-gray-500 hover:text-gray-700"
                 title="退出登录"
+                aria-label="退出登录"
               >
                 <LogOut className="h-4 w-4" />
               </Button>
@@ -242,6 +259,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title 
                 onClick={handleLogout}
                 className="h-8 w-8 text-gray-500 hover:text-gray-700"
                 title="退出登录"
+                aria-label="退出登录"
               >
                 <LogOut className="h-4 w-4" />
               </Button>
@@ -253,13 +271,13 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title 
   );
 
   return (
-    <div className="flex h-screen bg-slate-50">
+    <div className="flex h-dvh bg-slate-50">
       {/* Desktop Sidebar */}
       {!isMobile && (
         <aside
           className={cn(
             "relative flex flex-col border-r border-slate-200 bg-white transition-all duration-300",
-            collapsed ? "w-16" : "w-64"
+            collapsed ? "w-16" : "w-60"
           )}
         >
           {sidebarContent}
@@ -267,6 +285,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title 
             onClick={() => setCollapsed(!collapsed)}
             className="absolute top-[84px] -right-3 flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 shadow-sm transition-colors hover:text-slate-900"
             title={collapsed ? "展开侧边栏" : "收起侧边栏"}
+            aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
           >
             <ChevronLeft className={cn("h-3 w-3 transition-transform", collapsed && "rotate-180")} />
           </button>
@@ -296,6 +315,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title 
                 size="icon"
                 onClick={() => setMobileOpen(true)}
                 className="text-gray-600"
+                aria-label="打开导航菜单"
               >
                 <Menu className="h-5 w-5" />
               </Button>

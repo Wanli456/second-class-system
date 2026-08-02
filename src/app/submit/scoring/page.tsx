@@ -162,7 +162,7 @@ export default function SubmitScoringPage() {
     );
   }
 
-  if (user.role !== 'admin' && user.role !== 'leader' && !user.canScore) {
+  if (user.role !== 'admin' && user.canSubmitScoring !== true) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
         <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center">
@@ -316,14 +316,14 @@ export default function SubmitScoringPage() {
 
               <button
                 onClick={handleSubmitScoring}
-                disabled={uploadingId !== null || !selectedActivityId || !scoringFile}
+                disabled={uploadingId !== null || !selectedActivityId || !scoringFile || selectedActivity?.scoring_status === '已赋分'}
                 className="w-full rounded-md bg-teal-600 py-2.5 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
               >
                 {uploadingId ? '提交中...' : '提交赋分材料'}
               </button>
 
               {/* 重新提交按钮 */}
-              {submittedActivityId && !showResubmit && (
+              {submittedActivityId && !showResubmit && activities.find((activity) => activity.id === submittedActivityId)?.scoring_status !== '已赋分' && (
                 <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                   <div className="flex items-center gap-2 text-emerald-700">
                     <CheckCircle2 className="h-5 w-5" />

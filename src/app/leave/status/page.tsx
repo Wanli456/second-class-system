@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
-import { Search, RefreshCw } from 'lucide-react';
+import { Search, RefreshCw, Pencil } from 'lucide-react';
 import { LeaveRequest, STATUS_COLORS } from '@/lib/types';
 
 export default function LeaveStatusPage() {
@@ -110,6 +111,16 @@ export default function LeaveStatusPage() {
                         {l.review_status}
                       </span>
                     </div>
+                    {l.review_status !== '已通过' && (
+                      <div className="mt-3 border-t border-gray-100 pt-3">
+                        <Link
+                          href={`/leave?requestId=${encodeURIComponent(l.id)}`}
+                          className="inline-flex items-center gap-1 text-sm font-medium text-teal-700 hover:text-teal-800"
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> 重新提交
+                        </Link>
+                      </div>
+                    )}
                   </div>
                 ))}
               </>

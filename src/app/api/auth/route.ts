@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     const user = await queryOne(
       `INSERT INTO users (username, password, student_id, role, can_publish, can_score, can_review_leave)
        VALUES ($1, $2, $3, 'student', false, false, false)
-       RETURNING id, username, student_id, role, can_publish, can_score, can_review_leave, can_view_evening_study`,
+       RETURNING id, username, student_id, role, can_publish, can_score, can_submit_scoring, can_review_leave, can_view_evening_study`,
       [name, await hashPassword(password), studentId],
     );
 
@@ -85,6 +85,7 @@ export async function GET(request: NextRequest) {
         role: user.role,
         canPublish: user.can_publish,
         canScore: user.can_score,
+        canSubmitScoring: user.can_submit_scoring,
         canReviewLeave: user.can_review_leave,
         canViewEveningStudy: user.can_view_evening_study,
       })),
@@ -115,7 +116,7 @@ export async function PATCH(request: NextRequest) {
 
     const auth = await requirePermission(request, 'admin');
     if (auth.response) return auth.response;
-    const { userId, role, canPublish, canScore, canReviewLeave, canViewEveningStudy } = body;
+    const { userId, role, canPublish, canScore, canSubmitScoring, canReviewLeave, canViewEveningStudy } = body;
     if (!userId) return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
 
     const updates: string[] = [];
@@ -124,6 +125,7 @@ export async function PATCH(request: NextRequest) {
     if (role !== undefined) { updates.push(`role = $${index++}`); params.push(role); }
     if (canPublish !== undefined) { updates.push(`can_publish = $${index++}`); params.push(canPublish); }
     if (canScore !== undefined) { updates.push(`can_score = $${index++}`); params.push(canScore); }
+    if (canSubmitScoring !== undefined) { updates.push(`can_submit_scoring = $${index++}`); params.push(canSubmitScoring); }
     if (canReviewLeave !== undefined) { updates.push(`can_review_leave = $${index++}`); params.push(canReviewLeave); }
     if (canViewEveningStudy !== undefined) { updates.push(`can_view_evening_study = $${index++}`); params.push(canViewEveningStudy); }
     if (!updates.length) return NextResponse.json({ success: false, error: 'No fields to update' }, { status: 400 });

@@ -4,12 +4,15 @@ import { requirePermission } from "@/lib/auth";
 
 // GET - 查询晚自习安排和考勤
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const date = searchParams.get("date");
-  const className = searchParams.get("class");
-  const type = searchParams.get("type");
-
   try {
+    const auth = await requirePermission(request, 'eveningStudy');
+    if (auth.response) return auth.response;
+
+    const { searchParams } = new URL(request.url);
+    const date = searchParams.get("date");
+    const className = searchParams.get("class");
+    const type = searchParams.get("type");
+
     // 查询今日安排
     if (type === "today") {
       const today = new Date().toISOString().split("T")[0];
@@ -113,7 +116,7 @@ export async function PUT(request: NextRequest) {
     const { id, ...data } = body;
 
     const setClauses: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
     let paramIndex = 1;
 
     for (const [key, value] of Object.entries(data)) {

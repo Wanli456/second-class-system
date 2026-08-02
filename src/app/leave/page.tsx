@@ -19,6 +19,13 @@ export default function LeavePage() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [activityList, setActivityList] = useState<string[]>([]);
+  const [resubmissionId, setResubmissionId] = useState<string | null>(null);
+  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRequestId(new URLSearchParams(window.location.search).get('requestId'));
+  }, []);
 
   // Fetch activity names for autocomplete
   useEffect(() => {
@@ -33,6 +40,36 @@ export default function LeavePage() {
         .catch(() => {});
     }
   }, [form.leave_type]);
+
+  useEffect(() => {
+    if (!requestId) return;
+
+    fetch(`/api/leave?id=${encodeURIComponent(requestId)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const leave = data.success ? data.data?.[0] : null;
+        if (!leave) {
+          alert('未找到原请假申请');
+          return;
+        }
+        if (leave.review_status === '已通过') {
+          alert('该请假申请已审核通过，不能重新提交');
+          return;
+        }
+
+        setResubmissionId(leave.id);
+        setExistingImageUrl(leave.leave_image_url || null);
+        setImagePreview(leave.leave_image_url || null);
+        setForm({
+          student_id: leave.student_id,
+          class_name: leave.class_name,
+          student_name: leave.student_name,
+          leave_type: leave.leave_type,
+          activity_name: leave.activity_name || '',
+        });
+      })
+      .catch(() => alert('读取原请假申请失败'));
+  }, [requestId]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -55,7 +92,7 @@ export default function LeavePage() {
       return;
     }
 
-    if (!imageFile) {
+    if (!imageFile && !existingImageUrl) {
       alert('请上传请假条图片');
       return;
     }
@@ -63,7 +100,7 @@ export default function LeavePage() {
     setSubmitting(true);
     try {
       // Upload image first if exists
-      let imageUrl = null;
+      let imageUrl = existingImageUrl;
       if (imageFile) {
         const formData = new FormData();
         formData.append('file', imageFile);
@@ -77,6 +114,7 @@ export default function LeavePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          ...(resubmissionId ? { leave_request_id: resubmissionId } : {}),
           leave_image_url: imageUrl,
           activity_name: form.leave_type === '活动公假' ? form.activity_name : null,
         }),
@@ -84,6 +122,8 @@ export default function LeavePage() {
       const data = await res.json();
       if (data.success) {
         setSuccess(true);
+        setResubmissionId(null);
+        setExistingImageUrl(null);
         setForm({ student_id: '', class_name: '', student_name: '', leave_type: '', activity_name: '' });
         setImageFile(null);
         setImagePreview(null);
@@ -101,7 +141,7 @@ export default function LeavePage() {
         {success && (
           <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
             <p className="text-sm text-emerald-700">
-              请假申请提交成功！请前往
+              请假申请已进入审核队列！请前往
               <Link href="/leave/status" className="mx-1 font-medium underline">查询状态</Link>
               查看审核进度。
             </p>
@@ -109,7 +149,7 @@ export default function LeavePage() {
         )}
 
         <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-1 text-lg font-semibold text-gray-900">提交请假申请</h2>
+          <h2 className="mb-1 text-lg font-semibold text-gray-900">{resubmissionId ? '重新提交请假申请' : '提交请假申请'}</h2>
           <p className="mb-6 text-sm text-gray-500">请填写请假信息并上传请假条图片</p>
 
           <div className="space-y-4">
@@ -218,7 +258,7 @@ export default function LeavePage() {
               className="flex items-center gap-2 rounded-md bg-[#1e3a5f] px-5 py-2 text-sm font-medium text-white hover:bg-[#1e3a5f]/90 disabled:opacity-50"
             >
               <Send className="h-4 w-4" />
-              {submitting ? '提交中...' : '提交申请'}
+              {submitting ? '提交中...' : resubmissionId ? '重新提交申请' : '提交申请'}
             </button>
             <Link
               href="/leave/status"

@@ -13,6 +13,12 @@ export async function GET(request: NextRequest) {
     const role = searchParams.get('role');
     const className = searchParams.get('class');
     const date = searchParams.get('date'); // 日期筛选
+    const requestId = searchParams.get('id');
+
+    if (requestId) {
+      const leave = await queryOne('SELECT * FROM leave_requests WHERE id = $1', [requestId]);
+      return NextResponse.json({ success: true, data: leave ? [leave] : [] });
+    }
 
     // 按班级查询
     if (className) {
@@ -105,7 +111,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { student_id, class_name, student_name, leave_type, leave_image_url, activity_name } = body;
+    const { leave_request_id, student_id, class_name, student_name, leave_type, leave_image_url, activity_name } = body;
 
     if (!student_id || !class_name || !student_name || !leave_type) {
       return NextResponse.json({ success: false, error: '缺少必填字段' }, { status: 400 });
@@ -131,12 +137,36 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const data = await queryOne(
-      `INSERT INTO leave_requests (student_id, class_name, student_name, leave_type, leave_image_url, activity_name, review_status, review_note)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING *`,
-      [student_id, class_name, student_name, leave_type, leave_image_url || null, leave_type === '活动公假' ? activity_name : null, reviewStatus, reviewNote]
-    );
+    let data;
+    if (leave_request_id) {
+      const existing = await queryOne(
+        'SELECT id, review_status, leave_image_url FROM leave_requests WHERE id = $1',
+        [leave_request_id]
+      );
+
+      if (!existing) {
+        return NextResponse.json({ success: false, error: '原请假申请不存在' }, { status: 404 });
+      }
+      if (existing.review_status === '已通过') {
+        return NextResponse.json({ success: false, error: '该请假申请已审核通过，不能重新提交' }, { status: 400 });
+      }
+
+      data = await queryOne(
+        `UPDATE leave_requests
+         SET student_id = $1, class_name = $2, student_name = $3, leave_type = $4,
+             leave_image_url = $5, activity_name = $6, review_status = $7, review_note = $8, updated_at = NOW()
+         WHERE id = $9
+         RETURNING *`,
+        [student_id, class_name, student_name, leave_type, leave_image_url || existing.leave_image_url, leave_type === '活动公假' ? activity_name : null, reviewStatus, reviewNote, leave_request_id]
+      );
+    } else {
+      data = await queryOne(
+        `INSERT INTO leave_requests (student_id, class_name, student_name, leave_type, leave_image_url, activity_name, review_status, review_note)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING *`,
+        [student_id, class_name, student_name, leave_type, leave_image_url || null, leave_type === '活动公假' ? activity_name : null, reviewStatus, reviewNote]
+      );
+    }
 
     return NextResponse.json({ success: true, data });
   } catch (err) {
@@ -159,6 +189,14 @@ export async function PUT(request: NextRequest) {
 
     if (!['待审核', '已通过', '已驳回'].includes(review_status)) {
       return NextResponse.json({ success: false, error: '无效的审核状态' }, { status: 400 });
+    }
+
+    const existing = await queryOne('SELECT review_status FROM leave_requests WHERE id = $1', [id]);
+    if (!existing) {
+      return NextResponse.json({ success: false, error: '请假申请不存在' }, { status: 404 });
+    }
+    if (existing.review_status !== '待审核') {
+      return NextResponse.json({ success: false, error: '该请假申请已处理，不能重复审核' }, { status: 400 });
     }
 
     const data = await queryOne(

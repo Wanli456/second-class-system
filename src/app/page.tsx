@@ -17,6 +17,7 @@ interface User {
   role: string;
   canPublish?: boolean;
   canScore?: boolean;
+  canSubmitScoring?: boolean;
   canReviewLeave?: boolean;
   canViewEveningStudy?: boolean;
 }
@@ -33,7 +34,7 @@ function getButtonState(user: User | null, requiredRole: string): 'active' | 'gr
 
 function getLeaderButtonState(user: User | null): 'active' | 'grayed' | 'locked' {
   if (!user) return 'locked';
-  if (user.role === 'admin' || user.role === 'publisher' || user.canPublish || user.canScore) return 'active';
+  if (user.role === 'admin' || user.role === 'publisher' || user.canPublish || user.canSubmitScoring) return 'active';
   if (user.role === 'leader') return 'active';
   return 'grayed';
 }
@@ -56,6 +57,7 @@ export default function Home() {
         if (parsed.role === 'admin') {
           parsed.canPublish = true;
           parsed.canScore = true;
+          parsed.canSubmitScoring = true;
           parsed.canReviewLeave = true;
           parsed.canViewEveningStudy = true;
         }
@@ -214,15 +216,16 @@ export default function Home() {
       <DashboardLayout user={user} onLogout={handleLogout} title="首页">
         <div className="space-y-6">
           {/* 欢迎区域 */}
-          <div className="rounded-lg border border-gray-200 bg-white p-6">
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-semibold text-gray-900">
+                <p className="mb-2 text-xs font-semibold text-teal-700">今日工作台</p>
+                <h2 className="text-xl font-semibold text-slate-950">
                   欢迎，{user.name}
                 </h2>
                 <p className="mt-1 text-sm text-gray-500">
                   当前角色：
-                  <span className="font-medium text-teal-600">
+                  <span className="font-medium text-teal-700">
                     {user.role === 'admin' ? '管理员' : user.role === 'leader' ? '活动负责人' : '学生'}
                   </span>
                 </p>
@@ -231,7 +234,7 @@ export default function Home() {
                 <NotificationBell userId={user.id} />
                 <button
                   onClick={() => setShowPasswordModal(true)}
-                  className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-50"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 transition-colors hover:bg-slate-50"
                 >
                   <Key className="h-4 w-4" />
                   修改密码
@@ -323,7 +326,7 @@ export default function Home() {
             <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">用户端</h3>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {/* 活动提交 */}
-              {(user.role === 'admin' || user.role === 'leader' || user.canPublish) && (
+              {(user.role === 'admin' || user.canPublish) && (
                 <Link
                   href="/submit"
                   className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
@@ -337,7 +340,7 @@ export default function Home() {
               )}
 
               {/* 赋分材料提交 */}
-              {(user.role === 'admin' || user.role === 'leader' || user.canScore) && (
+              {(user.role === 'admin' || user.canSubmitScoring) && (
                 <Link
                   href="/submit/scoring"
                   className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
@@ -369,13 +372,15 @@ export default function Home() {
             <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">快捷查询</h3>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {/* 提交状态查询 */}
-              <Link
-                href="/submit/status"
-                className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-teal-500 hover:bg-gray-50"
-              >
-                <FileCheck className="h-5 w-5 text-gray-400" />
-                <span className="text-sm font-medium text-gray-700">提交状态查询</span>
-              </Link>
+              {(user.role === 'admin' || user.canPublish) && (
+                <Link
+                  href="/submit/status"
+                  className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-teal-500 hover:bg-gray-50"
+                >
+                  <FileCheck className="h-5 w-5 text-gray-400" />
+                  <span className="text-sm font-medium text-gray-700">提交状态查询</span>
+                </Link>
+              )}
 
               {/* 请假状态查询 */}
               <Link
@@ -387,7 +392,7 @@ export default function Home() {
               </Link>
 
               {/* 晚自习请假查询 */}
-              {user.canViewEveningStudy && (
+              {(user.role === 'admin' || user.canViewEveningStudy) && (
                 <Link
                   href="/evening-study"
                   className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-teal-500 hover:bg-gray-50"
@@ -407,7 +412,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#f5f7f6] text-slate-950">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex h-[68px] max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white shadow-sm">
               <ClipboardList className="h-5 w-5" strokeWidth={2.4} />
@@ -427,21 +432,21 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8 lg:py-16">
-        <section className="grid gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] lg:items-center">
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
+        <section className="grid gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)] lg:items-center">
           <div>
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-800">
               <span className="h-1.5 w-1.5 rounded-full bg-teal-600" />
               第二课堂工作入口
             </div>
-            <h2 className="max-w-2xl text-4xl font-bold leading-[1.12] tracking-tight text-slate-950 sm:text-5xl">
+            <h2 className="max-w-2xl text-3xl font-bold leading-[1.16] text-slate-950 sm:text-4xl">
               让活动提交、请假与赋分，
               <span className="block text-teal-700">在一个工作台完成。</span>
             </h2>
             <p className="mt-5 max-w-xl text-base leading-7 text-slate-600">
               二课活动管理与请假申请平台，为学生、活动负责人和管理人员提供清晰的业务入口。
             </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
+            <div className="mt-6 flex flex-wrap items-center gap-3">
               <button
                 onClick={() => setShowLoginModal(true)}
                 className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2"
@@ -458,11 +463,11 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_16px_40px_-28px_rgba(15,23,42,0.45)] sm:p-6">
+          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-[0_16px_40px_-28px_rgba(15,23,42,0.45)] sm:p-6">
             <div className="flex items-start justify-between border-b border-slate-100 pb-5">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-700">Quick access</p>
-                <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">常用入口</h3>
+                <p className="text-xs font-bold text-teal-700">公开入口</p>
+                <h3 className="mt-2 text-xl font-bold text-slate-950">请假服务</h3>
               </div>
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
                 <LayoutDashboard className="h-4 w-4" />
@@ -470,7 +475,6 @@ export default function Home() {
             </div>
             <div className="divide-y divide-slate-100">
               {[
-                { href: '/submit', label: '活动提交', detail: '负责人提交活动信息', icon: Send, tone: 'text-emerald-700 bg-emerald-50' },
                 { href: '/leave', label: '请假申请', detail: '提交请假信息与请假条', icon: FileText, tone: 'text-sky-700 bg-sky-50' },
                 { href: '/leave/status', label: '请假状态查询', detail: '查看审核处理状态', icon: FileCheck, tone: 'text-slate-700 bg-slate-100' },
               ].map(({ href, label, detail, icon: Icon, tone }) => (
@@ -492,8 +496,8 @@ export default function Home() {
         <section className="mt-14 border-t border-slate-200 pt-8">
           <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Access guide</p>
-              <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">按角色进入对应功能</h3>
+              <p className="text-xs font-bold text-slate-400">权限说明</p>
+              <h3 className="mt-2 text-xl font-bold text-slate-950">按角色进入对应功能</h3>
             </div>
             <p className="text-sm text-slate-500">登录后将根据权限显示管理菜单</p>
           </div>
@@ -589,7 +593,7 @@ function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (u
           <h3 className="text-lg font-semibold text-gray-900">
             {isLogin ? '账号登录' : '注册账号'}
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+          <button onClick={onClose} aria-label="关闭登录窗口" className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

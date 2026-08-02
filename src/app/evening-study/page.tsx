@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,7 +53,17 @@ const LEAVE_TYPE_COLORS: Record<string, string> = {
 
 type SearchType = "class" | "name" | "student_id";
 
+interface CurrentUser {
+  id: string;
+  name?: string;
+  username?: string;
+  role: string;
+  canViewEveningStudy?: boolean;
+}
+
 export default function EveningStudyPage() {
+  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [checking, setChecking] = useState(true);
   const [searchKeyword, setSearchKeyword] = useState("");
   const [searchType, setSearchType] = useState<SearchType>("class");
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
@@ -63,15 +74,44 @@ export default function EveningStudyPage() {
   const [todayCount, setTodayCount] = useState<number>(0);
 
   useEffect(() => {
+    const saved = localStorage.getItem('user');
+    if (saved) {
+      try {
+        setUser(JSON.parse(saved));
+      } catch {
+        localStorage.removeItem('user');
+      }
+    }
+    setChecking(false);
     const dateStr = new Date().toISOString().split("T")[0];
     setToday(dateStr);
   }, []);
 
-  // 当查询条件变化时清空结果
+  // Keep the search result state aligned with the current filters.
   useEffect(() => {
     setLeaveRequests([]);
     setSearched(false);
   }, [searchKeyword, searchType]);
+
+  const canView = Boolean(user && (user.role === 'admin' || user.canViewEveningStudy));
+
+  if (checking) {
+    return <div className="flex min-h-screen items-center justify-center bg-gray-50 text-sm text-gray-500">加载中...</div>;
+  }
+
+  if (!canView) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+        <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
+          <h2 className="mb-2 text-lg font-semibold text-gray-900">暂无晚自习查询权限</h2>
+          <p className="mb-6 text-sm text-gray-500">请联系管理员开通晚自习查询权限。</p>
+          <Link href="/" className="inline-flex w-full justify-center rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700">
+            返回首页
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const fetchLeaveRequests = async () => {
     if (!searchKeyword.trim()) {
@@ -127,7 +167,7 @@ export default function EveningStudyPage() {
   const classStats = getClassStats();
 
   return (
-    <DashboardLayout title="晚自习请假查询">
+    <DashboardLayout title="晚自习请假查询" user={user}>
       <div className="space-y-4">
         <Card className="border-teal-200">
           <CardContent className="pt-5">

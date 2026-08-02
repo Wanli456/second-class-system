@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
-import { Search, RefreshCw } from 'lucide-react';
+import { Search, RefreshCw, Pencil } from 'lucide-react';
 import { CATEGORIES, LEVELS, REVIEW_STATUSES, STATUS_COLORS, CATEGORY_COLORS } from '@/lib/types';
 
 interface Submission {
@@ -19,13 +20,56 @@ interface Submission {
   plan_file_url?: string;
   record_file_url?: string;
   created_at: string;
+  source?: 'submission' | 'activity';
+}
+
+interface CurrentUser {
+  id: string;
+  name?: string;
+  username?: string;
+  role: string;
+  canPublish?: boolean;
 }
 
 export default function SubmitStatusPage() {
+  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [checking, setChecking] = useState(true);
   const [keyword, setKeyword] = useState('');
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('user');
+    if (saved) {
+      try {
+        setUser(JSON.parse(saved));
+      } catch {
+        localStorage.removeItem('user');
+      }
+    }
+    setChecking(false);
+  }, []);
+
+  const canView = user && (user.role === 'admin' || user.canPublish === true);
+
+  if (checking) {
+    return <div className="flex min-h-screen items-center justify-center bg-gray-50 text-sm text-gray-500">加载中...</div>;
+  }
+
+  if (!canView) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+        <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
+          <h2 className="mb-2 text-lg font-semibold text-gray-900">暂无活动提交权限</h2>
+          <p className="mb-6 text-sm text-gray-500">请联系管理员开通活动发布权限。</p>
+          <Link href="/" className="inline-flex w-full justify-center rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700">
+            返回首页
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const handleSearch = async () => {
     if (!keyword.trim()) return;
@@ -45,30 +89,39 @@ export default function SubmitStatusPage() {
   };
 
   return (
-    <DashboardLayout title="提交状态查询">
+    <DashboardLayout title="提交状态查询" user={user}>
       <div className="space-y-4">
         {/* Search */}
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <label className="mb-2 block text-sm font-medium text-gray-700">按活动名称查询</label>
           <div className="flex gap-2">
             <input
+              aria-label="按活动名称查询"
               type="text"
               value={keyword}
               onChange={e => setKeyword(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSearch()}
               placeholder="输入活动名称关键字..."
-              className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600"
+              className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600"
             />
             <button
               onClick={handleSearch}
               disabled={loading || !keyword.trim()}
-              className="flex items-center gap-1 rounded-md bg-teal-600 px-4 py-2 text-sm text-white hover:bg-teal-700 disabled:opacity-50"
+              className="flex shrink-0 items-center gap-1 rounded-lg bg-teal-700 px-4 py-2 text-sm text-white hover:bg-teal-800 disabled:opacity-50"
             >
               <Search className="h-4 w-4" />
               查询
             </button>
           </div>
         </div>
+
+        {!searched && (
+          <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+            <Search className="mx-auto size-8 text-slate-300" />
+            <h3 className="mt-3 text-sm font-semibold text-slate-800">输入活动名称开始查询</h3>
+            <p className="mt-1 text-sm text-slate-500">例如：校园文化节、志愿服务活动</p>
+          </div>
+        )}
 
         {/* Results */}
         {searched && (
@@ -113,6 +166,16 @@ export default function SubmitStatusPage() {
                     {s.review_note && (
                       <div className="mt-2 rounded bg-gray-50 px-3 py-2 text-xs text-gray-600">
                         <span className="font-medium">审核备注：</span>{s.review_note}
+                      </div>
+                    )}
+                    {s.source === 'submission' && s.review_status !== '已通过' && (
+                      <div className="mt-3 border-t border-gray-100 pt-3">
+                        <Link
+                          href={`/submit?submissionId=${encodeURIComponent(s.id)}`}
+                          className="inline-flex items-center gap-1 text-sm font-medium text-teal-700 hover:text-teal-800"
+                        >
+                          <Pencil className="h-3.5 w-3.5" /> 重新提交
+                        </Link>
                       </div>
                     )}
                   </div>

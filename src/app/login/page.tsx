@@ -94,15 +94,20 @@ function LoginPageInner() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0] p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">账号登录</CardTitle>
-          <CardDescription>登录后可使用完整功能</CardDescription>
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
+      <Card className="w-full max-w-md rounded-lg border-slate-200 shadow-[0_20px_50px_-28px_rgba(15,23,42,0.45)]">
+        <CardHeader className="space-y-3 pb-5 text-center">
+          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 text-white shadow-sm">
+            <LogIn className="h-5 w-5" />
+          </div>
+          <div>
+            <CardTitle className="text-2xl tracking-tight text-slate-950">账号登录</CardTitle>
+            <CardDescription className="mt-2 text-slate-500">登录后可使用完整功能</CardDescription>
+          </div>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid h-10 w-full grid-cols-2 rounded-lg bg-slate-100 p-1">
               <TabsTrigger value="login">登录</TabsTrigger>
               <TabsTrigger value="register">注册</TabsTrigger>
             </TabsList>
@@ -148,15 +153,15 @@ function LoginPageInner() {
                   />
                 </div>
               </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button className="w-full" onClick={handleLogin} disabled={loading}>
+              {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+              <Button className="w-full rounded-lg bg-teal-700 hover:bg-teal-800" onClick={handleLogin} disabled={loading}>
                 <LogIn className="mr-2 h-4 w-4" />
                 {loading ? "登录中..." : "登录"}
               </Button>
             </TabsContent>
 
             <TabsContent value="register" className="space-y-4">
-              <p className="text-xs text-gray-500">注册后默认为学生身份，如需其他角色请联系管理员设置</p>
+              <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">注册后默认为学生身份，如需其他角色请联系管理员设置</p>
               <div className="space-y-2">
                 <label className="text-sm font-medium">学号</label>
                 <div className="relative">
@@ -209,8 +214,8 @@ function LoginPageInner() {
                   />
                 </div>
               </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button className="w-full" onClick={handleRegister} disabled={loading}>
+              {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+              <Button className="w-full rounded-lg bg-teal-700 hover:bg-teal-800" onClick={handleRegister} disabled={loading}>
                 <User className="mr-2 h-4 w-4" />
                 {loading ? "注册中..." : "注册"}
               </Button>

@@ -56,6 +56,10 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: '提交记录不存在' }, { status: 404 });
     }
 
+    if (submission.review_status !== '待审核') {
+      return NextResponse.json({ success: false, error: '该提交已处理，不能重复审核' }, { status: 400 });
+    }
+
     // 更新审核状态
     await query(
       `UPDATE activity_submissions SET review_status = $1, review_note = $2, updated_at = NOW() WHERE id = $3`,

@@ -24,14 +24,49 @@ export default function SubmitPage() {
   const [recordFile, setRecordFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [resubmissionId, setResubmissionId] = useState<string | null>(null);
+  const [submissionId, setSubmissionId] = useState<string | null>(null);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
     if (userData) {
       setUser(JSON.parse(userData));
     }
+    setSubmissionId(new URLSearchParams(window.location.search).get('submissionId'));
     setChecking(false);
   }, []);
+
+  useEffect(() => {
+    if (!submissionId) return;
+
+    fetch(`/api/activities/submit?submission_id=${encodeURIComponent(submissionId)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const submission = data.success ? data.data?.[0] : null;
+        if (!submission) {
+          alert('未找到原活动提交记录');
+          router.replace('/submit');
+          return;
+        }
+        if (submission.review_status === '已通过') {
+          alert('该活动已审核通过，不能重新提交');
+          router.replace('/submit');
+          return;
+        }
+
+        setResubmissionId(submission.id);
+        setForm({
+          full_name: submission.full_name,
+          start_time: new Date(submission.start_time).toISOString().slice(0, 16),
+          end_time: new Date(submission.end_time).toISOString().slice(0, 16),
+          category: submission.category,
+          level: submission.level,
+          leader_name: submission.leader_name,
+          leader_phone: submission.leader_phone,
+        });
+      })
+      .catch(() => alert('读取原活动提交记录失败'));
+  }, [router, submissionId]);
 
   const uploadFile = async (file: File): Promise<string> => {
     const formData = new FormData();
@@ -67,6 +102,7 @@ export default function SubmitPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          ...(resubmissionId ? { submission_id: resubmissionId } : {}),
           plan_file_url,
           record_file_url,
           start_time: new Date(form.start_time).toISOString(),
@@ -76,6 +112,8 @@ export default function SubmitPage() {
       const data = await res.json();
       if (data.success) {
         setSuccess(true);
+        setResubmissionId(null);
+        if (submissionId) router.replace('/submit');
         setForm({ full_name: '', start_time: '', end_time: '', category: '', level: '', leader_name: '', leader_phone: '' });
         setPlanFile(null);
         setRecordFile(null);
@@ -117,7 +155,7 @@ export default function SubmitPage() {
     );
   }
 
-  if (user.role !== 'admin' && user.role !== 'leader' && !user.canPublish) {
+  if (user.role !== 'admin' && user.canPublish !== true) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0] p-4">
         <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
@@ -139,7 +177,7 @@ export default function SubmitPage() {
         {success && (
           <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
             <p className="text-sm text-emerald-700">
-              提交成功！您的活动信息已提交审核，请前往
+              提交成功！您的活动信息已进入审核队列，请前往
               <Link href="/submit/status" className="mx-1 font-medium underline">查询状态</Link>
               查看处理进度。
             </p>
@@ -147,7 +185,7 @@ export default function SubmitPage() {
         )}
 
         <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-1 text-lg font-semibold text-gray-900">提交活动信息</h2>
+          <h2 className="mb-1 text-lg font-semibold text-gray-900">{resubmissionId ? '重新提交活动信息' : '提交活动信息'}</h2>
           <p className="mb-6 text-sm text-gray-500">请填写活动信息并上传相关文件，提交后将由管理员审核并录入活动总表</p>
 
           <div className="space-y-4">
@@ -273,7 +311,7 @@ export default function SubmitPage() {
               className="flex items-center gap-2 rounded-md bg-[#1e3a5f] px-5 py-2 text-sm font-medium text-white hover:bg-[#1e3a5f]/90 disabled:opacity-50"
             >
               <Send className="h-4 w-4" />
-              {submitting ? '提交中...' : '提交活动'}
+              {submitting ? '提交中...' : resubmissionId ? '重新提交活动' : '提交活动'}
             </button>
             <Link
               href="/submit/status"

@@ -92,11 +92,9 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT /api/activities - 管理员更新活动（不能修改ID）
+// PUT /api/activities - 管理员更新活动，获授权用户只能提交赋分材料
 export async function PUT(request: NextRequest) {
   try {
-    const auth = await requirePermission(request, 'admin');
-    if (auth.response) return auth.response;
     const body = await request.json();
     const { id, ...updates } = body;
 
@@ -104,8 +102,29 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: '缺少活动ID' }, { status: 400 });
     }
 
-    // 禁止修改ID
-    delete updates.id;
+    const materialFields = ['scoring_table_url', 'record_file_url'];
+    const updateKeys = Object.keys(updates);
+    const isScoringMaterialSubmission = updateKeys.length > 0 && updateKeys.every((key) => materialFields.includes(key));
+    const auth = await requirePermission(request, isScoringMaterialSubmission ? 'submitScoring' : 'admin');
+    if (auth.response) return auth.response;
+
+    if (updateKeys.length === 0) {
+      return NextResponse.json({ success: false, error: '没有可更新的内容' }, { status: 400 });
+    }
+
+    if (isScoringMaterialSubmission) {
+      const activity = await queryOne(
+        'SELECT scoring_status FROM activities WHERE id = $1',
+        [id]
+      );
+
+      if (!activity) {
+        return NextResponse.json({ success: false, error: '活动不存在' }, { status: 404 });
+      }
+      if (activity.scoring_status === '已赋分') {
+        return NextResponse.json({ success: false, error: '该活动已完成赋分，不能重新提交材料' }, { status: 400 });
+      }
+    }
 
     const setClauses: string[] = [];
     const params: any[] = [];

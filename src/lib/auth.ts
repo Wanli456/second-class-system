@@ -15,6 +15,7 @@ export type AuthUser = {
   role: string;
   can_publish: boolean;
   can_score: boolean;
+  can_submit_scoring: boolean;
   can_review_leave: boolean;
   can_view_evening_study: boolean;
 };
@@ -74,6 +75,7 @@ export function publicUser(user: AuthUser) {
     role: user.role,
     canPublish: isAdmin || user.can_publish,
     canScore: isAdmin || user.can_score,
+    canSubmitScoring: isAdmin || user.can_submit_scoring,
     canReviewLeave: isAdmin || user.can_review_leave,
     canViewEveningStudy: isAdmin || user.can_view_evening_study,
   };
@@ -83,7 +85,7 @@ export async function getSessionUser(request: NextRequest): Promise<AuthUser | n
   const userId = readSession(request.cookies.get(SESSION_COOKIE)?.value);
   if (!userId) return null;
   return queryOne(
-    `SELECT id, username, student_id, role, can_publish, can_score, can_review_leave, can_view_evening_study
+    `SELECT id, username, student_id, role, can_publish, can_score, can_submit_scoring, can_review_leave, can_view_evening_study
      FROM users WHERE id = $1`,
     [userId],
   );
@@ -97,7 +99,7 @@ export async function requireUser(request: NextRequest) {
   return { user, response: null };
 }
 
-export async function requirePermission(request: NextRequest, permission: 'admin' | 'publish' | 'score' | 'reviewLeave' | 'eveningStudy') {
+export async function requirePermission(request: NextRequest, permission: 'admin' | 'publish' | 'score' | 'submitScoring' | 'reviewLeave' | 'eveningStudy') {
   const result = await requireUser(request);
   if (result.response) return result;
 
@@ -105,8 +107,9 @@ export async function requirePermission(request: NextRequest, permission: 'admin
   const allowed = permission === 'admin'
     ? user.role === 'admin'
     : user.role === 'admin'
-      || (permission === 'publish' && (user.role === 'publisher' || user.role === 'leader' || user.can_publish))
-      || (permission === 'score' && (user.role === 'scorer' || user.can_score))
+      || (permission === 'publish' && user.can_publish)
+      || (permission === 'score' && user.can_score)
+      || (permission === 'submitScoring' && user.can_submit_scoring)
       || (permission === 'reviewLeave' && (user.role === 'leave_reviewer' || user.can_review_leave))
       || (permission === 'eveningStudy' && user.can_view_evening_study);
 

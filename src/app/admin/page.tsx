@@ -60,6 +60,7 @@ interface UserData {
   role: string;
   canPublish: boolean;
   canScore: boolean;
+  canSubmitScoring: boolean;
   canReviewLeave: boolean;
   canViewEveningStudy: boolean;
   createdAt?: string;
@@ -298,6 +299,14 @@ function AdminPage() {
       });
       const data = await res.json();
       if (data.success) {
+        if (user?.id === userId && data.data) {
+          setUser(data.data);
+          localStorage.setItem('user', JSON.stringify(data.data));
+          if (newRole !== 'admin') {
+            setAuthenticated(false);
+            router.push('/');
+          }
+        }
         fetchUsers();
       } else {
         alert(data.error || '更新角色失败');
@@ -308,10 +317,11 @@ function AdminPage() {
     }
   };
 
-  const handleUpdatePermission = async (userId: string, permission: 'canPublish' | 'canScore' | 'canReviewLeave' | 'canViewEveningStudy', value: boolean) => {
+  const handleUpdatePermission = async (userId: string, permission: 'canPublish' | 'canScore' | 'canSubmitScoring' | 'canReviewLeave' | 'canViewEveningStudy', value: boolean) => {
     const apiFieldMap = {
       canPublish: 'canPublish',
       canScore: 'canScore',
+      canSubmitScoring: 'canSubmitScoring',
       canReviewLeave: 'canReviewLeave',
       canViewEveningStudy: 'canViewEveningStudy',
     };
@@ -325,6 +335,10 @@ function AdminPage() {
       const data = await res.json();
       if (data.success) {
         // 只更新本地状态，避免页面跳动
+        if (user?.id === userId && data.data) {
+          setUser(data.data);
+          localStorage.setItem('user', JSON.stringify(data.data));
+        }
         setUsers(prev => prev.map(u => 
           u.id === userId ? { ...u, [permission]: value } : u
         ));
@@ -490,8 +504,8 @@ function AdminPage() {
   const tabs = [
     ...(isAdmin ? [{ key: 'activities', label: '活动总表', icon: Table, count: activities.length }] : []),
     ...(canPublish ? [{ key: 'review', label: '活动审核', icon: FileCheck, count: pendingSubmissions.length }] : []),
-    ...(canReviewLeave ? [{ key: 'leave', label: '请假审核', icon: UserCheck, count: pendingLeaves.length }] : []),
     ...(canScore ? [{ key: 'scoring', label: '活动赋分', icon: Award, count: scoringList.filter(s => s.scoring_status === '待赋分').length }] : []),
+    ...(canReviewLeave ? [{ key: 'leave', label: '请假审核', icon: UserCheck, count: pendingLeaves.length }] : []),
     ...(isAdmin ? [{ key: 'users', label: '用户管理', icon: Users, count: 0 }] : []),
   ];
 
@@ -1072,6 +1086,7 @@ function AdminPage() {
                             <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">发布活动权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">赋分材料提交</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">晚自习查询权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
@@ -1082,6 +1097,17 @@ function AdminPage() {
                             <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
                               <td className="px-3 py-2 text-gray-800">{u.name || '-'}</td>
                               <td className="px-3 py-2 text-gray-500">{u.studentId || '-'}</td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={true}
+                                    disabled
+                                    className="rounded border-gray-300 text-blue-600"
+                                  />
+                                  <span className="text-xs text-gray-500">已开启</span>
+                                </label>
+                              </td>
                               <td className="px-3 py-2">
                                 <label className="flex items-center gap-1.5">
                                   <input
@@ -1172,6 +1198,7 @@ function AdminPage() {
                             <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">发布活动权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">赋分材料提交</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">晚自习查询权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
@@ -1202,6 +1229,17 @@ function AdminPage() {
                                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                                   />
                                   <span className="text-xs text-gray-600">{u.canScore ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canSubmitScoring || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canSubmitScoring', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canSubmitScoring ? '已开启' : '未开启'}</span>
                                 </label>
                               </td>
                               <td className="px-3 py-2">
@@ -1272,6 +1310,7 @@ function AdminPage() {
                             <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">发布活动权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">赋分材料提交</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">晚自习查询权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
@@ -1302,6 +1341,17 @@ function AdminPage() {
                                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                                   />
                                   <span className="text-xs text-gray-600">{u.canScore ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canSubmitScoring || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canSubmitScoring', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canSubmitScoring ? '已开启' : '未开启'}</span>
                                 </label>
                               </td>
                               <td className="px-3 py-2">
