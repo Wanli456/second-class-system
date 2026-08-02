@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { GraduationCap, ArrowLeft, Send, Eye, Upload, FileText, LogIn } from 'lucide-react';
 import { CATEGORIES, LEVELS } from '@/lib/types';
 import DashboardLayout from '@/components/DashboardLayout';
+import { apiFetch, refreshCurrentUser } from '@/lib/client-api';
 
 export default function SubmitPage() {
   const router = useRouter();
@@ -28,10 +29,9 @@ export default function SubmitPage() {
   const [submissionId, setSubmissionId] = useState<string | null>(null);
 
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      setUser(JSON.parse(userData));
-    }
+    refreshCurrentUser().then((currentUser) => {
+      if (currentUser) setUser(currentUser);
+    });
     setSubmissionId(new URLSearchParams(window.location.search).get('submissionId'));
     setChecking(false);
   }, []);
@@ -39,7 +39,7 @@ export default function SubmitPage() {
   useEffect(() => {
     if (!submissionId) return;
 
-    fetch(`/api/activities/submit?submission_id=${encodeURIComponent(submissionId)}`)
+    apiFetch(`/api/activities/submit?submission_id=${encodeURIComponent(submissionId)}`)
       .then((res) => res.json())
       .then((data) => {
         const submission = data.success ? data.data?.[0] : null;
@@ -72,7 +72,7 @@ export default function SubmitPage() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('bucket', 'app-files');
-    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const res = await apiFetch('/api/upload', { method: 'POST', body: formData });
     const data = await res.json();
     if (!data.success) throw new Error(data.error || '上传失败');
     return data.url;
@@ -97,7 +97,7 @@ export default function SubmitPage() {
       const plan_file_url = await uploadFile(planFile);
       const record_file_url = await uploadFile(recordFile);
 
-      const res = await fetch('/api/activities/submit', {
+      const res = await apiFetch('/api/activities/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -155,7 +155,7 @@ export default function SubmitPage() {
     );
   }
 
-  if (user.role !== 'admin' && user.canPublish !== true) {
+  if (user.role !== 'admin' && user.canSubmitActivity !== true) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0] p-4">
         <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
@@ -297,11 +297,13 @@ export default function SubmitPage() {
                 </label>
               </div>
             </div>
-            <p className="text-xs text-gray-500">
-              以上为电子档。活动审核通过后，赋分表和备案表纸质版照片请通过
-              <Link href="/submit/scoring" className="font-medium text-[#1e3a5f] underline">赋分材料提交</Link>
-              入口上传
-            </p>
+            {user.canSubmitScoring && (
+              <p className="text-xs text-gray-500">
+                以上为电子档。活动审核通过后，赋分表和备案表纸质版照片请通过
+                <Link href="/submit/scoring" className="font-medium text-[#1e3a5f] underline">赋分材料提交</Link>
+                入口上传
+              </p>
+            )}
           </div>
 
           <div className="mt-6 flex gap-3">
@@ -313,13 +315,15 @@ export default function SubmitPage() {
               <Send className="h-4 w-4" />
               {submitting ? '提交中...' : resubmissionId ? '重新提交活动' : '提交活动'}
             </button>
-            <Link
-              href="/submit/status"
-              className="flex items-center gap-2 rounded-md border border-gray-300 px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              <Eye className="h-4 w-4" />
-              查看提交状态
-            </Link>
+            {user.canViewSubmissionStatus && (
+              <Link
+                href="/submit/status"
+                className="flex items-center gap-2 rounded-md border border-gray-300 px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <Eye className="h-4 w-4" />
+                查看提交状态
+              </Link>
+            )}
           </div>
         </div>
       </div>

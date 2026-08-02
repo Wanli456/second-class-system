@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { refreshCurrentUser } from "@/lib/client-api";
 import { 
   Search, Calendar, User, Users, FileText,
   AlertCircle, CheckCircle2, XCircle, Clock, RefreshCw, GraduationCap
@@ -74,14 +75,9 @@ export default function EveningStudyPage() {
   const [todayCount, setTodayCount] = useState<number>(0);
 
   useEffect(() => {
-    const saved = localStorage.getItem('user');
-    if (saved) {
-      try {
-        setUser(JSON.parse(saved));
-      } catch {
-        localStorage.removeItem('user');
-      }
-    }
+    refreshCurrentUser<CurrentUser>().then((currentUser) => {
+      if (currentUser) setUser(currentUser);
+    });
     setChecking(false);
     const dateStr = new Date().toISOString().split("T")[0];
     setToday(dateStr);

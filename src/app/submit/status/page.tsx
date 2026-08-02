@@ -5,6 +5,7 @@ import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Search, RefreshCw, Pencil } from 'lucide-react';
 import { CATEGORIES, LEVELS, REVIEW_STATUSES, STATUS_COLORS, CATEGORY_COLORS } from '@/lib/types';
+import { apiFetch, refreshCurrentUser } from '@/lib/client-api';
 
 interface Submission {
   id: string;
@@ -28,7 +29,7 @@ interface CurrentUser {
   name?: string;
   username?: string;
   role: string;
-  canPublish?: boolean;
+  canViewSubmissionStatus?: boolean;
 }
 
 export default function SubmitStatusPage() {
@@ -40,18 +41,13 @@ export default function SubmitStatusPage() {
   const [searched, setSearched] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem('user');
-    if (saved) {
-      try {
-        setUser(JSON.parse(saved));
-      } catch {
-        localStorage.removeItem('user');
-      }
-    }
+    refreshCurrentUser<CurrentUser>().then((currentUser) => {
+      if (currentUser) setUser(currentUser);
+    });
     setChecking(false);
   }, []);
 
-  const canView = user && (user.role === 'admin' || user.canPublish === true);
+  const canView = user && (user.role === 'admin' || user.canViewSubmissionStatus === true);
 
   if (checking) {
     return <div className="flex min-h-screen items-center justify-center bg-gray-50 text-sm text-gray-500">加载中...</div>;
@@ -76,7 +72,7 @@ export default function SubmitStatusPage() {
     setLoading(true);
     setSearched(true);
     try {
-      const res = await fetch(`/api/activities/submit?keyword=${encodeURIComponent(keyword.trim())}`);
+      const res = await apiFetch(`/api/activities/submit?keyword=${encodeURIComponent(keyword.trim())}`);
       const result = await res.json();
       if (result.success) {
         setSubmissions(result.data);

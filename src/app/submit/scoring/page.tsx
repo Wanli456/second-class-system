@@ -5,6 +5,7 @@ import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { GraduationCap, Upload, FileText, Search, CheckCircle2, AlertCircle, LogIn } from 'lucide-react';
 import { LEVELS, SCORING_STATUSES } from '@/lib/types';
+import { apiFetch, refreshCurrentUser } from '@/lib/client-api';
 
 interface Activity {
   id: string;
@@ -33,10 +34,9 @@ export default function SubmitScoringPage() {
   const [showResubmit, setShowResubmit] = useState(false);
 
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      setUser(JSON.parse(userData));
-    }
+    refreshCurrentUser().then((currentUser) => {
+      if (currentUser) setUser(currentUser);
+    });
     setChecking(false);
   }, []);
 
@@ -48,7 +48,7 @@ export default function SubmitScoringPage() {
     setLoading(true);
     setSearched(true);
     try {
-      const res = await fetch(`/api/activities?keyword=${encodeURIComponent(activityName)}`);
+      const res = await apiFetch(`/api/activities?keyword=${encodeURIComponent(activityName)}`);
       const data = await res.json();
       if (data.success) {
         setActivities(data.data);
@@ -64,7 +64,7 @@ export default function SubmitScoringPage() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('bucket', 'app-files');
-    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const res = await apiFetch('/api/upload', { method: 'POST', body: formData });
     const data = await res.json();
     if (!data.success) throw new Error(data.error || '上传失败');
     return data.url;
@@ -103,7 +103,7 @@ export default function SubmitScoringPage() {
         record_file_url = await uploadFile(recordFile);
       }
 
-      const res = await fetch('/api/activities', {
+      const res = await apiFetch('/api/activities', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

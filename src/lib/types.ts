@@ -87,6 +87,8 @@ export interface UserData {
   role: 'student' | 'leader' | 'admin';
   canPublish: boolean;
   canScore: boolean;
+  canSubmitActivity: boolean;
+  canViewSubmissionStatus: boolean;
   canSubmitScoring: boolean;
   canReviewLeave: boolean;
   canViewEveningStudy: boolean;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/storage/database/supabase-client';
 import {
   clearSessionCookie,
+  createSessionToken,
   hashPassword,
   publicUser,
   requirePermission,
@@ -29,12 +30,13 @@ export async function POST(request: NextRequest) {
     const user = await queryOne(
       `INSERT INTO users (username, password, student_id, role, can_publish, can_score, can_review_leave)
        VALUES ($1, $2, $3, 'student', false, false, false)
-       RETURNING id, username, student_id, role, can_publish, can_score, can_submit_scoring, can_review_leave, can_view_evening_study`,
+       RETURNING id, username, student_id, role, can_publish, can_score, can_submit_activity, can_view_submission_status, can_submit_scoring, can_review_leave, can_view_evening_study`,
       [name, await hashPassword(password), studentId],
     );
 
-    const response = NextResponse.json({ success: true, data: publicUser(user) });
-    setSessionCookie(response, user.id);
+    const sessionToken = createSessionToken(user.id);
+    const response = NextResponse.json({ success: true, data: { ...publicUser(user), sessionToken } });
+    setSessionCookie(response, user.id, sessionToken);
     return response;
   } catch (error) {
     console.error('Registration failed:', error);
@@ -60,8 +62,9 @@ export async function PUT(request: NextRequest) {
       await query('UPDATE users SET password = $1 WHERE id = $2', [await hashPassword(password), user.id]);
     }
 
-    const response = NextResponse.json({ success: true, data: publicUser(user) });
-    setSessionCookie(response, user.id);
+    const sessionToken = createSessionToken(user.id);
+    const response = NextResponse.json({ success: true, data: { ...publicUser(user), sessionToken } });
+    setSessionCookie(response, user.id, sessionToken);
     return response;
   } catch (error) {
     console.error('Login failed:', error);
@@ -72,6 +75,13 @@ export async function PUT(request: NextRequest) {
 // GET /api/auth - admin user list
 export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    if (searchParams.get('me') === 'true') {
+      const auth = await requireUser(request);
+      if (auth.response) return auth.response;
+      return NextResponse.json({ success: true, data: publicUser(auth.user!) });
+    }
+
     const auth = await requirePermission(request, 'admin');
     if (auth.response) return auth.response;
 
@@ -85,6 +95,8 @@ export async function GET(request: NextRequest) {
         role: user.role,
         canPublish: user.can_publish,
         canScore: user.can_score,
+        canSubmitActivity: user.can_submit_activity,
+        canViewSubmissionStatus: user.can_view_submission_status,
         canSubmitScoring: user.can_submit_scoring,
         canReviewLeave: user.can_review_leave,
         canViewEveningStudy: user.can_view_evening_study,
@@ -116,7 +128,7 @@ export async function PATCH(request: NextRequest) {
 
     const auth = await requirePermission(request, 'admin');
     if (auth.response) return auth.response;
-    const { userId, role, canPublish, canScore, canSubmitScoring, canReviewLeave, canViewEveningStudy } = body;
+    const { userId, role, canPublish, canScore, canSubmitActivity, canViewSubmissionStatus, canSubmitScoring, canReviewLeave, canViewEveningStudy } = body;
     if (!userId) return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
 
     const updates: string[] = [];
@@ -125,6 +137,8 @@ export async function PATCH(request: NextRequest) {
     if (role !== undefined) { updates.push(`role = $${index++}`); params.push(role); }
     if (canPublish !== undefined) { updates.push(`can_publish = $${index++}`); params.push(canPublish); }
     if (canScore !== undefined) { updates.push(`can_score = $${index++}`); params.push(canScore); }
+    if (canSubmitActivity !== undefined) { updates.push(`can_submit_activity = $${index++}`); params.push(canSubmitActivity); }
+    if (canViewSubmissionStatus !== undefined) { updates.push(`can_view_submission_status = $${index++}`); params.push(canViewSubmissionStatus); }
     if (canSubmitScoring !== undefined) { updates.push(`can_submit_scoring = $${index++}`); params.push(canSubmitScoring); }
     if (canReviewLeave !== undefined) { updates.push(`can_review_leave = $${index++}`); params.push(canReviewLeave); }
     if (canViewEveningStudy !== undefined) { updates.push(`can_view_evening_study = $${index++}`); params.push(canViewEveningStudy); }

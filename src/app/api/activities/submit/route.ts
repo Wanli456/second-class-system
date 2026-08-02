@@ -5,12 +5,12 @@ import { requirePermission } from '@/lib/auth';
 // GET /api/activities/submit - 负责人查看自己提交的活动（支持按活动名称搜索）
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requirePermission(request, 'publish');
-    if (auth.response) return auth.response;
     const { searchParams } = new URL(request.url);
     const phone = searchParams.get('phone');
     const keyword = searchParams.get('keyword');
     const submissionId = searchParams.get('submission_id');
+    const auth = await requirePermission(request, submissionId ? 'submitActivity' : 'viewSubmissionStatus');
+    if (auth.response) return auth.response;
 
     if (submissionId) {
       const submission = await queryOne('SELECT * FROM activity_submissions WHERE id = $1', [submissionId]);
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
 // POST /api/activities/submit - 负责人提交活动
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requirePermission(request, 'publish');
+    const auth = await requirePermission(request, 'submitActivity');
     if (auth.response) return auth.response;
     const body = await request.json();
     const { submission_id, full_name, start_time, end_time, category, level, plan_file_url, record_file_url, leader_name, leader_phone } = body;

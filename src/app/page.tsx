@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { NotificationBell } from '@/components/NotificationBell';
 import { DashboardLayout } from '@/components/DashboardLayout';
+import { apiFetch, refreshCurrentUser } from '@/lib/client-api';
 
 interface User {
   id: string;
@@ -17,6 +18,8 @@ interface User {
   role: string;
   canPublish?: boolean;
   canScore?: boolean;
+  canSubmitActivity?: boolean;
+  canViewSubmissionStatus?: boolean;
   canSubmitScoring?: boolean;
   canReviewLeave?: boolean;
   canViewEveningStudy?: boolean;
@@ -34,7 +37,7 @@ function getButtonState(user: User | null, requiredRole: string): 'active' | 'gr
 
 function getLeaderButtonState(user: User | null): 'active' | 'grayed' | 'locked' {
   if (!user) return 'locked';
-  if (user.role === 'admin' || user.role === 'publisher' || user.canPublish || user.canSubmitScoring) return 'active';
+  if (user.role === 'admin' || user.role === 'publisher' || user.canSubmitActivity || user.canViewSubmissionStatus || user.canSubmitScoring) return 'active';
   if (user.role === 'leader') return 'active';
   return 'grayed';
 }
@@ -49,21 +52,20 @@ export default function Home() {
   const [passwordMessage, setPasswordMessage] = useState('');
 
   useEffect(() => {
-    const saved = localStorage.getItem('user');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        // 管理员自动拥有所有权限
-        if (parsed.role === 'admin') {
-          parsed.canPublish = true;
-          parsed.canScore = true;
-          parsed.canSubmitScoring = true;
-          parsed.canReviewLeave = true;
-          parsed.canViewEveningStudy = true;
-        }
-        setUser(parsed);
-      } catch {}
-    }
+    refreshCurrentUser<User>().then((parsed) => {
+      if (!parsed) return;
+      // 管理员自动拥有所有权限
+      if (parsed.role === 'admin') {
+        parsed.canPublish = true;
+        parsed.canScore = true;
+        parsed.canSubmitActivity = true;
+        parsed.canViewSubmissionStatus = true;
+        parsed.canSubmitScoring = true;
+        parsed.canReviewLeave = true;
+        parsed.canViewEveningStudy = true;
+      }
+      setUser(parsed);
+    });
   }, []);
 
   const handleLoginSuccess = (u: User) => {
@@ -90,7 +92,7 @@ export default function Home() {
       return;
     }
     try {
-      const res = await fetch('/api/auth', {
+      const res = await apiFetch('/api/auth', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: user!.id, password: newPassword, oldPassword }),
@@ -326,7 +328,7 @@ export default function Home() {
             <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">用户端</h3>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {/* 活动提交 */}
-              {(user.role === 'admin' || user.canPublish) && (
+              {(user.role === 'admin' || user.canSubmitActivity) && (
                 <Link
                   href="/submit"
                   className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
@@ -372,7 +374,7 @@ export default function Home() {
             <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">快捷查询</h3>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {/* 提交状态查询 */}
-              {(user.role === 'admin' || user.canPublish) && (
+              {(user.role === 'admin' || user.canViewSubmissionStatus) && (
                 <Link
                   href="/submit/status"
                   className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-teal-500 hover:bg-gray-50"

@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { refreshCurrentUser } from '@/lib/client-api';
 
 interface User {
   id: string;
@@ -30,6 +31,8 @@ interface User {
   role: string;
   canPublish?: boolean;
   canScore?: boolean;
+  canSubmitActivity?: boolean;
+  canViewSubmissionStatus?: boolean;
   canSubmitScoring?: boolean;
   canReviewLeave?: boolean;
   canViewEveningStudy?: boolean;
@@ -57,8 +60,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: '活动赋分', href: '/admin?role=scorer&tab=scoring', icon: Award, requiredRole: 'scorer', requiredPermission: 'canScore' },
   { label: '请假审核', href: '/admin?role=leave_reviewer&tab=leave', icon: UserCheck, requiredRole: 'leave_reviewer', requiredPermission: 'canReviewLeave' },
   { label: '用户管理', href: '/admin?role=admin&tab=users', icon: Users, requiredRole: 'admin' },
-  { label: '活动提交', href: '/submit', icon: Send, requiredPermission: 'canPublish' },
-  { label: '提交状态', href: '/submit/status', icon: FileCheck, requiredPermission: 'canPublish' },
+  { label: '活动提交', href: '/submit', icon: Send, requiredPermission: 'canSubmitActivity' },
+  { label: '提交状态', href: '/submit/status', icon: FileCheck, requiredPermission: 'canViewSubmissionStatus' },
   { label: '赋分材料', href: '/submit/scoring', icon: Award, requiredPermission: 'canSubmitScoring' },
   { label: '请假申请', href: '/leave', icon: FileCheck },
   { label: '请假状态', href: '/leave/status', icon: FileCheck },
@@ -73,6 +76,13 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title 
   const [collapsed, setCollapsed] = React.useState(false);
   const [currentQuery, setCurrentQuery] = React.useState('');
   const [storedUser, setStoredUser] = React.useState<User | null>(null);
+  const [syncedUser, setSyncedUser] = React.useState<User | null>(null);
+
+  React.useEffect(() => {
+    refreshCurrentUser<User>().then((currentUser) => {
+      if (currentUser) setSyncedUser(currentUser);
+    });
+  }, []);
 
   React.useEffect(() => {
     if (providedUser) return;
@@ -91,7 +101,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title 
     setCurrentQuery(window.location.search);
   });
 
-  const user = providedUser ?? storedUser;
+  const user = syncedUser ?? providedUser ?? storedUser;
 
   const canAccessItem = (item: NavItem): boolean => {
     if (!user) {

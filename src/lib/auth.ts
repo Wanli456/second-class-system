@@ -8,6 +8,18 @@ const SESSION_COOKIE = 'second_class_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const FALLBACK_SECRET = 'second-class-local-development-secret';
 
+function sessionCookieOptions() {
+  // Coze renders previews in an embedded cross-site frame. Production cookies
+  // must opt into that context or protected API requests lose the session.
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.COZE_PROJECT_ENV === 'PROD';
+  return {
+    httpOnly: true,
+    sameSite: isProduction ? 'none' as const : 'lax' as const,
+    secure: isProduction,
+    path: '/',
+  };
+}
+
 export type AuthUser = {
   id: string;
   username: string;
@@ -15,6 +27,8 @@ export type AuthUser = {
   role: string;
   can_publish: boolean;
   can_score: boolean;
+  can_submit_activity: boolean;
+  can_view_submission_status: boolean;
   can_submit_scoring: boolean;
   can_review_leave: boolean;
   can_view_evening_study: boolean;
@@ -31,6 +45,10 @@ function sign(value: string) {
 function serializeSession(userId: string) {
   const payload = `${userId}.${Date.now() + SESSION_TTL_SECONDS * 1000}`;
   return `${Buffer.from(payload).toString('base64url')}.${sign(payload)}`;
+}
+
+export function createSessionToken(userId: string) {
+  return serializeSession(userId);
 }
 
 function readSession(value?: string | null) {
@@ -75,6 +93,8 @@ export function publicUser(user: AuthUser) {
     role: user.role,
     canPublish: isAdmin || user.can_publish,
     canScore: isAdmin || user.can_score,
+    canSubmitActivity: isAdmin || user.can_submit_activity,
+    canViewSubmissionStatus: isAdmin || user.can_view_submission_status,
     canSubmitScoring: isAdmin || user.can_submit_scoring,
     canReviewLeave: isAdmin || user.can_review_leave,
     canViewEveningStudy: isAdmin || user.can_view_evening_study,
@@ -82,10 +102,12 @@ export function publicUser(user: AuthUser) {
 }
 
 export async function getSessionUser(request: NextRequest): Promise<AuthUser | null> {
-  const userId = readSession(request.cookies.get(SESSION_COOKIE)?.value);
+  const authorization = request.headers.get('authorization');
+  const bearerToken = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null;
+  const userId = readSession(request.cookies.get(SESSION_COOKIE)?.value) || readSession(bearerToken);
   if (!userId) return null;
   return queryOne(
-    `SELECT id, username, student_id, role, can_publish, can_score, can_submit_scoring, can_review_leave, can_view_evening_study
+    `SELECT id, username, student_id, role, can_publish, can_score, can_submit_activity, can_view_submission_status, can_submit_scoring, can_review_leave, can_view_evening_study
      FROM users WHERE id = $1`,
     [userId],
   );
@@ -99,7 +121,7 @@ export async function requireUser(request: NextRequest) {
   return { user, response: null };
 }
 
-export async function requirePermission(request: NextRequest, permission: 'admin' | 'publish' | 'score' | 'submitScoring' | 'reviewLeave' | 'eveningStudy') {
+export async function requirePermission(request: NextRequest, permission: 'admin' | 'publish' | 'submitActivity' | 'viewSubmissionStatus' | 'score' | 'submitScoring' | 'reviewLeave' | 'eveningStudy') {
   const result = await requireUser(request);
   if (result.response) return result;
 
@@ -108,6 +130,8 @@ export async function requirePermission(request: NextRequest, permission: 'admin
     ? user.role === 'admin'
     : user.role === 'admin'
       || (permission === 'publish' && user.can_publish)
+      || (permission === 'submitActivity' && user.can_submit_activity)
+      || (permission === 'viewSubmissionStatus' && user.can_view_submission_status)
       || (permission === 'score' && user.can_score)
       || (permission === 'submitScoring' && user.can_submit_scoring)
       || (permission === 'reviewLeave' && (user.role === 'leave_reviewer' || user.can_review_leave))
@@ -119,18 +143,15 @@ export async function requirePermission(request: NextRequest, permission: 'admin
   return { user, response: null };
 }
 
-export function setSessionCookie(response: NextResponse, userId: string) {
+export function setSessionCookie(response: NextResponse, userId: string, token = createSessionToken(userId)) {
   response.cookies.set({
     name: SESSION_COOKIE,
-    value: serializeSession(userId),
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
+    value: token,
+    ...sessionCookieOptions(),
     maxAge: SESSION_TTL_SECONDS,
   });
 }
 
 export function clearSessionCookie(response: NextResponse) {
-  response.cookies.set({ name: SESSION_COOKIE, value: '', httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/', maxAge: 0 });
+  response.cookies.set({ name: SESSION_COOKIE, value: '', ...sessionCookieOptions(), maxAge: 0 });
 }

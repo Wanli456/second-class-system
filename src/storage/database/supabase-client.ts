@@ -24,6 +24,8 @@ if (localDb) {
       role TEXT NOT NULL DEFAULT 'student',
       can_publish BOOLEAN NOT NULL DEFAULT false,
       can_score BOOLEAN NOT NULL DEFAULT false,
+      can_submit_activity BOOLEAN NOT NULL DEFAULT false,
+      can_view_submission_status BOOLEAN NOT NULL DEFAULT false,
       can_submit_scoring BOOLEAN NOT NULL DEFAULT false,
       can_review_leave BOOLEAN NOT NULL DEFAULT false,
       can_view_evening_study BOOLEAN NOT NULL DEFAULT false,
@@ -127,6 +129,16 @@ const pool = useLocalTestDatabase
       connectionString: process.env.PGDATABASE_URL,
       ssl: { rejectUnauthorized: false },
     });
+
+export async function ensureDatabaseSchema() {
+  if (useLocalTestDatabase) return;
+
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_activity BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_submission_status BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_scoring BOOLEAN NOT NULL DEFAULT false;
+  `);
+}
 
 // 通用查询函数
 export async function query(sql: string, params: any[] = []): Promise<any[]> {

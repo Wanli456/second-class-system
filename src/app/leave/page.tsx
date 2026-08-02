@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { GraduationCap, ArrowLeft, Send, Eye, AlertCircle } from 'lucide-react';
 import { LEAVE_TYPES } from '@/lib/types';
 import DashboardLayout from '@/components/DashboardLayout';
+import { apiFetch } from '@/lib/client-api';
 
 export default function LeavePage() {
   const [form, setForm] = useState({
@@ -30,7 +31,7 @@ export default function LeavePage() {
   // Fetch activity names for autocomplete
   useEffect(() => {
     if (form.leave_type === '活动公假') {
-      fetch('/api/activities')
+      apiFetch('/api/activities')
         .then(res => res.json())
         .then(data => {
           if (data.success) {
@@ -44,7 +45,7 @@ export default function LeavePage() {
   useEffect(() => {
     if (!requestId) return;
 
-    fetch(`/api/leave?id=${encodeURIComponent(requestId)}`)
+    apiFetch(`/api/leave?id=${encodeURIComponent(requestId)}`)
       .then((res) => res.json())
       .then((data) => {
         const leave = data.success ? data.data?.[0] : null;
@@ -104,12 +105,12 @@ export default function LeavePage() {
       if (imageFile) {
         const formData = new FormData();
         formData.append('file', imageFile);
-        const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+        const uploadRes = await apiFetch('/api/upload', { method: 'POST', body: formData });
         const uploadData = await uploadRes.json();
         if (uploadData.success) imageUrl = uploadData.url;
       }
 
-      const res = await fetch('/api/leave', {
+      const res = await apiFetch('/api/leave', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

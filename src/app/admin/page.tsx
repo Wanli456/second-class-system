@@ -14,6 +14,7 @@ import {
   STATUS_COLORS,
 } from '@/lib/types';
 import DashboardLayout from '@/components/DashboardLayout';
+import { apiFetch, refreshCurrentUser } from '@/lib/client-api';
 
 type ReviewStatus = '待审核' | '已通过' | '已驳回';
 type LeaveStatus = '待审核' | '已通过' | '已驳回';
@@ -60,6 +61,8 @@ interface UserData {
   role: string;
   canPublish: boolean;
   canScore: boolean;
+  canSubmitActivity: boolean;
+  canViewSubmissionStatus: boolean;
   canSubmitScoring: boolean;
   canReviewLeave: boolean;
   canViewEveningStudy: boolean;
@@ -106,9 +109,12 @@ function AdminPage() {
 
   // Check if user is logged in
   useEffect(() => {
-    const stored = localStorage.getItem('user');
-    if (stored) {
-      const userData = JSON.parse(stored);
+    refreshCurrentUser<UserData>().then((userData) => {
+      if (!userData) {
+        setShowLoginModal(true);
+        return;
+      }
+
       setUser(userData);
       // Admin can access all roles
       if (userData.role === 'admin') {
@@ -129,9 +135,7 @@ function AdminPage() {
         setLoginError(`当前账号没有${ROLE_LABELS[roleParam]}权限`);
         setShowLoginModal(true);
       }
-    } else {
-      setShowLoginModal(true);
-    }
+    });
   }, [roleParam]);
 
   useEffect(() => {
@@ -155,31 +159,31 @@ function AdminPage() {
   }, [authenticated, role, tabParam]);
 
   const fetchActivities = useCallback(async () => {
-    const res = await fetch('/api/activities');
+    const res = await apiFetch('/api/activities');
     const data = await res.json();
     if (data.success) setActivities(data.data);
   }, []);
 
   const fetchSubmissions = useCallback(async () => {
-    const res = await fetch('/api/activities/review');
+    const res = await apiFetch('/api/activities/review');
     const data = await res.json();
     if (data.success) setSubmissions(data.data);
   }, []);
 
   const fetchLeaves = useCallback(async () => {
-    const res = await fetch('/api/leave?role=admin');
+    const res = await apiFetch('/api/leave?role=admin');
     const data = await res.json();
     if (data.success) setLeaves(data.data);
   }, []);
 
   const fetchScoring = useCallback(async () => {
-    const res = await fetch('/api/scoring');
+    const res = await apiFetch('/api/scoring');
     const data = await res.json();
     if (data.success) setScoringList(data.data);
   }, []);
 
   const fetchUsers = useCallback(async () => {
-    const res = await fetch('/api/auth?admin=true');
+    const res = await apiFetch('/api/auth?admin=true');
     const data = await res.json();
     if (data.success) setUsers(data.data);
   }, []);
@@ -241,7 +245,7 @@ function AdminPage() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('bucket', 'app-files');
-    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const res = await apiFetch('/api/upload', { method: 'POST', body: formData });
     const data = await res.json();
     if (!data.success) throw new Error(data.error || '上传失败');
     return data.url;
@@ -272,7 +276,7 @@ function AdminPage() {
 
     setScoringInProgress(true);
     try {
-      const res = await fetch('/api/scoring', {
+      const res = await apiFetch('/api/scoring', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: activityId }),
@@ -292,7 +296,7 @@ function AdminPage() {
 
   const handleUpdateRole = async (userId: string, newRole: string) => {
     try {
-      const res = await fetch('/api/auth', {
+      const res = await apiFetch('/api/auth', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, role: newRole }),
@@ -300,8 +304,10 @@ function AdminPage() {
       const data = await res.json();
       if (data.success) {
         if (user?.id === userId && data.data) {
-          setUser(data.data);
-          localStorage.setItem('user', JSON.stringify(data.data));
+          const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
+          const updatedUser = { ...savedUser, ...data.data };
+          setUser(updatedUser);
+          localStorage.setItem('user', JSON.stringify(updatedUser));
           if (newRole !== 'admin') {
             setAuthenticated(false);
             router.push('/');
@@ -317,17 +323,19 @@ function AdminPage() {
     }
   };
 
-  const handleUpdatePermission = async (userId: string, permission: 'canPublish' | 'canScore' | 'canSubmitScoring' | 'canReviewLeave' | 'canViewEveningStudy', value: boolean) => {
+  const handleUpdatePermission = async (userId: string, permission: 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canReviewLeave' | 'canViewEveningStudy', value: boolean) => {
     const apiFieldMap = {
       canPublish: 'canPublish',
       canScore: 'canScore',
+      canSubmitActivity: 'canSubmitActivity',
+      canViewSubmissionStatus: 'canViewSubmissionStatus',
       canSubmitScoring: 'canSubmitScoring',
       canReviewLeave: 'canReviewLeave',
       canViewEveningStudy: 'canViewEveningStudy',
     };
     const apiField = apiFieldMap[permission];
     try {
-      const res = await fetch('/api/auth', {
+      const res = await apiFetch('/api/auth', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, [apiField]: value }),
@@ -336,11 +344,13 @@ function AdminPage() {
       if (data.success) {
         // 只更新本地状态，避免页面跳动
         if (user?.id === userId && data.data) {
-          setUser(data.data);
-          localStorage.setItem('user', JSON.stringify(data.data));
+          const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
+          const updatedUser = { ...savedUser, ...data.data };
+          setUser(updatedUser);
+          localStorage.setItem('user', JSON.stringify(updatedUser));
         }
-        setUsers(prev => prev.map(u => 
-          u.id === userId ? { ...u, [permission]: value } : u
+        setUsers(prev => prev.map(u =>
+          u.id === userId ? { ...u, ...(data.data || { [permission]: value }) } : u
         ));
       } else {
         alert(data.error || '更新权限失败');
@@ -354,7 +364,7 @@ function AdminPage() {
   const handleDeleteUser = async (userId: string, userName: string) => {
     if (!confirm(`确定要删除用户"${userName}"吗？此操作不可恢复。`)) return;
     try {
-      const res = await fetch(`/api/auth?id=${userId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/auth?id=${userId}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
         fetchUsers();
@@ -375,7 +385,7 @@ function AdminPage() {
       return;
     }
     try {
-      const res = await fetch('/api/auth', {
+      const res = await apiFetch('/api/auth', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: userId, password: newPassword }),
@@ -393,7 +403,7 @@ function AdminPage() {
   };
 
   const handleReviewSubmission = async (id: string, status: ReviewStatus) => {
-    const res = await fetch('/api/activities/review', {
+    const res = await apiFetch('/api/activities/review', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, review_status: status, review_note: reviewNote || null }),
@@ -409,7 +419,7 @@ function AdminPage() {
   };
 
   const handleReviewLeave = async (id: string, status: LeaveStatus) => {
-    const res = await fetch('/api/leave', {
+    const res = await apiFetch('/api/leave', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, review_status: status, review_note: reviewNote || null }),
@@ -425,7 +435,7 @@ function AdminPage() {
 
   const handleDeleteActivity = async (id: string) => {
     if (!confirm('确认删除该活动？')) return;
-    const res = await fetch(`/api/activities?id=${id}`, { method: 'DELETE' });
+    const res = await apiFetch(`/api/activities?id=${id}`, { method: 'DELETE' });
     const data = await res.json();
     if (data.success) fetchActivities();
     else alert(data.error);
@@ -589,7 +599,7 @@ function AdminPage() {
                 {showAddForm && (
                   <ActivityForm
                     onSubmit={async (data) => {
-                      const res = await fetch('/api/activities', {
+                      const res = await apiFetch('/api/activities', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(data),
@@ -606,7 +616,7 @@ function AdminPage() {
                   <ActivityForm
                     activity={editActivity}
                     onSubmit={async (data) => {
-                      const res = await fetch('/api/activities', {
+                      const res = await apiFetch('/api/activities', {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ id: editActivity.id, ...data }),
@@ -1084,11 +1094,13 @@ function AdminPage() {
                           <tr className="border-b border-gray-200 bg-gray-50">
                             <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">发布活动权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">活动审核权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">赋分材料提交</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">赋分材料权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">晚自习查询权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">活动提交权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">提交状态权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
                           </tr>
                         </thead>
@@ -1097,6 +1109,28 @@ function AdminPage() {
                             <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
                               <td className="px-3 py-2 text-gray-800">{u.name || '-'}</td>
                               <td className="px-3 py-2 text-gray-500">{u.studentId || '-'}</td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={true}
+                                    disabled
+                                    className="rounded border-gray-300 text-blue-600"
+                                  />
+                                  <span className="text-xs text-gray-500">已开启</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5">
+                                  <input
+                                    type="checkbox"
+                                    checked={true}
+                                    disabled
+                                    className="rounded border-gray-300 text-blue-600"
+                                  />
+                                  <span className="text-xs text-gray-500">已开启</span>
+                                </label>
+                              </td>
                               <td className="px-3 py-2">
                                 <label className="flex items-center gap-1.5">
                                   <input
@@ -1196,11 +1230,13 @@ function AdminPage() {
                           <tr className="border-b border-gray-200 bg-gray-50">
                             <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">发布活动权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">活动审核权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">赋分材料提交</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">赋分材料权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">晚自习查询权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">活动提交权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">提交状态权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
                           </tr>
                         </thead>
@@ -1265,6 +1301,28 @@ function AdminPage() {
                                 </label>
                               </td>
                               <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canSubmitActivity || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canSubmitActivity', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canSubmitActivity ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canViewSubmissionStatus || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canViewSubmissionStatus', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canViewSubmissionStatus ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
                                 <div className="flex gap-1">
                                   <button
                                     onClick={() => handleChangePassword(u.id, u.name)}
@@ -1308,11 +1366,13 @@ function AdminPage() {
                           <tr className="border-b border-gray-200 bg-gray-50">
                             <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">发布活动权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">活动审核权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">赋分材料提交</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">赋分材料权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">晚自习查询权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">活动提交权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">提交状态权限</th>
                             <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
                           </tr>
                         </thead>
@@ -1374,6 +1434,28 @@ function AdminPage() {
                                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                                   />
                                   <span className="text-xs text-gray-600">{u.canViewEveningStudy ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canSubmitActivity || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canSubmitActivity', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canSubmitActivity ? '已开启' : '未开启'}</span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canViewSubmissionStatus || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canViewSubmissionStatus', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">{u.canViewSubmissionStatus ? '已开启' : '未开启'}</span>
                                 </label>
                               </td>
                               <td className="px-3 py-2">
