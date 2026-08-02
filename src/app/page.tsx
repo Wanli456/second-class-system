@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
-  ClipboardList, Send, Award, FileText, UserCheck, Moon, Lock, LogOut, Key, ArrowLeft,
+  ClipboardList, Send, Award, FileText, UserCheck, Moon, Lock, LogOut, Key, ArrowLeft, ArrowUpRight,
   LayoutDashboard, Users, FileCheck,
 } from 'lucide-react';
 import { NotificationBell } from '@/components/NotificationBell';
@@ -262,7 +262,7 @@ export default function Home() {
                 {/* 发布活动 */}
                 {(user.role === 'admin' || user.canPublish) && (
                   <Link
-                    href="/admin?role=publisher&tab=submissions"
+                    href="/admin?role=publisher&tab=review"
                     className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
                   >
                     <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
@@ -290,7 +290,7 @@ export default function Home() {
                 {/* 请假审核 */}
                 {(user.role === 'admin' || user.canReviewLeave) && (
                   <Link
-                    href="/admin?role=leave_reviewer&tab=leaves"
+                    href="/admin?role=leave_reviewer&tab=leave"
                     className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
                   >
                     <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
@@ -323,28 +323,32 @@ export default function Home() {
             <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">用户端</h3>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {/* 活动提交 */}
-              <Link
-                href="/submit"
-                className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
-              >
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                  <Send className="h-5 w-5" />
-                </div>
-                <h4 className="font-semibold text-gray-900">活动提交</h4>
-                <p className="mt-1 text-xs text-gray-500">提交活动基本信息、查看审核状态</p>
-              </Link>
+              {(user.role === 'admin' || user.role === 'leader' || user.canPublish) && (
+                <Link
+                  href="/submit"
+                  className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
+                >
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                    <Send className="h-5 w-5" />
+                  </div>
+                  <h4 className="font-semibold text-gray-900">活动提交</h4>
+                  <p className="mt-1 text-xs text-gray-500">提交活动基本信息、查看审核状态</p>
+                </Link>
+              )}
 
               {/* 赋分材料提交 */}
-              <Link
-                href="/submit/scoring"
-                className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
-              >
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-                  <Award className="h-5 w-5" />
-                </div>
-                <h4 className="font-semibold text-gray-900">赋分材料提交</h4>
-                <p className="mt-1 text-xs text-gray-500">上传活动赋分表、备案表照片</p>
-              </Link>
+              {(user.role === 'admin' || user.role === 'leader' || user.canScore) && (
+                <Link
+                  href="/submit/scoring"
+                  className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
+                >
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                    <Award className="h-5 w-5" />
+                  </div>
+                  <h4 className="font-semibold text-gray-900">赋分材料提交</h4>
+                  <p className="mt-1 text-xs text-gray-500">上传活动赋分表、备案表照片</p>
+                </Link>
+              )}
 
               {/* 请假申请 */}
               <Link
@@ -401,105 +405,132 @@ export default function Home() {
 
   // 未登录用户 - 显示公开首页
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* 顶部导航 */}
-      <header className="border-b border-gray-200 bg-white shadow-sm">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+    <div className="min-h-screen bg-[#f5f7f6] text-slate-950">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-600 text-white">
-              <ClipboardList className="h-5 w-5" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white shadow-sm">
+              <ClipboardList className="h-5 w-5" strokeWidth={2.4} />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-gray-900">二课活动管理系统</h1>
-              <p className="text-xs text-gray-500">University Second Classroom Activity Management</p>
+              <h1 className="text-base font-bold tracking-tight text-slate-950 sm:text-lg">二课活动管理系统</h1>
+              <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">Activity Operations</p>
             </div>
           </div>
           <button
             onClick={() => setShowLoginModal(true)}
-            className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-700"
+            className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 sm:px-4"
           >
-            登录/注册
+            登录 / 注册
+            <ArrowUpRight className="h-4 w-4" />
           </button>
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6 py-12">
-        {/* 欢迎区域 */}
-        <div className="mb-8 text-center">
-          <h2 className="text-3xl font-bold text-gray-900">
-            欢迎使用二课活动管理系统
-          </h2>
-          <p className="mt-3 text-gray-500">
-            第二课堂活动管理与请假申请平台
-          </p>
-        </div>
-
-        {/* 功能入口 */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {/* 活动提交 */}
-          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-              <Send className="h-6 w-6" />
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8 lg:py-16">
+        <section className="grid gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] lg:items-center">
+          <div>
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-800">
+              <span className="h-1.5 w-1.5 rounded-full bg-teal-600" />
+              第二课堂工作入口
             </div>
-            <h3 className="font-semibold text-gray-900">活动提交</h3>
-            <p className="mt-2 text-sm text-gray-500">提交活动基本信息，等待审核</p>
-            <Link
-              href="/submit"
-              className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-teal-600 hover:underline"
-            >
-              进入 <span aria-hidden="true">→</span>
-            </Link>
-          </div>
-
-          {/* 请假申请 */}
-          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
-              <FileText className="h-6 w-6" />
-            </div>
-            <h3 className="font-semibold text-gray-900">请假申请</h3>
-            <p className="mt-2 text-sm text-gray-500">提交请假申请，上传请假条</p>
-            <Link
-              href="/leave"
-              className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-teal-600 hover:underline"
-            >
-              进入 <span aria-hidden="true">→</span>
-            </Link>
-          </div>
-
-          {/* 请假状态查询 */}
-          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100 text-gray-600">
-              <FileCheck className="h-6 w-6" />
-            </div>
-            <h3 className="font-semibold text-gray-900">请假状态查询</h3>
-            <p className="mt-2 text-sm text-gray-500">查询请假申请审核状态</p>
-            <Link
-              href="/leave/status"
-              className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-teal-600 hover:underline"
-            >
-              进入 <span aria-hidden="true">→</span>
-            </Link>
-          </div>
-        </div>
-
-        {/* 登录提示 */}
-        <div className="mt-8 rounded-lg border border-amber-200 bg-amber-50 p-6">
-          <div className="flex items-start gap-3">
-            <Lock className="h-5 w-5 flex-shrink-0 text-amber-600 mt-0.5" />
-            <div>
-              <h4 className="font-medium text-amber-900">更多功能需要登录</h4>
-              <p className="mt-1 text-sm text-amber-700">
-                登录后可以使用活动审核、活动赋分、提交状态查询、晚自习请假查询等功能
-              </p>
+            <h2 className="max-w-2xl text-4xl font-bold leading-[1.12] tracking-tight text-slate-950 sm:text-5xl">
+              让活动提交、请假与赋分，
+              <span className="block text-teal-700">在一个工作台完成。</span>
+            </h2>
+            <p className="mt-5 max-w-xl text-base leading-7 text-slate-600">
+              二课活动管理与请假申请平台，为学生、活动负责人和管理人员提供清晰的业务入口。
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
               <button
                 onClick={() => setShowLoginModal(true)}
-                className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700"
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2"
               >
-                立即登录
+                进入工作台
+                <ArrowUpRight className="h-4 w-4" />
               </button>
+              <Link
+                href="/leave"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-teal-500 hover:text-teal-700"
+              >
+                直接提交请假
+              </Link>
             </div>
           </div>
-        </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_16px_40px_-28px_rgba(15,23,42,0.45)] sm:p-6">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-5">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-teal-700">Quick access</p>
+                <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">常用入口</h3>
+              </div>
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+                <LayoutDashboard className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {[
+                { href: '/submit', label: '活动提交', detail: '负责人提交活动信息', icon: Send, tone: 'text-emerald-700 bg-emerald-50' },
+                { href: '/leave', label: '请假申请', detail: '提交请假信息与请假条', icon: FileText, tone: 'text-sky-700 bg-sky-50' },
+                { href: '/leave/status', label: '请假状态查询', detail: '查看审核处理状态', icon: FileCheck, tone: 'text-slate-700 bg-slate-100' },
+              ].map(({ href, label, detail, icon: Icon, tone }) => (
+                <Link key={href} href={href} className="group flex items-center gap-3 py-4 transition-colors first:pt-5 last:pb-1 hover:text-teal-700">
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tone}`}>
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-slate-900">{label}</span>
+                    <span className="mt-1 block text-xs text-slate-500">{detail}</span>
+                  </span>
+                  <ArrowUpRight className="h-4 w-4 text-slate-300 transition-colors group-hover:text-teal-600" />
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-14 border-t border-slate-200 pt-8">
+          <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Access guide</p>
+              <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">按角色进入对应功能</h3>
+            </div>
+            <p className="text-sm text-slate-500">登录后将根据权限显示管理菜单</p>
+          </div>
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            {[
+              { label: '学生', detail: '请假申请、状态查询', icon: UserCheck, tone: 'bg-sky-50 text-sky-700' },
+              { label: '活动负责人', detail: '活动提交、赋分材料', icon: Send, tone: 'bg-emerald-50 text-emerald-700' },
+              { label: '管理人员', detail: '审核、赋分、活动管理', icon: Users, tone: 'bg-amber-50 text-amber-700' },
+            ].map(({ label, detail, icon: Icon, tone }) => (
+              <div key={label} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tone}`}>
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span>
+                  <span className="block text-sm font-semibold text-slate-900">{label}</span>
+                  <span className="mt-1 block text-xs text-slate-500">{detail}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-8 flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50/80 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <div className="flex items-start gap-3">
+            <Lock className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+            <div>
+              <h4 className="font-semibold text-amber-950">更多管理功能需要登录</h4>
+              <p className="mt-1 text-sm leading-6 text-amber-800">活动审核、活动赋分、提交状态和晚自习查询会按账号权限开放。</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowLoginModal(true)}
+            className="shrink-0 rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-700 focus:ring-offset-2 focus:ring-offset-amber-50"
+          >
+            立即登录
+          </button>
+        </section>
       </main>
 
       {/* 登录弹窗 */}

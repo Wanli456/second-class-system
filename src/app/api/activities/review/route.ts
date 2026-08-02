@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/storage/database/supabase-client';
 import { createNotification } from '@/app/api/notifications/route';
+import { requirePermission } from '@/lib/auth';
 
 // GET /api/activities/review - 管理员获取待审核提交
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'publish');
+    if (auth.response) return auth.response;
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
 
@@ -30,6 +33,8 @@ export async function GET(request: NextRequest) {
 // PUT /api/activities/review - 管理员审核提交
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'publish');
+    if (auth.response) return auth.response;
     const body = await request.json();
     const { id, review_status, review_note } = body;
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/storage/database/supabase-client';
 import { createNotification } from '@/app/api/notifications/route';
+import { requirePermission } from '@/lib/auth';
 
 // GET /api/leave - 查询请假记录
 export async function GET(request: NextRequest) {
@@ -67,6 +68,8 @@ export async function GET(request: NextRequest) {
     }
 
     if (role === 'admin') {
+      const auth = await requirePermission(request, 'reviewLeave');
+      if (auth.response) return auth.response;
       let sql = 'SELECT * FROM leave_requests';
       const params: any[] = [];
       let paramIndex = 1;
@@ -145,6 +148,8 @@ export async function POST(request: NextRequest) {
 // PUT /api/leave - 管理员审核请假
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'reviewLeave');
+    if (auth.response) return auth.response;
     const body = await request.json();
     const { id, review_status, review_note } = body;
 

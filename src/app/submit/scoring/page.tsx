@@ -162,8 +162,22 @@ export default function SubmitScoringPage() {
     );
   }
 
+  if (user.role !== 'admin' && user.role !== 'leader' && !user.canScore) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+        <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center">
+          <h2 className="mb-2 text-lg font-semibold text-gray-900">暂无赋分材料权限</h2>
+          <p className="mb-6 text-sm text-gray-500">请联系管理员开通赋分材料权限。</p>
+          <Link href="/" className="inline-flex w-full items-center justify-center rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700">
+            返回首页
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <DashboardLayout title="赋分材料提交">
+    <DashboardLayout title="赋分材料提交" user={user}>
       <div className="space-y-6">
         <div className="rounded-lg border border-gray-200 bg-white p-6">
           <h2 className="mb-4 text-base font-semibold text-gray-900">查询活动</h2>

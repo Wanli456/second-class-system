@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne } from "@/storage/database/supabase-client";
+import { requirePermission } from "@/lib/auth";
 
 // GET - 查询晚自习安排和考勤
 export async function GET(request: NextRequest) {
@@ -65,6 +66,8 @@ export async function GET(request: NextRequest) {
 // POST - 创建晚自习安排或考勤记录
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'eveningStudy');
+    if (auth.response) return auth.response;
     const body = await request.json();
     const { type, ...data } = body;
 
@@ -104,6 +107,8 @@ export async function POST(request: NextRequest) {
 // PUT - 更新晚自习安排
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'eveningStudy');
+    if (auth.response) return auth.response;
     const body = await request.json();
     const { id, ...data } = body;
 
@@ -133,6 +138,8 @@ export async function PUT(request: NextRequest) {
 // DELETE - 删除晚自习安排
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'eveningStudy');
+    if (auth.response) return auth.response;
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 

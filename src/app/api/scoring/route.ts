@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/storage/database/supabase-client';
 import { createNotification } from '@/app/api/notifications/route';
+import { requirePermission } from '@/lib/auth';
 
 // GET /api/scoring - 获取赋分列表
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'score');
+    if (auth.response) return auth.response;
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const level = searchParams.get('level');
@@ -36,6 +39,8 @@ export async function GET(request: NextRequest) {
 // PUT /api/scoring - 赋分操作
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'score');
+    if (auth.response) return auth.response;
     const body = await request.json();
     const { id, scoring_table_url } = body;
 

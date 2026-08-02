@@ -1,175 +1,84 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/storage/database/supabase-client';
+import {
+  clearSessionCookie,
+  hashPassword,
+  publicUser,
+  requirePermission,
+  requireUser,
+  setSessionCookie,
+  verifyPassword,
+} from '@/lib/auth';
 
-// POST /api/auth - 注册
+// POST /api/auth - register
 export async function POST(request: NextRequest) {
   try {
     const { studentId, name, password } = await request.json();
-
     if (!studentId || !name || !password) {
-      return NextResponse.json({ success: false, error: '学号、姓名和密码不能为空' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Student ID, name and password are required' }, { status: 400 });
+    }
+    if (String(password).length < 6) {
+      return NextResponse.json({ success: false, error: 'Password must be at least 6 characters' }, { status: 400 });
     }
 
-    // 检查学号是否已存在
-    const existing = await queryOne(
-      'SELECT id FROM users WHERE student_id = $1',
-      [studentId]
-    );
-
+    const existing = await queryOne('SELECT id FROM users WHERE student_id = $1', [studentId]);
     if (existing) {
-      return NextResponse.json({ success: false, error: '该学号已注册' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'This student ID is already registered' }, { status: 400 });
     }
 
-    // 创建用户
     const user = await queryOne(
       `INSERT INTO users (username, password, student_id, role, can_publish, can_score, can_review_leave)
        VALUES ($1, $2, $3, 'student', false, false, false)
-       RETURNING *`,
-      [name, password, studentId]
+       RETURNING id, username, student_id, role, can_publish, can_score, can_review_leave, can_view_evening_study`,
+      [name, await hashPassword(password), studentId],
     );
 
-    return NextResponse.json({ 
-      success: true, 
-      data: { 
-        id: user.id, 
-        studentId: user.student_id,
-        name: user.username,
-        role: user.role,
-        canPublish: user.can_publish,
-        canScore: user.can_score,
-      } 
-    });
+    const response = NextResponse.json({ success: true, data: publicUser(user) });
+    setSessionCookie(response, user.id);
+    return response;
   } catch (error) {
-    console.error('注册失败:', error);
-    return NextResponse.json({ success: false, error: '注册失败' }, { status: 500 });
+    console.error('Registration failed:', error);
+    return NextResponse.json({ success: false, error: 'Registration failed' }, { status: 500 });
   }
 }
 
-// PUT /api/auth - 登录
+// PUT /api/auth - login
 export async function PUT(request: NextRequest) {
   try {
     const { studentId, name, password } = await request.json();
-
     if (!studentId || !name || !password) {
-      return NextResponse.json({ success: false, error: '学号、姓名和密码不能为空' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Student ID, name and password are required' }, { status: 400 });
     }
 
-    const user = await queryOne(
-      'SELECT * FROM users WHERE student_id = $1 AND username = $2 AND password = $3',
-      [studentId, name, password]
-    );
-
-    if (!user) {
-      return NextResponse.json({ success: false, error: '学号、姓名或密码错误' }, { status: 401 });
+    const user = await queryOne('SELECT * FROM users WHERE student_id = $1 AND username = $2', [studentId, name]);
+    if (!user || !(await verifyPassword(password, user.password))) {
+      return NextResponse.json({ success: false, error: 'Invalid student ID, name or password' }, { status: 401 });
     }
 
-    // 管理员自动拥有所有权限
-    const isAdmin = user.role === 'admin';
+    // Upgrade old plaintext records after a successful login.
+    if (!user.password.startsWith('scrypt$')) {
+      await query('UPDATE users SET password = $1 WHERE id = $2', [await hashPassword(password), user.id]);
+    }
 
-    return NextResponse.json({ 
-      success: true, 
-      data: { 
-        id: user.id, 
-        studentId: user.student_id,
-        name: user.username, 
-        role: user.role,
-        canPublish: isAdmin ? true : user.can_publish,
-        canScore: isAdmin ? true : user.can_score,
-        canReviewLeave: isAdmin ? true : user.can_review_leave,
-        canViewEveningStudy: isAdmin ? true : user.can_view_evening_study,
-      } 
-    });
+    const response = NextResponse.json({ success: true, data: publicUser(user) });
+    setSessionCookie(response, user.id);
+    return response;
   } catch (error) {
-    console.error('登录失败:', error);
-    return NextResponse.json({ success: false, error: '登录失败' }, { status: 500 });
+    console.error('Login failed:', error);
+    return NextResponse.json({ success: false, error: 'Login failed' }, { status: 500 });
   }
 }
 
-// GET /api/auth - 获取用户列表（管理员）
+// GET /api/auth - admin user list
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const role = searchParams.get('role');
-    const admin = searchParams.get('admin');
+    const auth = await requirePermission(request, 'admin');
+    if (auth.response) return auth.response;
 
-    if (role !== 'admin' && admin !== 'true') {
-      return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
-    }
-
-    const userList = await query(
-      'SELECT * FROM users ORDER BY created_at DESC'
-    );
-
-    return NextResponse.json({ 
-      success: true, 
-      data: userList.map(u => ({
-        id: u.id,
-        studentId: u.student_id,
-        name: u.username,
-        role: u.role,
-        canPublish: u.can_publish,
-        canScore: u.can_score,
-        canReviewLeave: u.can_review_leave,
-        canViewEveningStudy: u.can_view_evening_study,
-      }))
-    });
-  } catch (error) {
-    console.error('获取用户列表失败:', error);
-    return NextResponse.json({ success: false, error: '获取用户列表失败' }, { status: 500 });
-  }
-}
-
-// PATCH /api/auth - 更新用户角色/权限
-export async function PATCH(request: NextRequest) {
-  try {
-    const { userId, role, canPublish, canScore, canReviewLeave, canViewEveningStudy } = await request.json();
-
-    if (!userId) {
-      return NextResponse.json({ success: false, error: '用户 ID 不能为空' }, { status: 400 });
-    }
-
-    const updates: string[] = [];
-    const params: any[] = [];
-    let paramIndex = 1;
-
-    if (role !== undefined) {
-      updates.push(`role = $${paramIndex++}`);
-      params.push(role);
-    }
-    if (canPublish !== undefined) {
-      updates.push(`can_publish = $${paramIndex++}`);
-      params.push(canPublish);
-    }
-    if (canScore !== undefined) {
-      updates.push(`can_score = $${paramIndex++}`);
-      params.push(canScore);
-    }
-    if (canReviewLeave !== undefined) {
-      updates.push(`can_review_leave = $${paramIndex++}`);
-      params.push(canReviewLeave);
-    }
-    if (canViewEveningStudy !== undefined) {
-      updates.push(`can_view_evening_study = $${paramIndex++}`);
-      params.push(canViewEveningStudy);
-    }
-
-    if (updates.length === 0) {
-      return NextResponse.json({ success: false, error: '没有需要更新的字段' }, { status: 400 });
-    }
-
-    params.push(userId);
-    const user = await queryOne(
-      `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
-      params
-    );
-
-    if (!user) {
-      return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
-    }
-
-    return NextResponse.json({ 
-      success: true, 
-      data: {
+    const userList = await query('SELECT * FROM users ORDER BY created_at DESC');
+    return NextResponse.json({
+      success: true,
+      data: userList.map((user) => ({
         id: user.id,
         studentId: user.student_id,
         name: user.username,
@@ -178,10 +87,59 @@ export async function PATCH(request: NextRequest) {
         canScore: user.can_score,
         canReviewLeave: user.can_review_leave,
         canViewEveningStudy: user.can_view_evening_study,
-      }
+      })),
     });
-  } catch (error: any) {
-    console.error('更新用户失败:', error);
-    return NextResponse.json({ success: false, error: error.message || '更新用户失败' }, { status: 500 });
+  } catch (error) {
+    console.error('Failed to list users:', error);
+    return NextResponse.json({ success: false, error: 'Failed to list users' }, { status: 500 });
   }
+}
+
+// PATCH /api/auth - admin permissions or own password
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    if (body.password && body.oldPassword) {
+      const auth = await requireUser(request);
+      if (auth.response) return auth.response;
+      if (auth.user!.id !== body.id) {
+        return NextResponse.json({ success: false, error: 'You can only change your own password' }, { status: 403 });
+      }
+      const current = await queryOne('SELECT password FROM users WHERE id = $1', [body.id]);
+      if (!current || !(await verifyPassword(body.oldPassword, current.password))) {
+        return NextResponse.json({ success: false, error: 'Old password is incorrect' }, { status: 400 });
+      }
+      await query('UPDATE users SET password = $1 WHERE id = $2', [await hashPassword(body.password), body.id]);
+      return NextResponse.json({ success: true });
+    }
+
+    const auth = await requirePermission(request, 'admin');
+    if (auth.response) return auth.response;
+    const { userId, role, canPublish, canScore, canReviewLeave, canViewEveningStudy } = body;
+    if (!userId) return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
+
+    const updates: string[] = [];
+    const params: unknown[] = [];
+    let index = 1;
+    if (role !== undefined) { updates.push(`role = $${index++}`); params.push(role); }
+    if (canPublish !== undefined) { updates.push(`can_publish = $${index++}`); params.push(canPublish); }
+    if (canScore !== undefined) { updates.push(`can_score = $${index++}`); params.push(canScore); }
+    if (canReviewLeave !== undefined) { updates.push(`can_review_leave = $${index++}`); params.push(canReviewLeave); }
+    if (canViewEveningStudy !== undefined) { updates.push(`can_view_evening_study = $${index++}`); params.push(canViewEveningStudy); }
+    if (!updates.length) return NextResponse.json({ success: false, error: 'No fields to update' }, { status: 400 });
+
+    params.push(userId);
+    const user = await queryOne(`UPDATE users SET ${updates.join(', ')} WHERE id = $${index} RETURNING *`, params);
+    if (!user) return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+    return NextResponse.json({ success: true, data: publicUser(user) });
+  } catch (error) {
+    console.error('Failed to update user:', error);
+    return NextResponse.json({ success: false, error: 'Failed to update user' }, { status: 500 });
+  }
+}
+
+export async function DELETE() {
+  const response = NextResponse.json({ success: true });
+  clearSessionCookie(response);
+  return response;
 }

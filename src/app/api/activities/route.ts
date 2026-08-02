@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/storage/database/supabase-client';
+import { requirePermission } from '@/lib/auth';
 
 // GET /api/activities - 获取活动列表（管理员/负责人）
 export async function GET(request: NextRequest) {
@@ -50,6 +51,8 @@ export async function GET(request: NextRequest) {
 // POST /api/activities - 管理员创建活动
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'admin');
+    if (auth.response) return auth.response;
     const body = await request.json();
     const { full_name, start_time, end_time, category, level, plan_file_url, record_file_url, leader_name, leader_phone, status } = body;
 
@@ -92,6 +95,8 @@ export async function POST(request: NextRequest) {
 // PUT /api/activities - 管理员更新活动（不能修改ID）
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'admin');
+    if (auth.response) return auth.response;
     const body = await request.json();
     const { id, ...updates } = body;
 
@@ -129,6 +134,8 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/activities - 管理员删除活动
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requirePermission(request, 'admin');
+    if (auth.response) return auth.response;
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 

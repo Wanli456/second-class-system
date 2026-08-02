@@ -34,6 +34,12 @@ const ROLE_PASSWORDS: Record<AdminRole, string> = {
   leave_reviewer: 'leave123',
 };
 
+const normalizeTab = (tab: string | null) => {
+  if (tab === 'submissions') return 'review';
+  if (tab === 'leaves') return 'leave';
+  return tab || '';
+};
+
 interface ScoringActivity {
   id: string;
   full_name: string;
@@ -79,7 +85,7 @@ function AdminPage() {
   const [userSearch, setUserSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState(tabParam || '');
+  const [activeTab, setActiveTab] = useState(() => normalizeTab(tabParam));
   const [editActivity, setEditActivity] = useState<Activity | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [reviewNote, setReviewNote] = useState('');
@@ -128,16 +134,24 @@ function AdminPage() {
   }, [roleParam]);
 
   useEffect(() => {
-    if (authenticated && role) {
-      if (role === 'scorer') {
-        setActiveTab('scoring');
-      } else if (role === 'publisher') {
-        setActiveTab('review');
-      } else {
-        setActiveTab('activities');
-      }
+    if (!authenticated || !role) return;
+
+    const requestedTab = normalizeTab(tabParam);
+    if (requestedTab) {
+      setActiveTab(requestedTab);
+      return;
     }
-  }, [authenticated, role]);
+
+    if (role === 'scorer') {
+      setActiveTab('scoring');
+    } else if (role === 'publisher') {
+      setActiveTab('review');
+    } else if (role === 'leave_reviewer') {
+      setActiveTab('leave');
+    } else {
+      setActiveTab('activities');
+    }
+  }, [authenticated, role, tabParam]);
 
   const fetchActivities = useCallback(async () => {
     const res = await fetch('/api/activities');
