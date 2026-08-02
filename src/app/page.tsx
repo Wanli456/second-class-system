@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   ClipboardList, Send, Award, FileText, UserCheck, Moon, Lock, LogOut, Key, ArrowLeft,
+  LayoutDashboard, Users, FileCheck,
 } from 'lucide-react';
 import { NotificationBell } from '@/components/NotificationBell';
+import { DashboardLayout } from '@/components/DashboardLayout';
 
 interface User {
   id: string;
@@ -78,7 +80,7 @@ export default function Home() {
       return;
     }
     if (newPassword.length < 6) {
-      setPasswordMessage('新密码至少6位');
+      setPasswordMessage('新密码至少 6 位');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -122,12 +124,12 @@ export default function Home() {
   // 修改密码页面
   if (showPasswordModal) {
     return (
-      <div className="min-h-screen bg-[#f5f5f0]">
+      <div className="min-h-screen bg-gray-50">
         <header className="border-b border-gray-200 bg-white px-6 py-4 shadow-sm">
           <div className="mx-auto flex max-w-5xl items-center justify-between">
             <button
               onClick={() => { setShowPasswordModal(false); setPasswordMessage(''); setOldPassword(''); setNewPassword(''); setConfirmPassword(''); }}
-              className="flex items-center gap-1 text-sm text-[#1e3a5f] hover:underline"
+              className="flex items-center gap-1 text-sm text-teal-600 hover:underline"
             >
               <ArrowLeft className="h-4 w-4" />
               返回首页
@@ -140,8 +142,8 @@ export default function Home() {
         <main className="mx-auto max-w-md px-6 py-12">
           <div className="rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
             <div className="mb-6 text-center">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#1e3a5f]/10">
-                <Key className="h-6 w-6 text-[#1e3a5f]" />
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-teal-50">
+                <Key className="h-6 w-6 text-teal-600" />
               </div>
               <h2 className="text-lg font-bold text-gray-900">修改密码</h2>
               <p className="mt-1 text-sm text-gray-500">欢迎，{user?.name}</p>
@@ -157,7 +159,7 @@ export default function Home() {
                   type="password"
                   value={oldPassword}
                   onChange={(e) => setOldPassword(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
                   placeholder="请输入旧密码"
                   required
                 />
@@ -168,8 +170,8 @@ export default function Home() {
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
-                  placeholder="请输入新密码（至少6位）"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                  placeholder="请输入新密码（至少 6 位）"
                   required
                   minLength={6}
                 />
@@ -180,7 +182,7 @@ export default function Home() {
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
                   placeholder="请再次输入新密码"
                   required
                   minLength={6}
@@ -188,14 +190,14 @@ export default function Home() {
               </div>
 
               {passwordMessage && (
-                <p className={`text-sm ${passwordMessage.includes('成功') ? 'text-green-500' : 'text-red-500'}`}>
+                <p className={`text-sm ${passwordMessage.includes('成功') ? 'text-green-600' : 'text-red-600'}`}>
                   {passwordMessage}
                 </p>
               )}
 
               <button
                 type="submit"
-                className="w-full rounded-lg bg-[#1e3a5f] py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#2a4f7f]"
+                className="w-full rounded-lg bg-teal-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-teal-700"
               >
                 确认修改
               </button>
@@ -206,25 +208,27 @@ export default function Home() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-[#f5f5f0]">
-      {/* 顶部导航 */}
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#1e3a5f] text-white">
-              <ClipboardList className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-[#1e3a5f]">二课活动管理系统</h1>
-              <p className="text-xs text-gray-500">第二课堂活动管理平台</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {user ? (
-              <>
+  // 已登录用户 - 使用 DashboardLayout
+  if (user) {
+    return (
+      <DashboardLayout user={user} onLogout={handleLogout} title="首页">
+        <div className="space-y-6">
+          {/* 欢迎区域 */}
+          <div className="rounded-lg border border-gray-200 bg-white p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  欢迎，{user.name}
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  当前角色：
+                  <span className="font-medium text-teal-600">
+                    {user.role === 'admin' ? '管理员' : user.role === 'leader' ? '活动负责人' : '学生'}
+                  </span>
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
                 <NotificationBell userId={user.id} />
-                <span className="text-sm text-gray-600">欢迎，{user.name}</span>
                 <button
                   onClick={() => setShowPasswordModal(true)}
                   className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-50"
@@ -232,273 +236,268 @@ export default function Home() {
                   <Key className="h-4 w-4" />
                   修改密码
                 </button>
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-50"
-                >
-                  <LogOut className="h-4 w-4" />
-                  退出
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={() => setShowLoginModal(true)}
-                className="rounded-lg bg-[#1e3a5f] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#2a4f7f]"
-              >
-                登录/注册
-              </button>
-            )}
+              </div>
+            </div>
           </div>
+
+          {/* 管理端入口 */}
+          {(user.role === 'admin' || user.canPublish || user.canScore || user.canReviewLeave) && (
+            <div>
+              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">管理端</h3>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {/* 管理员 */}
+                {user.role === 'admin' && (
+                  <Link
+                    href="/admin?role=admin&tab=activities"
+                    className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
+                  >
+                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+                      <ClipboardList className="h-5 w-5" />
+                    </div>
+                    <h4 className="font-semibold text-gray-900">活动总表</h4>
+                    <p className="mt-1 text-xs text-gray-500">活动管理、审核、赋分、用户管理</p>
+                  </Link>
+                )}
+
+                {/* 发布活动 */}
+                {(user.role === 'admin' || user.canPublish) && (
+                  <Link
+                    href="/admin?role=publisher&tab=submissions"
+                    className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
+                  >
+                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                      <FileCheck className="h-5 w-5" />
+                    </div>
+                    <h4 className="font-semibold text-gray-900">活动审核</h4>
+                    <p className="mt-1 text-xs text-gray-500">审核活动提交（含策划书、备案表）</p>
+                  </Link>
+                )}
+
+                {/* 活动赋分 */}
+                {(user.role === 'admin' || user.canScore) && (
+                  <Link
+                    href="/admin?role=scorer&tab=scoring"
+                    className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
+                  >
+                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                      <Award className="h-5 w-5" />
+                    </div>
+                    <h4 className="font-semibold text-gray-900">活动赋分</h4>
+                    <p className="mt-1 text-xs text-gray-500">活动赋分管理</p>
+                  </Link>
+                )}
+
+                {/* 请假审核 */}
+                {(user.role === 'admin' || user.canReviewLeave) && (
+                  <Link
+                    href="/admin?role=leave_reviewer&tab=leaves"
+                    className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
+                  >
+                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
+                      <UserCheck className="h-5 w-5" />
+                    </div>
+                    <h4 className="font-semibold text-gray-900">请假审核</h4>
+                    <p className="mt-1 text-xs text-gray-500">审核请假申请（含请假条截图）</p>
+                  </Link>
+                )}
+
+                {/* 用户管理 */}
+                {user.role === 'admin' && (
+                  <Link
+                    href="/admin?role=admin&tab=users"
+                    className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
+                  >
+                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <h4 className="font-semibold text-gray-900">用户管理</h4>
+                    <p className="mt-1 text-xs text-gray-500">权限管理、角色分配</p>
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 用户端入口 */}
+          <div>
+            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">用户端</h3>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {/* 活动提交 */}
+              <Link
+                href="/submit"
+                className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
+              >
+                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                  <Send className="h-5 w-5" />
+                </div>
+                <h4 className="font-semibold text-gray-900">活动提交</h4>
+                <p className="mt-1 text-xs text-gray-500">提交活动基本信息、查看审核状态</p>
+              </Link>
+
+              {/* 赋分材料提交 */}
+              <Link
+                href="/submit/scoring"
+                className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
+              >
+                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                  <Award className="h-5 w-5" />
+                </div>
+                <h4 className="font-semibold text-gray-900">赋分材料提交</h4>
+                <p className="mt-1 text-xs text-gray-500">上传活动赋分表、备案表照片</p>
+              </Link>
+
+              {/* 请假申请 */}
+              <Link
+                href="/leave"
+                className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
+              >
+                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <h4 className="font-semibold text-gray-900">请假申请</h4>
+                <p className="mt-1 text-xs text-gray-500">提交请假申请（含请假条图片）</p>
+              </Link>
+            </div>
+          </div>
+
+          {/* 快捷查询 */}
+          <div>
+            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">快捷查询</h3>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {/* 提交状态查询 */}
+              <Link
+                href="/submit/status"
+                className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-teal-500 hover:bg-gray-50"
+              >
+                <FileCheck className="h-5 w-5 text-gray-400" />
+                <span className="text-sm font-medium text-gray-700">提交状态查询</span>
+              </Link>
+
+              {/* 请假状态查询 */}
+              <Link
+                href="/leave/status"
+                className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-teal-500 hover:bg-gray-50"
+              >
+                <FileText className="h-5 w-5 text-gray-400" />
+                <span className="text-sm font-medium text-gray-700">请假状态查询</span>
+              </Link>
+
+              {/* 晚自习请假查询 */}
+              {user.canViewEveningStudy && (
+                <Link
+                  href="/evening-study"
+                  className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-teal-500 hover:bg-gray-50"
+                >
+                  <Moon className="h-5 w-5 text-gray-400" />
+                  <span className="text-sm font-medium text-gray-700">晚自习请假查询</span>
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // 未登录用户 - 显示公开首页
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* 顶部导航 */}
+      <header className="border-b border-gray-200 bg-white shadow-sm">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-600 text-white">
+              <ClipboardList className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-gray-900">二课活动管理系统</h1>
+              <p className="text-xs text-gray-500">University Second Classroom Activity Management</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowLoginModal(true)}
+            className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-700"
+          >
+            登录/注册
+          </button>
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6 py-8">
+      <main className="mx-auto max-w-5xl px-6 py-12">
         {/* 欢迎区域 */}
-        <div className="mb-8 rounded-xl bg-white p-6 shadow-sm">
-          <h2 className="text-2xl font-bold text-[#1e3a5f]">
-            {user ? `欢迎，${user.name}` : '欢迎使用二课活动管理系统'}
+        <div className="mb-8 text-center">
+          <h2 className="text-3xl font-bold text-gray-900">
+            欢迎使用二课活动管理系统
           </h2>
-          <p className="mt-2 text-sm text-gray-500">
-            {user
-              ? `当前角色：${user.role === 'admin' ? '管理员' : user.role === 'publisher' ? '发布干事' : user.role === 'scorer' ? '赋分干事' : user.role === 'leader' ? '活动负责人' : '学生'}`
-              : '请选择身份入口开始使用，或登录/注册账号'}
+          <p className="mt-3 text-gray-500">
+            第二课堂活动管理与请假申请平台
           </p>
         </div>
 
-        {/* 管理端入口 */}
-        <div className="mb-6">
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">
-            管理端
-            {!user && <span className="text-xs text-amber-500 normal-case">（需登录）</span>}
-          </h3>
-          <div className="grid gap-4 sm:grid-cols-4">
-            {/* 管理员 */}
+        {/* 功能入口 */}
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {/* 活动提交 */}
+          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+              <Send className="h-6 w-6" />
+            </div>
+            <h3 className="font-semibold text-gray-900">活动提交</h3>
+            <p className="mt-2 text-sm text-gray-500">提交活动基本信息，等待审核</p>
             <Link
-              href={adminState === 'active' ? "/admin?role=admin" : "#"}
-              onClick={(e) => {
-                if (adminState === 'locked') { e.preventDefault(); handleRoleClick('admin'); }
-                if (adminState === 'grayed') { e.preventDefault(); }
-              }}
-              className={`group rounded-lg border p-5 shadow-sm transition-all ${
-                adminState === 'active'
-                  ? 'border-gray-200 bg-white hover:border-[#1e3a5f] hover:shadow-md'
-                  : adminState === 'grayed'
-                  ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
-                  : 'border-gray-200 bg-white relative'
-              }`}
+              href="/submit"
+              className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-teal-600 hover:underline"
             >
-              {adminState === 'locked' && (
-                <div className="absolute top-2 right-2">
-                  <Lock className="h-4 w-4 text-gray-400" />
-                </div>
-              )}
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-[#1e3a5f]/10 text-[#1e3a5f]">
-                <ClipboardList className="h-5 w-5" />
-              </div>
-              <h4 className="font-semibold text-gray-900">管理员</h4>
-              <p className="mt-1 text-xs text-gray-500">活动总表、活动审核、请假审核、全部权限</p>
-              {adminState === 'grayed' && <p className="mt-1 text-xs text-gray-400">（无此权限）</p>}
-            </Link>
-
-            {/* 发布活动 */}
-            <Link
-              href={publisherState === 'active' ? "/admin?role=admin&tab=review" : "#"}
-              onClick={(e) => {
-                if (publisherState === 'locked') { e.preventDefault(); handleRoleClick('publisher'); }
-                if (publisherState === 'grayed') { e.preventDefault(); }
-              }}
-              className={`group rounded-lg border p-5 shadow-sm transition-all ${
-                publisherState === 'active'
-                  ? 'border-gray-200 bg-white hover:border-[#1e3a5f] hover:shadow-md'
-                  : publisherState === 'grayed'
-                  ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
-                  : 'border-gray-200 bg-white relative'
-              }`}
-            >
-              {publisherState === 'locked' && (
-                <div className="absolute top-2 right-2">
-                  <Lock className="h-4 w-4 text-gray-400" />
-                </div>
-              )}
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-                <Send className="h-5 w-5" />
-              </div>
-              <h4 className="font-semibold text-gray-900">发布活动</h4>
-              <p className="mt-1 text-xs text-gray-500">活动审核（含策划书、备案表查看）</p>
-              {publisherState === 'grayed' && <p className="mt-1 text-xs text-gray-400">（无此权限）</p>}
-            </Link>
-
-            {/* 活动赋分 */}
-            <Link
-              href={scorerState === 'active' ? "/admin?role=admin&tab=scoring" : "#"}
-              onClick={(e) => {
-                if (scorerState === 'locked') { e.preventDefault(); handleRoleClick('scorer'); }
-                if (scorerState === 'grayed') { e.preventDefault(); }
-              }}
-              className={`group rounded-lg border p-5 shadow-sm transition-all ${
-                scorerState === 'active'
-                  ? 'border-gray-200 bg-white hover:border-[#1e3a5f] hover:shadow-md'
-                  : scorerState === 'grayed'
-                  ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
-                  : 'border-gray-200 bg-white relative'
-              }`}
-            >
-              {scorerState === 'locked' && (
-                <div className="absolute top-2 right-2">
-                  <Lock className="h-4 w-4 text-gray-400" />
-                </div>
-              )}
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-                <Award className="h-5 w-5" />
-              </div>
-              <h4 className="font-semibold text-gray-900">活动赋分</h4>
-              <p className="mt-1 text-xs text-gray-500">活动赋分管理</p>
-              {scorerState === 'grayed' && <p className="mt-1 text-xs text-gray-400">（无此权限）</p>}
-            </Link>
-
-            {/* 请假审核 */}
-            <Link
-              href={leaveReviewerState === 'active' ? "/admin?role=admin&tab=leave" : "#"}
-              onClick={(e) => {
-                if (leaveReviewerState === 'locked') { e.preventDefault(); handleRoleClick('leave_reviewer'); }
-                if (leaveReviewerState === 'grayed') { e.preventDefault(); }
-              }}
-              className={`group rounded-lg border p-5 shadow-sm transition-all ${
-                leaveReviewerState === 'active'
-                  ? 'border-gray-200 bg-white hover:border-[#1e3a5f] hover:shadow-md'
-                  : leaveReviewerState === 'grayed'
-                  ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
-                  : 'border-gray-200 bg-white relative'
-              }`}
-            >
-              {leaveReviewerState === 'locked' && (
-                <div className="absolute top-2 right-2">
-                  <Lock className="h-4 w-4 text-gray-400" />
-                </div>
-              )}
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
-                <UserCheck className="h-5 w-5" />
-              </div>
-              <h4 className="font-semibold text-gray-900">请假审核</h4>
-              <p className="mt-1 text-xs text-gray-500">审核请假申请（含请假条截图）</p>
-              {leaveReviewerState === 'grayed' && <p className="mt-1 text-xs text-gray-400">（无此权限）</p>}
+              进入 <span aria-hidden="true">→</span>
             </Link>
           </div>
-        </div>
 
-        {/* 用户端入口 */}
-        <div>
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">
-            用户端
-            {!user && <span className="text-xs text-amber-500 normal-case">（部分功能需登录）</span>}
-          </h3>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {/* 活动提交 */}
-            <Link
-              href={leaderState === 'active' ? "/submit" : "#"}
-              onClick={(e) => {
-                if (leaderState === 'locked') { e.preventDefault(); handleRoleClick('leader'); }
-                if (leaderState === 'grayed') { e.preventDefault(); }
-              }}
-              className={`group rounded-lg border p-5 shadow-sm transition-all ${
-                leaderState === 'active'
-                  ? 'border-gray-200 bg-white hover:border-[#1e3a5f] hover:shadow-md'
-                  : leaderState === 'grayed'
-                  ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
-                  : 'border-gray-200 bg-white relative'
-              }`}
-            >
-              {leaderState === 'locked' && (
-                <div className="absolute top-2 right-2">
-                  <Lock className="h-4 w-4 text-gray-400" />
-                </div>
-              )}
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                <FileText className="h-5 w-5" />
-              </div>
-              <h4 className="font-semibold text-gray-900">活动提交</h4>
-              <p className="mt-1 text-xs text-gray-500">提交活动基本信息、查看审核状态</p>
-              {leaderState === 'grayed' && <p className="mt-1 text-xs text-gray-400">（无此权限）</p>}
-            </Link>
-
-            {/* 赋分材料提交 */}
-            <Link
-              href={leaderState === 'active' ? "/submit/scoring" : "#"}
-              onClick={(e) => {
-                if (leaderState === 'locked') { e.preventDefault(); handleRoleClick('leader'); }
-                if (leaderState === 'grayed') { e.preventDefault(); }
-              }}
-              className={`group rounded-lg border p-5 shadow-sm transition-all ${
-                leaderState === 'active'
-                  ? 'border-gray-200 bg-white hover:border-[#1e3a5f] hover:shadow-md'
-                  : leaderState === 'grayed'
-                  ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
-                  : 'border-gray-200 bg-white relative'
-              }`}
-            >
-              {leaderState === 'locked' && (
-                <div className="absolute top-2 right-2">
-                  <Lock className="h-4 w-4 text-gray-400" />
-                </div>
-              )}
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-                <Award className="h-5 w-5" />
-              </div>
-              <h4 className="font-semibold text-gray-900">赋分材料提交</h4>
-              <p className="mt-1 text-xs text-gray-500">上传活动赋分表、备案表照片</p>
-              {leaderState === 'grayed' && <p className="mt-1 text-xs text-gray-400">（无此权限）</p>}
-            </Link>
-
-            {/* 请假申请 - 所有人可用 */}
+          {/* 请假申请 */}
+          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
+              <FileText className="h-6 w-6" />
+            </div>
+            <h3 className="font-semibold text-gray-900">请假申请</h3>
+            <p className="mt-2 text-sm text-gray-500">提交请假申请，上传请假条</p>
             <Link
               href="/leave"
-              className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-[#1e3a5f] hover:shadow-md"
+              className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-teal-600 hover:underline"
             >
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
-                <UserCheck className="h-5 w-5" />
-              </div>
-              <h4 className="font-semibold text-gray-900 group-hover:text-[#1e3a5f]">请假申请</h4>
-              <p className="mt-1 text-xs text-gray-500">提交请假申请（含请假条图片）、查看审核状态</p>
+              进入 <span aria-hidden="true">→</span>
+            </Link>
+          </div>
+
+          {/* 请假状态查询 */}
+          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100 text-gray-600">
+              <FileCheck className="h-6 w-6" />
+            </div>
+            <h3 className="font-semibold text-gray-900">请假状态查询</h3>
+            <p className="mt-2 text-sm text-gray-500">查询请假申请审核状态</p>
+            <Link
+              href="/leave/status"
+              className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-teal-600 hover:underline"
+            >
+              进入 <span aria-hidden="true">→</span>
             </Link>
           </div>
         </div>
 
-        {/* 快捷查询 */}
-        <div className="mt-8 rounded-lg border border-gray-200 bg-white p-5">
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">快捷查询</h3>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {/* 提交状态查询 - 需要登录 */}
-            <Link
-              href={user ? "/submit/status" : "#"}
-              onClick={(e) => { if (!user) { e.preventDefault(); handleRoleClick('leader'); } }}
-              className={`flex items-center gap-3 rounded-lg border border-gray-200 p-3 transition-colors ${
-                user ? 'hover:border-[#1e3a5f] hover:bg-gray-50' : 'relative opacity-50 cursor-not-allowed'
-              }`}
-            >
-              {!user && <Lock className="h-4 w-4 text-gray-400" />}
-              <FileText className="h-5 w-5 text-gray-400" />
-              <span className="text-sm text-gray-700">提交状态查询</span>
-            </Link>
-
-            {/* 请假状态查询 - 所有人可用 */}
-            <Link
-              href="/leave/status"
-              className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 hover:border-[#1e3a5f] hover:bg-gray-50 transition-colors"
-            >
-              <UserCheck className="h-5 w-5 text-gray-400" />
-              <span className="text-sm text-gray-700">请假状态查询</span>
-            </Link>
-
-            {/* 晚自习请假查询 - 需要权限 */}
-            {user?.canViewEveningStudy && (
-              <Link
-                href="/evening-study"
-                className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 hover:border-[#1e3a5f] hover:bg-gray-50 transition-colors"
+        {/* 登录提示 */}
+        <div className="mt-8 rounded-lg border border-amber-200 bg-amber-50 p-6">
+          <div className="flex items-start gap-3">
+            <Lock className="h-5 w-5 flex-shrink-0 text-amber-600 mt-0.5" />
+            <div>
+              <h4 className="font-medium text-amber-900">更多功能需要登录</h4>
+              <p className="mt-1 text-sm text-amber-700">
+                登录后可以使用活动审核、活动赋分、提交状态查询、晚自习请假查询等功能
+              </p>
+              <button
+                onClick={() => setShowLoginModal(true)}
+                className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700"
               >
-                <Moon className="h-5 w-5 text-gray-400" />
-                <span className="text-sm text-gray-700">晚自习请假查询</span>
-              </Link>
-            )}
+                立即登录
+              </button>
+            </div>
           </div>
         </div>
       </main>
@@ -569,7 +568,7 @@ function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (u
               type="text"
               value={studentId}
               onChange={(e) => setStudentId(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
               placeholder="请输入学号"
               required
             />
@@ -580,7 +579,7 @@ function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (u
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
               placeholder="请输入姓名"
               required
             />
@@ -591,7 +590,7 @@ function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (u
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
               placeholder="请输入密码"
               required
               minLength={6}
@@ -599,13 +598,13 @@ function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (u
           </div>
 
           {error && (
-            <p className="text-sm text-red-500">{error}</p>
+            <p className="text-sm text-red-600">{error}</p>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-[#1e3a5f] py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#2a4f7f] disabled:opacity-50"
+            className="w-full rounded-lg bg-teal-600 py-2.5 text-sm font-medium text-white transition-colors hover:bg-teal-700 disabled:opacity-50"
           >
             {loading ? '处理中...' : isLogin ? '登录' : '注册'}
           </button>
@@ -614,7 +613,7 @@ function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (u
         <div className="mt-4 text-center">
           <button
             onClick={() => { setIsLogin(!isLogin); setError(''); }}
-            className="text-sm text-[#1e3a5f] hover:underline"
+            className="text-sm text-teal-600 hover:underline"
           >
             {isLogin ? '没有账号？去注册' : '已有账号？去登录'}
           </button>
