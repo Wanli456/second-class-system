@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Search, RefreshCw, Lock } from 'lucide-react';
+import DashboardLayout from '@/components/DashboardLayout';
+import { Search, RefreshCw } from 'lucide-react';
 import { CATEGORIES, LEVELS, REVIEW_STATUSES, STATUS_COLORS, CATEGORY_COLORS } from '@/lib/types';
 
 interface Submission {
@@ -22,21 +22,10 @@ interface Submission {
 }
 
 export default function SubmitStatusPage() {
-  const router = useRouter();
-  const [user, setUser] = useState<{ name: string; role: string } | null>(null);
   const [keyword, setKeyword] = useState('');
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
-
-  useEffect(() => {
-    const saved = localStorage.getItem('user');
-    if (saved) {
-      setUser(JSON.parse(saved));
-    } else {
-      router.push('/login');
-    }
-  }, [router]);
 
   const handleSearch = async () => {
     if (!keyword.trim()) return;
@@ -55,25 +44,11 @@ export default function SubmitStatusPage() {
     }
   };
 
-  if (!user) return null;
-
   return (
-    <div className="min-h-screen bg-[#f5f5f0]">
-      {/* Header */}
-      <header className="border-b border-gray-200 bg-white shadow-sm">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-          <button onClick={() => router.push('/')} className="flex items-center gap-2 text-[#1e3a5f] hover:underline">
-            <span className="text-lg">←</span>
-            <span className="font-medium">返回首页</span>
-          </button>
-          <h1 className="text-lg font-semibold text-gray-900">提交状态查询</h1>
-          <div className="text-sm text-gray-600">欢迎，{user.name}</div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-5xl px-4 py-6">
+    <DashboardLayout title="提交状态查询">
+      <div className="space-y-4">
         {/* Search */}
-        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
           <label className="mb-2 block text-sm font-medium text-gray-700">按活动名称查询</label>
           <div className="flex gap-2">
             <input
@@ -82,12 +57,12 @@ export default function SubmitStatusPage() {
               onChange={e => setKeyword(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSearch()}
               placeholder="输入活动名称关键字..."
-              className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+              className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600"
             />
             <button
               onClick={handleSearch}
               disabled={loading || !keyword.trim()}
-              className="flex items-center gap-1 rounded-md bg-[#1e3a5f] px-4 py-2 text-sm text-white hover:bg-[#1e3a5f]/90 disabled:opacity-50"
+              className="flex items-center gap-1 rounded-md bg-teal-600 px-4 py-2 text-sm text-white hover:bg-teal-700 disabled:opacity-50"
             >
               <Search className="h-4 w-4" />
               查询
@@ -97,11 +72,11 @@ export default function SubmitStatusPage() {
 
         {/* Results */}
         {searched && (
-          <div className="mt-4 space-y-3">
+          <div className="space-y-3">
             {loading ? (
               <div className="py-8 text-center text-gray-400">查询中...</div>
             ) : submissions.length === 0 ? (
-              <div className="rounded-lg border border-gray-200 bg-white py-8 text-center shadow-sm">
+              <div className="rounded-lg border border-gray-200 bg-white py-8 text-center">
                 <p className="text-gray-400">未找到相关提交记录</p>
               </div>
             ) : (
@@ -110,13 +85,13 @@ export default function SubmitStatusPage() {
                   <h3 className="text-sm font-medium text-gray-700">共 {submissions.length} 条提交记录</h3>
                   <button
                     onClick={handleSearch}
-                    className="flex items-center gap-1 text-sm text-gray-500 hover:text-[#1e3a5f]"
+                    className="flex items-center gap-1 text-sm text-gray-500 hover:text-teal-600"
                   >
                     <RefreshCw className="h-3.5 w-3.5" /> 刷新
                   </button>
                 </div>
                 {submissions.map(s => (
-                  <div key={s.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                  <div key={s.id} className="rounded-lg border border-gray-200 bg-white p-4">
                     <div className="flex items-start justify-between">
                       <div>
                         <div className="flex items-center gap-2">
@@ -146,7 +121,7 @@ export default function SubmitStatusPage() {
             )}
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

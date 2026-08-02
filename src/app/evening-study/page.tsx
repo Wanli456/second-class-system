@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
-  ArrowLeft, Search, Calendar, User, Users, FileText,
+  Search, Calendar, User, Users, FileText,
   AlertCircle, CheckCircle2, XCircle, Clock, RefreshCw, GraduationCap
 } from "lucide-react";
 
@@ -53,7 +53,6 @@ const LEAVE_TYPE_COLORS: Record<string, string> = {
 type SearchType = "class" | "name" | "student_id";
 
 export default function EveningStudyPage() {
-  const router = useRouter();
   const [searchKeyword, setSearchKeyword] = useState("");
   const [searchType, setSearchType] = useState<SearchType>("class");
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
@@ -111,12 +110,6 @@ export default function EveningStudyPage() {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      fetchLeaveRequests();
-    }
-  };
-
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return `${date.getMonth() + 1}月${date.getDate()}日 ${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
@@ -134,22 +127,13 @@ export default function EveningStudyPage() {
   const classStats = getClassStats();
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#f5f5f0] to-white pb-20">
-      <header className="sticky top-0 z-10 bg-white border-b border-gray-100 shadow-sm">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => router.push("/")}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-lg font-bold text-[#1e3a5f]">晚自习请假查询</h1>
-        </div>
-      </header>
-
-      <main className="max-w-lg mx-auto px-4 py-4">
-        <Card className="mb-4 border-[#1e3a5f]/10">
+    <DashboardLayout title="晚自习请假查询">
+      <div className="space-y-4">
+        <Card className="border-teal-200">
           <CardContent className="pt-5">
             <div className="flex items-center gap-2 mb-3">
-              <Search className="h-4 w-4 text-[#1e3a5f]" />
-              <span className="text-sm font-medium text-[#1e3a5f]">查询请假人员</span>
+              <Search className="h-4 w-4 text-teal-700" />
+              <span className="text-sm font-medium text-teal-700">查询请假人员</span>
             </div>
             
             {/* 查询类型选择 */}
@@ -158,7 +142,7 @@ export default function EveningStudyPage() {
                 variant={searchType === "class" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setSearchType("class")}
-                className={searchType === "class" ? "bg-[#1e3a5f] hover:bg-[#152a45]" : ""}
+                className={searchType === "class" ? "bg-teal-600 hover:bg-teal-700" : ""}
               >
                 <Users className="h-3 w-3 mr-1" />
                 班级
@@ -167,7 +151,7 @@ export default function EveningStudyPage() {
                 variant={searchType === "name" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setSearchType("name")}
-                className={searchType === "name" ? "bg-[#1e3a5f] hover:bg-[#152a45]" : ""}
+                className={searchType === "name" ? "bg-teal-600 hover:bg-teal-700" : ""}
               >
                 <User className="h-3 w-3 mr-1" />
                 姓名
@@ -176,7 +160,7 @@ export default function EveningStudyPage() {
                 variant={searchType === "student_id" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setSearchType("student_id")}
-                className={searchType === "student_id" ? "bg-[#1e3a5f] hover:bg-[#152a45]" : ""}
+                className={searchType === "student_id" ? "bg-teal-600 hover:bg-teal-700" : ""}
               >
                 <GraduationCap className="h-3 w-3 mr-1" />
                 学号
@@ -191,7 +175,7 @@ export default function EveningStudyPage() {
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20 focus:border-[#1e3a5f]"
+                  className="flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600"
                 />
                 <Button
                   variant="outline"
@@ -209,20 +193,20 @@ export default function EveningStudyPage() {
               <Input
                 placeholder={
                   searchType === "class" 
-                    ? "输入班级名称，如：计算机2101" 
+                    ? "输入班级名称，如：计算机 2101" 
                     : searchType === "name"
                     ? "输入学生姓名"
                     : "输入学生学号"
                 }
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
-                onKeyDown={handleKeyDown}
+                onKeyDown={(e) => e.key === "Enter" && fetchLeaveRequests()}
                 className="flex-1"
               />
               <Button 
                 onClick={fetchLeaveRequests} 
                 disabled={loading}
-                className="bg-[#1e3a5f] hover:bg-[#152a45]"
+                className="bg-teal-600 hover:bg-teal-700"
               >
                 {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
               </Button>
@@ -243,26 +227,26 @@ export default function EveningStudyPage() {
               <div className="space-y-3">
                 {/* 班级统计 */}
                 {searchType === "class" && Object.keys(classStats).length > 0 && (
-                  <Card className="bg-gradient-to-r from-[#1e3a5f]/5 to-[#1e3a5f]/10 border-[#1e3a5f]/20">
+                  <Card className="bg-gradient-to-r from-teal-50 to-teal-100 border-teal-200">
                     <CardContent className="py-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <Users className="h-4 w-4 text-[#1e3a5f]" />
-                          <span className="text-sm font-medium text-[#1e3a5f]">班级请假统计</span>
+                          <Users className="h-4 w-4 text-teal-700" />
+                          <span className="text-sm font-medium text-teal-700">班级请假统计</span>
                         </div>
                         <div className="flex items-center gap-4">
                           {Object.entries(classStats).map(([className, count]) => (
                             <div key={className} className="text-center">
-                              <div className="text-lg font-bold text-[#1e3a5f]">{count}</div>
+                              <div className="text-lg font-bold text-teal-700">{count}</div>
                               <div className="text-xs text-gray-500">{className}</div>
                             </div>
                           ))}
                         </div>
                       </div>
                       {todayCount > 0 && (
-                        <div className="mt-2 pt-2 border-t border-[#1e3a5f]/10 flex items-center justify-between text-xs">
+                        <div className="mt-2 pt-2 border-t border-teal-200 flex items-center justify-between text-xs">
                           <span className="text-gray-600">今日请假人数</span>
-                          <span className="font-bold text-[#1e3a5f] text-base">{todayCount} 人</span>
+                          <span className="font-bold text-teal-700 text-base">{todayCount} 人</span>
                         </div>
                       )}
                     </CardContent>
@@ -281,8 +265,8 @@ export default function EveningStudyPage() {
                       <div className="flex items-start justify-between mb-3">
                         <div>
                           <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-[#1e3a5f]" />
-                            <span className="font-medium text-[#1e3a5f]">{req.student_name}</span>
+                            <User className="h-4 w-4 text-teal-700" />
+                            <span className="font-medium text-teal-700">{req.student_name}</span>
                             <Badge variant="outline" className="text-xs">
                               {req.student_id}
                             </Badge>
@@ -310,7 +294,7 @@ export default function EveningStudyPage() {
                       {req.activity_name && (
                         <div className="flex items-center gap-2 mb-2">
                           <span className="text-xs text-gray-500">关联活动：</span>
-                          <span className="text-sm text-[#1e3a5f]">{req.activity_name}</span>
+                          <span className="text-sm text-teal-700">{req.activity_name}</span>
                         </div>
                       )}
 
@@ -326,7 +310,7 @@ export default function EveningStudyPage() {
                             <img 
                               src={req.leave_image_url} 
                               alt="请假条" 
-                              className="w-full max-h-48 object-cover rounded-lg border border-gray-200 hover:border-[#1e3a5f] transition-colors"
+                              className="w-full max-h-48 object-cover rounded-lg border border-gray-200 hover:border-teal-600 transition-colors"
                             />
                           </a>
                         </div>
@@ -357,7 +341,7 @@ export default function EveningStudyPage() {
             </CardContent>
           </Card>
         )}
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

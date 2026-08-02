@@ -13,6 +13,7 @@ import {
   CATEGORIES, LEVELS, REVIEW_STATUSES, LEAVE_TYPES,
   STATUS_COLORS,
 } from '@/lib/types';
+import DashboardLayout from '@/components/DashboardLayout';
 
 type ReviewStatus = '待审核' | '已通过' | '已驳回';
 type LeaveStatus = '待审核' | '已通过' | '已驳回';
@@ -481,56 +482,45 @@ function AdminPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#f5f5f0]">
-      {/* Header */}
-      <header className="bg-[#1e3a5f] text-white">
-        <div className="mx-auto max-w-7xl px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <GraduationCap className="h-6 w-6" />
-              <div>
-                <h1 className="text-lg font-bold">管理后台</h1>
-                <p className="text-xs text-blue-200">{ROLE_LABELS[role!]}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button onClick={handleGoHome} className="rounded p-1.5 text-sm text-blue-200 hover:bg-white/10 hover:text-white">返回</button>
-              <button onClick={handleLogout} className="flex items-center gap-1 rounded p-1.5 text-sm text-blue-200 hover:bg-white/10 hover:text-white">
-                <LogOut className="h-4 w-4" /> 退出
-              </button>
-            </div>
+    <DashboardLayout
+      user={user}
+      onLogout={handleLogout}
+    >
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">管理后台</h1>
+            <p className="mt-1 text-sm text-gray-500">{ROLE_LABELS[role!]}</p>
           </div>
         </div>
-      </header>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-7xl px-4">
-          <nav className="flex gap-4 overflow-x-auto">
+        {/* Tabs Navigation */}
+        <div className="border-b border-gray-200">
+          <nav className="flex gap-6 overflow-x-auto">
             {tabs.map(tab => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex shrink-0 items-center gap-1.5 border-b-2 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`flex shrink-0 items-center gap-2 border-b-2 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
                   activeTab === tab.key
-                    ? 'border-[#1e3a5f] text-[#1e3a5f]'
+                    ? 'border-teal-600 text-teal-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
                 <tab.icon className="h-4 w-4 shrink-0" />
                 <span>{tab.label}</span>
                 {tab.count > 0 && (
-                  <span className={`rounded-full px-1.5 py-0.5 text-xs ${
-                    activeTab === tab.key ? 'bg-[#1e3a5f] text-white' : 'bg-gray-100 text-gray-600'
+                  <span className={`rounded-full px-2 py-0.5 text-xs ${
+                    activeTab === tab.key ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-600'
                   }`}>{tab.count}</span>
                 )}
               </button>
             ))}
           </nav>
         </div>
-      </div>
 
-      <main className="mx-auto max-w-7xl px-4 py-6">
+        {/* Main Content */}
         {loading ? (
           <div className="py-20 text-center text-gray-400">加载中...</div>
         ) : (
@@ -1362,8 +1352,8 @@ function AdminPage() {
             )}
           </>
         )}
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }
 

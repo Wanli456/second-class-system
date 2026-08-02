@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { GraduationCap, ArrowLeft, Upload, FileText, Search, CheckCircle2, AlertCircle, LogIn } from 'lucide-react';
+import DashboardLayout from '@/components/DashboardLayout';
+import { GraduationCap, Upload, FileText, Search, CheckCircle2, AlertCircle, LogIn } from 'lucide-react';
 import { LEVELS, SCORING_STATUSES } from '@/lib/types';
 
 interface Activity {
@@ -134,7 +135,7 @@ export default function SubmitScoringPage() {
   // 登录检查
   if (checking) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0]">
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
         <p className="text-gray-500">加载中...</p>
       </div>
     );
@@ -142,43 +143,28 @@ export default function SubmitScoringPage() {
 
   if (!user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0] p-4">
-        <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#1e3a5f]/10">
-            <LogIn className="h-6 w-6 text-[#1e3a5f]" />
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+        <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-teal-100">
+            <LogIn className="h-6 w-6 text-teal-600" />
           </div>
           <h2 className="mb-2 text-lg font-semibold text-gray-900">需要登录</h2>
           <p className="mb-6 text-sm text-gray-500">活动负责人需要登录后才能提交赋分材料</p>
           <Link
             href="/login?redirect=/submit/scoring"
-            className="inline-flex w-full items-center justify-center rounded-md bg-[#1e3a5f] px-4 py-2 text-sm font-medium text-white hover:bg-[#1e3a5f]/90"
+            className="inline-flex w-full items-center justify-center rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700"
           >
             登录/注册
           </Link>
-          <Link href="/" className="mt-3 block text-sm text-gray-500 hover:text-[#1e3a5f]">返回首页</Link>
+          <Link href="/" className="mt-3 block text-sm text-gray-500 hover:text-teal-600">返回首页</Link>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f5f0]">
-      <header className="bg-[#1e3a5f] text-white">
-        <div className="mx-auto max-w-6xl px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Link href="/" className="rounded p-1 hover:bg-white/10">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-              <GraduationCap className="h-6 w-6" />
-              <h1 className="text-lg font-bold">赋分材料提交</h1>
-            </div>
-            <span className="text-sm text-white/80">{user.displayName || user.username}</span>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-2xl px-4 py-8">
+    <DashboardLayout title="赋分材料提交">
+      <div className="space-y-6">
         <div className="rounded-lg border border-gray-200 bg-white p-6">
           <h2 className="mb-4 text-base font-semibold text-gray-900">查询活动</h2>
           <p className="mb-4 text-sm text-gray-500">输入活动名称关键字，查询已审核通过的活动，提交赋分材料</p>
@@ -188,20 +174,20 @@ export default function SubmitScoringPage() {
               value={activityName}
               onChange={(e) => setActivityName(e.target.value)}
               placeholder="输入活动名称关键字"
-              className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none"
+              className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-teal-600 focus:outline-none"
             />
             <button
               onClick={handleSearch}
               disabled={loading}
-              className="rounded-md bg-[#1e3a5f] px-4 py-2 text-sm font-medium text-white hover:bg-[#15304d] disabled:opacity-50"
+              className="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
             >
-              {loading ? '查询中...' : '查询'}
+              <Search className="h-4 w-4" />
             </button>
           </div>
         </div>
 
         {searched && activities.length === 0 && !loading && (
-          <div className="mt-6 rounded-lg border border-gray-200 bg-white p-8 text-center">
+          <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
             <AlertCircle className="mx-auto mb-3 h-10 w-10 text-gray-300" />
             <p className="text-sm text-gray-500">暂无已审核通过的活动</p>
             <p className="mt-1 text-xs text-gray-400">请先提交活动信息并等待审核通过</p>
@@ -209,7 +195,7 @@ export default function SubmitScoringPage() {
         )}
 
         {activities.length > 0 && (
-          <div className="mt-6 space-y-4">
+          <div className="space-y-4">
             <div className="rounded-lg border border-gray-200 bg-white p-6">
               <h3 className="mb-4 text-base font-semibold text-gray-900">提交赋分材料</h3>
               
@@ -218,7 +204,7 @@ export default function SubmitScoringPage() {
                 <select
                   value={selectedActivityId}
                   onChange={(e) => setSelectedActivityId(e.target.value)}
-                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none"
+                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-teal-600 focus:outline-none"
                 >
                   <option value="">请选择活动</option>
                   {activities.map((a) => (
@@ -246,7 +232,7 @@ export default function SubmitScoringPage() {
                     {selectedActivity.record_file_url && (
                       <div className="flex justify-between">
                         <span className="text-gray-500">备案表</span>
-                        <a href={selectedActivity.record_file_url} target="_blank" className="text-[#1e3a5f] underline">
+                        <a href={selectedActivity.record_file_url} target="_blank" className="text-teal-600 underline">
                           已上传
                         </a>
                       </div>
@@ -262,7 +248,7 @@ export default function SubmitScoringPage() {
 
               <div className="mb-4">
                 <label className="mb-1 block text-sm font-medium text-gray-700">
-                  活动赋分表 *（Excel格式）
+                  活动赋分表 *（Excel 格式）
                 </label>
                 <div className="rounded-lg border-2 border-dashed border-gray-200 p-4 text-center">
                   <Upload className="mx-auto mb-2 h-8 w-8 text-gray-300" />
@@ -275,13 +261,13 @@ export default function SubmitScoringPage() {
                   />
                   <label
                     htmlFor="scoring-file"
-                    className="cursor-pointer text-sm text-[#1e3a5f] hover:underline"
+                    className="cursor-pointer text-sm text-teal-600 hover:underline"
                   >
                     点击上传赋分表
                   </label>
                   <p className="mt-1 text-xs text-gray-400">仅支持 Excel 格式（.xlsx, .xls）</p>
                   {scoringFile && (
-                    <p className="mt-2 text-xs text-emerald-600">已选择: {scoringFile.name}</p>
+                    <p className="mt-2 text-xs text-emerald-600">已选择：{scoringFile.name}</p>
                   )}
                 </div>
               </div>
@@ -302,13 +288,13 @@ export default function SubmitScoringPage() {
                     />
                     <label
                       htmlFor="record-file"
-                      className="cursor-pointer text-sm text-[#1e3a5f] hover:underline"
+                      className="cursor-pointer text-sm text-teal-600 hover:underline"
                     >
                       点击上传备案表
                     </label>
                     <p className="mt-1 text-xs text-gray-400">支持 PDF、JPG、PNG 格式</p>
                     {recordFile && (
-                      <p className="mt-2 text-xs text-emerald-600">已选择: {recordFile.name}</p>
+                      <p className="mt-2 text-xs text-emerald-600">已选择：{recordFile.name}</p>
                     )}
                   </div>
                 </div>
@@ -317,7 +303,7 @@ export default function SubmitScoringPage() {
               <button
                 onClick={handleSubmitScoring}
                 disabled={uploadingId !== null || !selectedActivityId || !scoringFile}
-                className="w-full rounded-md bg-[#1e3a5f] py-2.5 text-sm font-medium text-white hover:bg-[#15304d] disabled:opacity-50"
+                className="w-full rounded-md bg-teal-600 py-2.5 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50"
               >
                 {uploadingId ? '提交中...' : '提交赋分材料'}
               </button>
@@ -374,7 +360,7 @@ export default function SubmitScoringPage() {
             </div>
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

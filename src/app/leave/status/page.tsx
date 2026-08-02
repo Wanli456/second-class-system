@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
-import { GraduationCap, ArrowLeft, Search, RefreshCw } from 'lucide-react';
+import DashboardLayout from '@/components/DashboardLayout';
+import { Search, RefreshCw } from 'lucide-react';
 import { LeaveRequest, STATUS_COLORS } from '@/lib/types';
 
 export default function LeaveStatusPage() {
@@ -29,22 +29,10 @@ export default function LeaveStatusPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f5f0]">
-      <header className="bg-[#1e3a5f] text-white">
-        <div className="mx-auto max-w-6xl px-4 py-4">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="rounded p-1 hover:bg-white/10">
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-            <GraduationCap className="h-6 w-6" />
-            <h1 className="text-lg font-bold">请假状态查询</h1>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-3xl px-4 py-8">
+    <DashboardLayout title="请假状态查询">
+      <div className="space-y-4">
         {/* Search */}
-        <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
           <div className="flex items-end gap-3">
             <div className="flex-1">
               <label className="mb-1 block text-sm font-medium text-gray-700">学号</label>
@@ -53,14 +41,14 @@ export default function LeaveStatusPage() {
                 value={studentId}
                 onChange={(e) => setStudentId(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600"
                 placeholder="请输入学号"
               />
             </div>
             <button
               onClick={handleSearch}
               disabled={loading}
-              className="flex items-center gap-1 rounded-md bg-[#1e3a5f] px-4 py-2 text-sm text-white hover:bg-[#1e3a5f]/90 disabled:opacity-50"
+              className="flex items-center gap-1 rounded-md bg-teal-600 px-4 py-2 text-sm text-white hover:bg-teal-700 disabled:opacity-50"
             >
               <Search className="h-4 w-4" />
               查询
@@ -74,7 +62,7 @@ export default function LeaveStatusPage() {
             {loading ? (
               <div className="py-8 text-center text-gray-400">查询中...</div>
             ) : leaves.length === 0 ? (
-              <div className="rounded-lg border border-gray-200 bg-white py-8 text-center shadow-sm">
+              <div className="rounded-lg border border-gray-200 bg-white py-8 text-center">
                 <p className="text-gray-400">未找到该学号的请假记录</p>
               </div>
             ) : (
@@ -83,13 +71,13 @@ export default function LeaveStatusPage() {
                   <h3 className="text-sm font-medium text-gray-700">共 {leaves.length} 条请假记录</h3>
                   <button
                     onClick={handleSearch}
-                    className="flex items-center gap-1 text-sm text-gray-500 hover:text-[#1e3a5f]"
+                    className="flex items-center gap-1 text-sm text-gray-500 hover:text-teal-600"
                   >
                     <RefreshCw className="h-3.5 w-3.5" /> 刷新
                   </button>
                 </div>
                 {leaves.map(l => (
-                  <div key={l.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                  <div key={l.id} className="rounded-lg border border-gray-200 bg-white p-4">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
@@ -128,7 +116,7 @@ export default function LeaveStatusPage() {
             )}
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

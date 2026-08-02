@@ -24,8 +24,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 
 interface User {
   id: string;
-  username: string;
-  name: string;
+  username?: string;
+  name?: string;
   studentId?: string;
   role: string;
   canPublish?: boolean;
@@ -36,8 +36,8 @@ interface User {
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
-  user: User | null;
-  onLogout: () => void;
+  user?: User | null;
+  onLogout?: () => void;
   title?: string;
 }
 
@@ -88,7 +88,9 @@ export function DashboardLayout({ children, user, onLogout, title }: DashboardLa
   const visibleItems = NAV_ITEMS.filter(canAccessItem);
 
   const handleLogout = () => {
-    onLogout();
+    if (onLogout) {
+      onLogout();
+    }
     router.push('/');
   };
 
@@ -267,3 +269,5 @@ export function DashboardLayout({ children, user, onLogout, title }: DashboardLa
     </div>
   );
 }
+
+export default DashboardLayout;

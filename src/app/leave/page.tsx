@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { GraduationCap, ArrowLeft, Send, Eye, AlertCircle } from 'lucide-react';
 import { LEAVE_TYPES } from '@/lib/types';
+import DashboardLayout from '@/components/DashboardLayout';
 
 export default function LeavePage() {
   const [form, setForm] = useState({
@@ -95,20 +96,8 @@ export default function LeavePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f5f0]">
-      <header className="bg-[#1e3a5f] text-white">
-        <div className="mx-auto max-w-6xl px-4 py-4">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="rounded p-1 hover:bg-white/10">
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-            <GraduationCap className="h-6 w-6" />
-            <h1 className="text-lg font-bold">请假申请</h1>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-2xl px-4 py-8">
+    <DashboardLayout>
+      <div className="mx-auto max-w-2xl">
         {success && (
           <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
             <p className="text-sm text-emerald-700">
@@ -240,7 +229,7 @@ export default function LeavePage() {
             </Link>
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }
