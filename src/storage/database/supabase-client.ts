@@ -143,3 +143,4 @@ export async function queryOne(sql: string, params: any[] = []): Promise<any | n
 export async function closePool() {
   await pool.end();
 }
+

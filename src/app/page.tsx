@@ -653,3 +653,4 @@ function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (u
     </div>
   );
 }
+

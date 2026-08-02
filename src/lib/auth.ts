@@ -131,3 +131,4 @@ export function setSessionCookie(response: NextResponse, userId: string) {
 export function clearSessionCookie(response: NextResponse) {
   response.cookies.set({ name: SESSION_COOKIE, value: '', httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/', maxAge: 0 });
 }
+

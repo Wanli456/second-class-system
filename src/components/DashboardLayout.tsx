@@ -330,3 +330,4 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title 
 }
 
 export default DashboardLayout;
+

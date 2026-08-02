@@ -100,3 +100,4 @@ CREATE TABLE IF NOT EXISTS notifications (
   related_id TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
