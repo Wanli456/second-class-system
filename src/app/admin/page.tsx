@@ -41,6 +41,14 @@ const normalizeTab = (tab: string | null) => {
   return tab || '';
 };
 
+const TAB_ROLES: Record<string, AdminRole> = {
+  activities: 'admin',
+  review: 'publisher',
+  scoring: 'scorer',
+  leave: 'leave_reviewer',
+  users: 'admin',
+};
+
 interface ScoringActivity {
   id: string;
   full_name: string;
@@ -194,7 +202,7 @@ function AdminPage() {
     Promise.all([
       role === 'admin' ? fetchActivities() : Promise.resolve(),
       (role === 'admin' || role === 'publisher') ? fetchSubmissions() : Promise.resolve(),
-      role === 'admin' ? fetchLeaves() : Promise.resolve(),
+      (role === 'admin' || role === 'leave_reviewer') ? fetchLeaves() : Promise.resolve(),
       (role === 'admin' || role === 'scorer') ? fetchScoring() : Promise.resolve(),
       role === 'admin' ? fetchUsers() : Promise.resolve(),
     ]).finally(() => setLoading(false));
@@ -217,6 +225,11 @@ function AdminPage() {
     } else if (roleParam === 'scorer' && userData.canScore) {
       setAuthenticated(true);
       setRole('scorer');
+      setLoginError('');
+      setShowLoginModal(false);
+    } else if (roleParam === 'leave_reviewer' && userData.canReviewLeave) {
+      setAuthenticated(true);
+      setRole('leave_reviewer');
       setLoginError('');
       setShowLoginModal(false);
     } else if (roleParam && userData.role === roleParam) {
@@ -519,6 +532,12 @@ function AdminPage() {
     ...(isAdmin ? [{ key: 'users', label: '用户管理', icon: Users, count: 0 }] : []),
   ];
 
+  const handleTabChange = (tabKey: string) => {
+    setActiveTab(tabKey);
+    const targetRole = TAB_ROLES[tabKey] || role || 'admin';
+    router.push(`/admin?role=${targetRole}&tab=${tabKey}`);
+  };
+
   return (
     <DashboardLayout
       user={user}
@@ -539,7 +558,7 @@ function AdminPage() {
             {tabs.map(tab => (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => handleTabChange(tab.key)}
                 className={`flex shrink-0 items-center gap-2 border-b-2 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
                   activeTab === tab.key
                     ? 'border-teal-600 text-teal-600'
