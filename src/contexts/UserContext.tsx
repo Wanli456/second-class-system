@@ -31,25 +31,44 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
+function readStoredUser(): User | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const savedUser = window.localStorage.getItem('user');
+    return savedUser ? JSON.parse(savedUser) as User : null;
+  } catch {
+    window.localStorage.removeItem('user');
+    return null;
+  }
+}
+
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  // 同步从 localStorage 初始化用户状态，避免页面切换时的加载闪烁
-  const [user, setUser] = useState<User | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const savedUser = localStorage.getItem('user');
-      return savedUser ? JSON.parse(savedUser) as User : null;
-    } catch {
-      localStorage.removeItem('user');
-      return null;
-    }
-  });
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
-  const [initialized, setInitialized] = useState(typeof window !== 'undefined'); // 客户端立即标记为已初始化
+  const [initialized, setInitialized] = useState(false);
   const [routeChanging, setRouteChanging] = useState(false);
 
-  // SSR 情况下，在客户端挂载后立即标记为已初始化
   useEffect(() => {
-    setInitialized(true);
+    let cancelled = false;
+
+    const initializeUser = async () => {
+      const storedUser = readStoredUser();
+      if (storedUser) setUser(storedUser);
+
+      try {
+        const currentUser = await refreshCurrentUser<User>();
+        if (!cancelled) setUser(currentUser);
+      } finally {
+        if (!cancelled) setInitialized(true);
+      }
+    };
+
+    void initializeUser();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const refreshUser = async () => {

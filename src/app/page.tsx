@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import {
   ClipboardList, Send, Award, FileText, UserCheck, Moon, Lock, LogOut, Key, ArrowLeft, ArrowUpRight,
@@ -10,11 +10,12 @@ import { NotificationBell } from '@/components/NotificationBell';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
+import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 
 interface User {
   id: string;
-  username: string;
-  name: string;
+  username?: string;
+  name?: string;
   studentId?: string;
   role: string;
   canPublish?: boolean;
@@ -41,8 +42,23 @@ function getLeaderButtonState(user: User | null): 'active' | 'grayed' | 'locked'
 }
 
 export default function Home() {
-  const { user: globalUser, setUser: setGlobalUser } = useUser();
-  const [user, setUser] = useState<User | null>(globalUser);
+  const { user: globalUser, initialized, setUser: setGlobalUser } = useUser();
+  const user = globalUser
+    ? {
+        ...globalUser,
+        ...(globalUser.role === 'admin'
+          ? {
+              canPublish: true,
+              canScore: true,
+              canSubmitActivity: true,
+              canViewSubmissionStatus: true,
+              canSubmitScoring: true,
+              canReviewLeave: true,
+              canViewEveningStudy: true,
+            }
+          : {}),
+      }
+    : null;
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
@@ -50,35 +66,13 @@ export default function Home() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
 
-  // 同步全局用户状态到本地状态
-  useEffect(() => {
-    if (globalUser) {
-      // 管理员自动拥有所有权限
-      const enrichedUser = { ...globalUser };
-      if (globalUser.role === 'admin') {
-        enrichedUser.canPublish = true;
-        enrichedUser.canScore = true;
-        enrichedUser.canSubmitActivity = true;
-        enrichedUser.canViewSubmissionStatus = true;
-        enrichedUser.canSubmitScoring = true;
-        enrichedUser.canReviewLeave = true;
-        enrichedUser.canViewEveningStudy = true;
-      }
-      setUser(enrichedUser);
-    } else {
-      setUser(null);
-    }
-  }, [globalUser]);
-
-  const handleLoginSuccess = (u: User) => {
-    setUser(u);
-    setGlobalUser(u);
+  const handleLoginSuccess = (nextUser: User) => {
+    setGlobalUser(nextUser);
     setShowLoginModal(false);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('user');
-    setUser(null);
     setGlobalUser(null);
   };
 
@@ -128,6 +122,10 @@ export default function Home() {
   const scorerState = getButtonState(user, 'scorer');
   const leaveReviewerState = getButtonState(user, 'leave_reviewer');
   const leaderState = getLeaderButtonState(user);
+
+  if (!initialized) {
+    return <AuthLoadingScreen />;
+  }
 
   // 修改密码页面
   if (showPasswordModal) {

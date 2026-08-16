@@ -14,6 +14,7 @@ import {
   STATUS_COLORS,
 } from '@/lib/types';
 import DashboardLayout from '@/components/DashboardLayout';
+import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch, refreshCurrentUser } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 
@@ -86,10 +87,11 @@ function AdminPage() {
   const tabParam = searchParams.get('tab') as string | null;
 
   // 使用全局用户状态，避免重复 API 调用
-  const { user: globalUser, loading: userLoading } = useUser();
+  const { user: globalUser, loading: userLoading, initialized } = useUser();
 
   const [user, setUser] = useState<UserData | null>(null);
   const [authenticated, setAuthenticated] = useState(false);
+  const [authResolved, setAuthResolved] = useState(false);
   const [role, setRole] = useState<AdminRole | null>(roleParam);
   const [loginError, setLoginError] = useState('');
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -136,9 +138,10 @@ function AdminPage() {
 
   // 使用全局用户状态替代 refreshCurrentUser，避免重复 API 调用
   useEffect(() => {
-    if (userLoading) return;
+    if (!initialized || userLoading) return;
 
     if (!globalUser) {
+      setAuthResolved(true);
       setShowLoginModal(true);
       return;
     }
@@ -169,7 +172,8 @@ function AdminPage() {
       setLoginError(`当前账号没有管理员权限`);
       setShowLoginModal(true);
     }
-  }, [globalUser, userLoading, roleParam]);
+    setAuthResolved(true);
+  }, [globalUser, userLoading, initialized, roleParam]);
 
   useEffect(() => {
     if (!authenticated || !role) return;
@@ -534,6 +538,10 @@ function AdminPage() {
 
   const pendingSubmissions = submissions.filter(s => s.review_status === '待审核');
   const pendingLeaves = leaves.filter(l => l.review_status === '待审核');
+
+  if (!initialized || !authResolved) {
+    return <AuthLoadingScreen />;
+  }
 
   // Login modal when not authenticated
   if (!authenticated) {
