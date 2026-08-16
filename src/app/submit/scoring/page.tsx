@@ -5,7 +5,8 @@ import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { GraduationCap, Upload, FileText, Search, CheckCircle2, AlertCircle, LogIn } from 'lucide-react';
 import { LEVELS, SCORING_STATUSES } from '@/lib/types';
-import { apiFetch, refreshCurrentUser } from '@/lib/client-api';
+import { apiFetch } from '@/lib/client-api';
+import { useUser } from '@/contexts/UserContext';
 
 interface Activity {
   id: string;
@@ -20,8 +21,7 @@ interface Activity {
 }
 
 export default function SubmitScoringPage() {
-  const [user, setUser] = useState<any>(null);
-  const [checking, setChecking] = useState(true);
+  const { user } = useUser();
   const [activityName, setActivityName] = useState('');
   const [searched, setSearched] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -32,13 +32,6 @@ export default function SubmitScoringPage() {
   const [selectedActivityId, setSelectedActivityId] = useState<string>('');
   const [submittedActivityId, setSubmittedActivityId] = useState<string | null>(null);
   const [showResubmit, setShowResubmit] = useState(false);
-
-  useEffect(() => {
-    refreshCurrentUser().then((currentUser) => {
-      if (currentUser) setUser(currentUser);
-    });
-    setChecking(false);
-  }, []);
 
   const handleSearch = async () => {
     if (!activityName) {
@@ -133,14 +126,6 @@ export default function SubmitScoringPage() {
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
 
   // 登录检查
-  if (checking) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <p className="text-gray-500">加载中...</p>
-      </div>
-    );
-  }
-
   if (!user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">

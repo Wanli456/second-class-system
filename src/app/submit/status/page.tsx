@@ -5,7 +5,8 @@ import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Search, RefreshCw, Pencil } from 'lucide-react';
 import { CATEGORIES, LEVELS, REVIEW_STATUSES, STATUS_COLORS, CATEGORY_COLORS } from '@/lib/types';
-import { apiFetch, refreshCurrentUser } from '@/lib/client-api';
+import { apiFetch } from '@/lib/client-api';
+import { useUser } from '@/contexts/UserContext';
 
 interface Submission {
   id: string;
@@ -33,25 +34,13 @@ interface CurrentUser {
 }
 
 export default function SubmitStatusPage() {
-  const [user, setUser] = useState<CurrentUser | null>(null);
-  const [checking, setChecking] = useState(true);
+  const { user } = useUser();
   const [keyword, setKeyword] = useState('');
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
-  useEffect(() => {
-    refreshCurrentUser<CurrentUser>().then((currentUser) => {
-      if (currentUser) setUser(currentUser);
-    });
-    setChecking(false);
-  }, []);
-
   const canView = user && (user.role === 'admin' || user.canViewSubmissionStatus === true);
-
-  if (checking) {
-    return <div className="flex min-h-screen items-center justify-center bg-gray-50 text-sm text-gray-500">加载中...</div>;
-  }
 
   if (!canView) {
     return (
