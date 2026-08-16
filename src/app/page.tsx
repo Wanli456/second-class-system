@@ -29,15 +29,12 @@ function getButtonState(user: User | null, requiredRole: string): 'active' | 'gr
   if (!user) return 'locked';
   if (user.role === 'admin') return 'active';
   if (requiredRole === 'admin') return 'grayed';
-  if (requiredRole === 'publisher') return user.canPublish ? 'active' : 'grayed';
-  if (requiredRole === 'scorer') return user.canScore ? 'active' : 'grayed';
-  if (requiredRole === 'leave_reviewer') return user.canReviewLeave ? 'active' : 'grayed';
   return 'grayed';
 }
 
 function getLeaderButtonState(user: User | null): 'active' | 'grayed' | 'locked' {
   if (!user) return 'locked';
-  if (user.role === 'admin' || user.role === 'publisher' || user.canSubmitActivity || user.canViewSubmissionStatus || user.canSubmitScoring) return 'active';
+  if (user.role === 'admin' || user.canSubmitActivity || user.canViewSubmissionStatus || user.canSubmitScoring) return 'active';
   if (user.role === 'leader') return 'active';
   return 'grayed';
 }
@@ -264,10 +261,10 @@ export default function Home() {
                   </Link>
                 )}
 
-                {/* 发布活动 */}
+                {/* 活动审核 */}
                 {(user.role === 'admin' || user.canPublish) && (
                   <Link
-                    href="/admin?role=publisher&tab=review"
+                    href="/admin?role=admin&tab=review"
                     className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
                   >
                     <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
@@ -281,7 +278,7 @@ export default function Home() {
                 {/* 活动赋分 */}
                 {(user.role === 'admin' || user.canScore) && (
                   <Link
-                    href="/admin?role=scorer&tab=scoring"
+                    href="/admin?role=admin&tab=scoring"
                     className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
                   >
                     <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
@@ -295,7 +292,7 @@ export default function Home() {
                 {/* 请假审核 */}
                 {(user.role === 'admin' || user.canReviewLeave) && (
                   <Link
-                    href="/admin?role=leave_reviewer&tab=leave"
+                    href="/admin?role=admin&tab=leave"
                     className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
                   >
                     <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50 text-sky-600">

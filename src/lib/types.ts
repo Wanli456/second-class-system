@@ -53,14 +53,6 @@ export const ACTIVITY_STATUSES = ['正常活动', '活动取消'] as const;
 export const LEAVE_TYPES = ['事假', '病假', '活动公假'] as const;
 export const REVIEW_STATUSES = ['待审核', '已通过', '已驳回'] as const;
 export const SCORING_STATUSES = ['待赋分', '已赋分'] as const;
-export const ADMIN_ROLES = ['admin', 'publisher', 'scorer', 'leave_reviewer'] as const;
-export type AdminRole = typeof ADMIN_ROLES[number];
-export const ROLE_LABELS: Record<AdminRole, string> = {
-  admin: '管理员',
-  publisher: '发布干事',
-  scorer: '赋分干事',
-  leave_reviewer: '请假审核',
-};
 
 export const CATEGORY_COLORS: Record<string, string> = {
   '德': 'bg-indigo-100 text-indigo-700 border-indigo-200',

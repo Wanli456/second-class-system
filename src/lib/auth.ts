@@ -101,18 +101,10 @@ function calculateUserPermissions(user: AuthUser) {
     studentId: user.student_id,
     name: user.username,
     role: user.role,
-    // 权限计算：admin OR (角色权限 AND 勾选权限)
-    canPublish: isAdmin ||
-      (user.role === 'publisher' && user.can_publish) ||
-      user.can_publish,
-
-    canScore: isAdmin ||
-      (user.role === 'scorer' && user.can_score) ||
-      user.can_score,
-
-    canReviewLeave: isAdmin ||
-      (user.role === 'leave_reviewer' && user.can_review_leave) ||
-      user.can_review_leave,
+    // 权限计算：admin OR 勾选权限
+    canPublish: isAdmin || user.can_publish,
+    canScore: isAdmin || user.can_score,
+    canReviewLeave: isAdmin || user.can_review_leave,
 
     // 普通权限：仅通过勾选控制
     canSubmitActivity: isAdmin || user.can_submit_activity,

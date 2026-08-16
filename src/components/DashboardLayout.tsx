@@ -57,9 +57,9 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: '首页', href: '/', icon: LayoutDashboard },
   { label: '活动总表', href: '/admin?role=admin&tab=activities', icon: ClipboardList, requiredRole: 'admin' },
-  { label: '活动审核', href: '/admin?role=publisher&tab=review', icon: FileCheck, requiredRole: 'publisher', requiredPermission: 'canPublish' },
-  { label: '活动赋分', href: '/admin?role=scorer&tab=scoring', icon: Award, requiredRole: 'scorer', requiredPermission: 'canScore' },
-  { label: '请假审核', href: '/admin?role=leave_reviewer&tab=leave', icon: UserCheck, requiredRole: 'leave_reviewer', requiredPermission: 'canReviewLeave' },
+  { label: '活动审核', href: '/admin?role=admin&tab=review', icon: FileCheck, requiredPermission: 'canPublish' },
+  { label: '活动赋分', href: '/admin?role=admin&tab=scoring', icon: Award, requiredPermission: 'canScore' },
+  { label: '请假审核', href: '/admin?role=admin&tab=leave', icon: UserCheck, requiredPermission: 'canReviewLeave' },
   { label: '用户管理', href: '/admin?role=admin&tab=users', icon: Users, requiredRole: 'admin' },
   { label: '活动提交', href: '/submit', icon: Send, requiredPermission: 'canSubmitActivity' },
   { label: '提交状态', href: '/submit/status', icon: FileCheck, requiredPermission: 'canViewSubmissionStatus' },
@@ -117,9 +117,6 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
     if (!user) return '访客';
     switch (user.role) {
       case 'admin': return '管理员';
-      case 'publisher': return '发布干事';
-      case 'scorer': return '赋分干事';
-      case 'leave_reviewer': return '请假审核员';
       case 'leader': return '活动负责人';
       case 'student': return '学生';
       default: return '学生';

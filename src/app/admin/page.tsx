@@ -120,18 +120,12 @@ function AdminPage() {
 
   // 权限计算必须与后端 auth.ts 中的 calculateUserPermissions 逻辑完全一致
   const isAdmin = user?.role === 'admin';
-  const canPublish = isAdmin ||
-    (user?.role === 'publisher' && user?.canPublish === true) ||
-    user?.canPublish === true;
-  const canScore = isAdmin ||
-    (user?.role === 'scorer' && user?.canScore === true) ||
-    user?.canScore === true;
-  const canReviewLeave = isAdmin ||
-    (user?.role === 'leave_reviewer' && user?.canReviewLeave === true) ||
-    user?.canReviewLeave === true;
+  const canPublish = isAdmin || user?.canPublish === true;
+  const canScore = isAdmin || user?.canScore === true;
+  const canReviewLeave = isAdmin || user?.canReviewLeave === true;
 
   useEffect(() => {
-    if (roleParam && ['admin', 'publisher', 'scorer', 'leave_reviewer'].includes(roleParam)) {
+    if (roleParam && roleParam === 'admin') {
       setRole(roleParam as AdminRole);
     }
   }, [roleParam]);
@@ -149,19 +143,10 @@ function AdminPage() {
       if (userData.role === 'admin') {
         setAuthenticated(true);
         setRole('admin');
-      } else if (roleParam === 'publisher' && userData.canPublish) {
-        setAuthenticated(true);
-        setRole('publisher');
-      } else if (roleParam === 'scorer' && userData.canScore) {
-        setAuthenticated(true);
-        setRole('scorer');
-      } else if (roleParam === 'leave_reviewer' && userData.canReviewLeave) {
-        setAuthenticated(true);
-        setRole('leave_reviewer');
       } else if (roleParam && userData.role === roleParam) {
         setAuthenticated(true);
       } else if (roleParam) {
-        setLoginError(`当前账号没有${ROLE_LABELS[roleParam]}权限`);
+        setLoginError(`当前账号没有管理员权限`);
         setShowLoginModal(true);
       }
     });
@@ -299,28 +284,13 @@ function AdminPage() {
       setRole('admin'); // Admin sees all tabs
       setLoginError('');
       setShowLoginModal(false);
-    } else if (roleParam === 'publisher' && userData.canPublish) {
-      setAuthenticated(true);
-      setRole('publisher');
-      setLoginError('');
-      setShowLoginModal(false);
-    } else if (roleParam === 'scorer' && userData.canScore) {
-      setAuthenticated(true);
-      setRole('scorer');
-      setLoginError('');
-      setShowLoginModal(false);
-    } else if (roleParam === 'leave_reviewer' && userData.canReviewLeave) {
-      setAuthenticated(true);
-      setRole('leave_reviewer');
-      setLoginError('');
-      setShowLoginModal(false);
     } else if (roleParam && userData.role === roleParam) {
       setAuthenticated(true);
       setRole(roleParam);
       setLoginError('');
       setShowLoginModal(false);
     } else if (roleParam) {
-      setLoginError(`当前账号没有${ROLE_LABELS[roleParam]}权限`);
+      setLoginError(`当前账号没有管理员权限`);
     }
   };
 
@@ -1327,219 +1297,6 @@ function AdminPage() {
                                     className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
                                   >
                                     <option value="admin">管理员</option>
-                                    <option value="publisher">发布干事</option>
-                                    <option value="scorer">赋分干事</option>
-                                    <option value="leave_reviewer">请假审核员</option>
-                                    <option value="leader">活动负责人</option>
-                                    <option value="student">学生</option>
-                                  </select>
-                                  <button
-                                    onClick={() => handleDeleteUser(u.id, u.name)}
-                                    className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
-                                  >
-                                    删除
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {/* 发布干事 */}
-                  {users.filter(u => u.role === 'publisher' && (!userSearch || u.name?.includes(userSearch))).length > 0 && (
-                    <div className="mb-6">
-                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                        <span className="rounded bg-blue-100 text-blue-700 px-2 py-0.5 text-xs font-medium">发布干事</span>
-                        <span className="text-gray-500 font-normal">({users.filter(u => u.role === 'publisher').length}人)</span>
-                      </h4>
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-gray-200 bg-gray-50">
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">活动审核权限</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {users.filter(u => u.role === 'publisher' && (!userSearch || u.name?.includes(userSearch))).map((u) => (
-                            <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
-                              <td className="px-3 py-2 text-gray-800">{u.name || '-'}</td>
-                              <td className="px-3 py-2 text-gray-500">{u.studentId || '-'}</td>
-                              <td className="px-3 py-2">
-                                <label className="flex items-center gap-1.5 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={u.canPublish || false}
-                                    onChange={(e) => handleUpdatePermission(u.id, 'canPublish', e.target.checked)}
-                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                  />
-                                  <span className="text-xs text-gray-600">
-                                    {u.canPublish ? '已启用' : '已禁用'}
-                                    <span className="text-gray-400 ml-1">(角色权限)</span>
-                                  </span>
-                                </label>
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="flex gap-1">
-                                  <button
-                                    onClick={() => handleChangePassword(u.id, u.name)}
-                                    className="text-xs text-blue-600 hover:text-blue-800 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-50"
-                                  >
-                                    改密
-                                  </button>
-                                  <select
-                                    value={u.role}
-                                    onChange={(e) => handleUpdateRole(u.id, e.target.value)}
-                                    className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                                  >
-                                    <option value="admin">管理员</option>
-                                    <option value="publisher">发布干事</option>
-                                    <option value="scorer">赋分干事</option>
-                                    <option value="leave_reviewer">请假审核员</option>
-                                    <option value="leader">活动负责人</option>
-                                    <option value="student">学生</option>
-                                  </select>
-                                  <button
-                                    onClick={() => handleDeleteUser(u.id, u.name)}
-                                    className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
-                                  >
-                                    删除
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {/* 赋分干事 */}
-                  {users.filter(u => u.role === 'scorer' && (!userSearch || u.name?.includes(userSearch))).length > 0 && (
-                    <div className="mb-6">
-                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                        <span className="rounded bg-green-100 text-green-700 px-2 py-0.5 text-xs font-medium">赋分干事</span>
-                        <span className="text-gray-500 font-normal">({users.filter(u => u.role === 'scorer').length}人)</span>
-                      </h4>
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-gray-200 bg-gray-50">
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {users.filter(u => u.role === 'scorer' && (!userSearch || u.name?.includes(userSearch))).map((u) => (
-                            <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
-                              <td className="px-3 py-2 text-gray-800">{u.name || '-'}</td>
-                              <td className="px-3 py-2 text-gray-500">{u.studentId || '-'}</td>
-                              <td className="px-3 py-2">
-                                <label className="flex items-center gap-1.5 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={u.canScore || false}
-                                    onChange={(e) => handleUpdatePermission(u.id, 'canScore', e.target.checked)}
-                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                  />
-                                  <span className="text-xs text-gray-600">
-                                    {u.canScore ? '已启用' : '已禁用'}
-                                    <span className="text-gray-400 ml-1">(角色权限)</span>
-                                  </span>
-                                </label>
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="flex gap-1">
-                                  <button
-                                    onClick={() => handleChangePassword(u.id, u.name)}
-                                    className="text-xs text-blue-600 hover:text-blue-800 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-50"
-                                  >
-                                    改密
-                                  </button>
-                                  <select
-                                    value={u.role}
-                                    onChange={(e) => handleUpdateRole(u.id, e.target.value)}
-                                    className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                                  >
-                                    <option value="admin">管理员</option>
-                                    <option value="publisher">发布干事</option>
-                                    <option value="scorer">赋分干事</option>
-                                    <option value="leave_reviewer">请假审核员</option>
-                                    <option value="leader">活动负责人</option>
-                                    <option value="student">学生</option>
-                                  </select>
-                                  <button
-                                    onClick={() => handleDeleteUser(u.id, u.name)}
-                                    className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
-                                  >
-                                    删除
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {/* 请假审核员 */}
-                  {users.filter(u => u.role === 'leave_reviewer' && (!userSearch || u.name?.includes(userSearch))).length > 0 && (
-                    <div className="mb-6">
-                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                        <span className="rounded bg-orange-100 text-orange-700 px-2 py-0.5 text-xs font-medium">请假审核员</span>
-                        <span className="text-gray-500 font-normal">({users.filter(u => u.role === 'leave_reviewer').length}人)</span>
-                      </h4>
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-gray-200 bg-gray-50">
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
-                            <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {users.filter(u => u.role === 'leave_reviewer' && (!userSearch || u.name?.includes(userSearch))).map((u) => (
-                            <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
-                              <td className="px-3 py-2 text-gray-800">{u.name || '-'}</td>
-                              <td className="px-3 py-2 text-gray-500">{u.studentId || '-'}</td>
-                              <td className="px-3 py-2">
-                                <label className="flex items-center gap-1.5 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={u.canReviewLeave || false}
-                                    onChange={(e) => handleUpdatePermission(u.id, 'canReviewLeave', e.target.checked)}
-                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                  />
-                                  <span className="text-xs text-gray-600">
-                                    {u.canReviewLeave ? '已启用' : '已禁用'}
-                                    <span className="text-gray-400 ml-1">(角色权限)</span>
-                                  </span>
-                                </label>
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="flex gap-1">
-                                  <button
-                                    onClick={() => handleChangePassword(u.id, u.name)}
-                                    className="text-xs text-blue-600 hover:text-blue-800 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-50"
-                                  >
-                                    改密
-                                  </button>
-                                  <select
-                                    value={u.role}
-                                    onChange={(e) => handleUpdateRole(u.id, e.target.value)}
-                                    className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                                  >
-                                    <option value="admin">管理员</option>
-                                    <option value="publisher">发布干事</option>
-                                    <option value="scorer">赋分干事</option>
-                                    <option value="leave_reviewer">请假审核员</option>
                                     <option value="leader">活动负责人</option>
                                     <option value="student">学生</option>
                                   </select>
@@ -1676,9 +1433,6 @@ function AdminPage() {
                                     className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
                                   >
                                     <option value="admin">管理员</option>
-                                    <option value="publisher">发布干事</option>
-                                    <option value="scorer">赋分干事</option>
-                                    <option value="leave_reviewer">请假审核员</option>
                                     <option value="leader">活动负责人</option>
                                     <option value="student">学生</option>
                                   </select>
@@ -1815,9 +1569,6 @@ function AdminPage() {
                                     className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
                                   >
                                     <option value="admin">管理员</option>
-                                    <option value="publisher">发布干事</option>
-                                    <option value="scorer">赋分干事</option>
-                                    <option value="leave_reviewer">请假审核员</option>
                                     <option value="leader">活动负责人</option>
                                     <option value="student">学生</option>
                                   </select>
