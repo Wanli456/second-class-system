@@ -122,7 +122,11 @@ export default function SubmitPage() {
     }
   };
 
-  // 登录检查（移除加载状态遮挡，直接判断用户）
+  // 登录检查 - 等待用户状态加载完成后再判断
+  if (userLoading) {
+    return null; // 加载中不显示任何内容，避免闪现"需要登录"
+  }
+
   if (!user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0] p-4">
