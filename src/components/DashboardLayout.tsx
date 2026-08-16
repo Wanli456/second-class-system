@@ -103,7 +103,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
     return roleAllowed && permissionAllowed;
   };
 
-  const visibleItems = NAV_ITEMS.filter(canAccessItem);
+  const visibleItems = React.useMemo(() => NAV_ITEMS.filter(canAccessItem), [user]);
 
   const getNavGroup = (href: string) => {
     if (href === '/') return '工作台';
@@ -113,17 +113,21 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
     return '查询';
   };
 
-  const roleLabel = user?.role === 'admin'
-    ? '管理员'
-    : user?.role === 'publisher'
-      ? '发布干事'
-      : user?.role === 'scorer'
-        ? '赋分干事'
-        : user?.role === 'leave_reviewer'
-          ? '请假审核员'
-          : user?.role === 'leader'
-            ? '活动负责人'
-            : '学生';
+  const roleLabel = React.useMemo(() => {
+    if (!user) return '访客';
+    switch (user.role) {
+      case 'admin': return '管理员';
+      case 'publisher': return '发布干事';
+      case 'scorer': return '赋分干事';
+      case 'leave_reviewer': return '请假审核员';
+      case 'leader': return '活动负责人';
+      case 'student': return '学生';
+      default: return '学生';
+    }
+  }, [user]);
+
+  // 使用useMemo优化URL查询参数解析，避免重复解析
+  const currentSearchParams = React.useMemo(() => new URLSearchParams(currentQuery), [currentQuery]);
 
   const isItemActive = (href: string) => {
     if (activeNavHref) return href === activeNavHref;
@@ -132,7 +136,6 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
     if (pathname !== itemPath) return false;
     if (!itemQuery) return true;
 
-    const currentSearchParams = new URLSearchParams(currentQuery);
     const expectedQuery = new URLSearchParams(itemQuery);
     return Array.from(expectedQuery.entries()).every(
       ([key, value]) => currentSearchParams.get(key) === value,
