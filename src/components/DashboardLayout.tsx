@@ -129,18 +129,37 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
   // 使用useMemo优化URL查询参数解析，避免重复解析
   const currentSearchParams = React.useMemo(() => new URLSearchParams(currentQuery), [currentQuery]);
 
-  const isItemActive = (href: string) => {
-    if (activeNavHref) return href === activeNavHref;
+  // 使用useMemo缓存所有导航项的激活状态，避免每次渲染都重复计算
+  const activeItemsMap = React.useMemo(() => {
+    const map = new Map<string, boolean>();
 
-    const [itemPath, itemQuery] = href.split('?');
-    if (pathname !== itemPath) return false;
-    if (!itemQuery) return true;
+    NAV_ITEMS.forEach(item => {
+      if (activeNavHref) {
+        map.set(item.href, item.href === activeNavHref);
+        return;
+      }
 
-    const expectedQuery = new URLSearchParams(itemQuery);
-    return Array.from(expectedQuery.entries()).every(
-      ([key, value]) => currentSearchParams.get(key) === value,
-    );
-  };
+      const [itemPath, itemQuery] = item.href.split('?');
+      if (pathname !== itemPath) {
+        map.set(item.href, false);
+        return;
+      }
+      if (!itemQuery) {
+        map.set(item.href, true);
+        return;
+      }
+
+      const expectedQuery = new URLSearchParams(itemQuery);
+      const isActive = Array.from(expectedQuery.entries()).every(
+        ([key, value]) => currentSearchParams.get(key) === value,
+      );
+      map.set(item.href, isActive);
+    });
+
+    return map;
+  }, [pathname, activeNavHref, currentSearchParams]);
+
+  const isItemActive = (href: string) => activeItemsMap.get(href) ?? false;
 
   const handleLogout = () => {
     localStorage.removeItem('user');
