@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard,
   ClipboardList,
@@ -72,18 +72,17 @@ const NAV_ITEMS: NavItem[] = [
 export function DashboardLayout({ children, user: providedUser, onLogout, title, activeNavHref }: DashboardLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isMobile = useIsMobile();
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [collapsed, setCollapsed] = React.useState(false);
-  const [currentQuery, setCurrentQuery] = React.useState('');
 
   // 使用全局用户状态，避免重复API调用和跨页面卡顿
   const globalUser = useUser();
   const user = providedUser ?? globalUser.user;
 
-  React.useEffect(() => {
-    setCurrentQuery(window.location.search);
-  }, [pathname, activeNavHref]);
+  // 使用 Next.js useSearchParams 替代 window.location.search，避免同步阻塞
+  const currentSearchParams = React.useMemo(() => searchParams, [searchParams]);
 
   const canAccessItem = (item: NavItem): boolean => {
     if (!user) {
@@ -122,9 +121,6 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
       default: return '学生';
     }
   }, [user]);
-
-  // 使用useMemo优化URL查询参数解析，避免重复解析
-  const currentSearchParams = React.useMemo(() => new URLSearchParams(currentQuery), [currentQuery]);
 
   // 使用useMemo缓存所有导航项的激活状态，避免每次渲染都重复计算
   const activeItemsMap = React.useMemo(() => {

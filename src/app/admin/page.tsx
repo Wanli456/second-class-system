@@ -15,6 +15,7 @@ import {
 } from '@/lib/types';
 import DashboardLayout from '@/components/DashboardLayout';
 import { apiFetch, refreshCurrentUser } from '@/lib/client-api';
+import { useUser } from '@/contexts/UserContext';
 
 type ReviewStatus = '待审核' | '已通过' | '已驳回';
 type LeaveStatus = '待审核' | '已通过' | '已驳回';
@@ -84,6 +85,9 @@ function AdminPage() {
   const roleParam = searchParams.get('role') as AdminRole | null;
   const tabParam = searchParams.get('tab') as string | null;
 
+  // 使用全局用户状态，避免重复 API 调用
+  const { user: globalUser, loading: userLoading } = useUser();
+
   const [user, setUser] = useState<UserData | null>(null);
   const [authenticated, setAuthenticated] = useState(false);
   const [role, setRole] = useState<AdminRole | null>(roleParam);
@@ -130,27 +134,42 @@ function AdminPage() {
     }
   }, [roleParam]);
 
-  // Check if user is logged in
+  // 使用全局用户状态替代 refreshCurrentUser，避免重复 API 调用
   useEffect(() => {
-    refreshCurrentUser<UserData>().then((userData) => {
-      if (!userData) {
-        setShowLoginModal(true);
-        return;
-      }
+    if (userLoading) return;
 
-      setUser(userData);
-      // Admin can access all roles
-      if (userData.role === 'admin') {
-        setAuthenticated(true);
-        setRole('admin');
-      } else if (roleParam && userData.role === roleParam) {
-        setAuthenticated(true);
-      } else if (roleParam) {
-        setLoginError(`当前账号没有管理员权限`);
-        setShowLoginModal(true);
-      }
-    });
-  }, [roleParam]);
+    if (!globalUser) {
+      setShowLoginModal(true);
+      return;
+    }
+
+    // 转换为 UserData 类型
+    const userData: UserData = {
+      id: globalUser.id,
+      studentId: globalUser.studentId || '',
+      name: globalUser.name || globalUser.username || '',
+      role: globalUser.role,
+      canPublish: globalUser.canPublish || false,
+      canScore: globalUser.canScore || false,
+      canSubmitActivity: globalUser.canSubmitActivity || false,
+      canViewSubmissionStatus: globalUser.canViewSubmissionStatus || false,
+      canSubmitScoring: globalUser.canSubmitScoring || false,
+      canReviewLeave: globalUser.canReviewLeave || false,
+      canViewEveningStudy: globalUser.canViewEveningStudy || false,
+    };
+
+    setUser(userData);
+    // Admin can access all roles
+    if (userData.role === 'admin') {
+      setAuthenticated(true);
+      setRole('admin');
+    } else if (roleParam && userData.role === roleParam) {
+      setAuthenticated(true);
+    } else if (roleParam) {
+      setLoginError(`当前账号没有管理员权限`);
+      setShowLoginModal(true);
+    }
+  }, [globalUser, userLoading, roleParam]);
 
   useEffect(() => {
     if (!authenticated || !role) return;
