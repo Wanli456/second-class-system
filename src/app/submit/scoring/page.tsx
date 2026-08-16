@@ -21,7 +21,7 @@ interface Activity {
 }
 
 export default function SubmitScoringPage() {
-  const { user } = useUser();
+  const { user, loading: userLoading } = useUser();
   const [activityName, setActivityName] = useState('');
   const [searched, setSearched] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -125,7 +125,11 @@ export default function SubmitScoringPage() {
 
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
 
-  // 登录检查
+  // 登录检查 - 等待用户状态加载完成后再判断
+  if (userLoading) {
+    return null; // 加载中不显示任何内容，避免闪现"需要登录"
+  }
+
   if (!user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
