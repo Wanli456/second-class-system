@@ -13,10 +13,10 @@ export function RouteLoadingIndicator() {
     // 路由切换时显示loading
     if (routeChanging) {
       setShowLoading(true);
-      // 最少显示100ms，避免闪烁
+      // 最少显示150ms，确保过渡完成
       const minDisplay = setTimeout(() => {
         setShowLoading(false);
-      }, 100);
+      }, 150);
 
       return () => clearTimeout(minDisplay);
     } else {
@@ -27,8 +27,8 @@ export function RouteLoadingIndicator() {
   if (!showLoading) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50">
-      <div className="h-1 bg-teal-600 animate-pulse"></div>
+    <div className="fixed top-0 left-0 right-0 z-50 h-1">
+      <div className="h-full w-full bg-teal-600 animate-pulse origin-left"></div>
     </div>
   );
 }

@@ -89,6 +89,26 @@
   --sidebar-ring: oklch(0.708 0 0);
 }
 
+/* 页面切换过渡动画 - 消除白屏闪烁 */
+.page-transition {
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 确保页面内容在过渡期间始终可见 */
+html, body {
+  background-color: #f5f5f0;
+}
+
+
 .dark {
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
