@@ -20,6 +20,7 @@ type ReviewStatus = '待审核' | '已通过' | '已驳回';
 type LeaveStatus = '待审核' | '已通过' | '已驳回';
 type ScoringStatus = '待赋分' | '已赋分';
 type AdminRole = 'admin' | 'publisher' | 'scorer' | 'leave_reviewer';
+type AdminTab = 'activities' | 'review' | 'scoring' | 'leave' | 'users';
 
 const ROLE_LABELS: Record<AdminRole, string> = {
   admin: '管理员',
@@ -96,6 +97,7 @@ function AdminPage() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [userSearch, setUserSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [dataError, setDataError] = useState('');
 
   const [activeTab, setActiveTab] = useState(() => normalizeTab(tabParam));
   const [editActivity, setEditActivity] = useState<Activity | null>(null);
@@ -108,6 +110,18 @@ function AdminPage() {
   const [expandedScoring, setExpandedScoring] = useState<string | null>(null);
   const [scoringFile, setScoringFile] = useState<File | null>(null);
   const [scoringInProgress, setScoringInProgress] = useState(false);
+
+  // 权限计算必须与后端 auth.ts 中的 calculateUserPermissions 逻辑完全一致
+  const isAdmin = user?.role === 'admin';
+  const canPublish = isAdmin ||
+    (user?.role === 'publisher' && user?.canPublish === true) ||
+    user?.canPublish === true;
+  const canScore = isAdmin ||
+    (user?.role === 'scorer' && user?.canScore === true) ||
+    user?.canScore === true;
+  const canReviewLeave = isAdmin ||
+    (user?.role === 'leave_reviewer' && user?.canReviewLeave === true) ||
+    user?.canReviewLeave === true;
 
   useEffect(() => {
     if (roleParam && ['admin', 'publisher', 'scorer', 'leave_reviewer'].includes(roleParam)) {
@@ -150,63 +164,83 @@ function AdminPage() {
     if (!authenticated || !role) return;
 
     const requestedTab = normalizeTab(tabParam);
-    if (requestedTab) {
-      setActiveTab(requestedTab);
-      return;
-    }
+    const availableTabs: AdminTab[] = [
+      ...(isAdmin ? ['activities' as const] : []),
+      ...(canPublish ? ['review' as const] : []),
+      ...(canScore ? ['scoring' as const] : []),
+      ...(canReviewLeave ? ['leave' as const] : []),
+      ...(isAdmin ? ['users' as const] : []),
+    ];
 
-    if (role === 'scorer') {
-      setActiveTab('scoring');
-    } else if (role === 'publisher') {
-      setActiveTab('review');
-    } else if (role === 'leave_reviewer') {
-      setActiveTab('leave');
-    } else {
-      setActiveTab('activities');
-    }
-  }, [authenticated, role, tabParam]);
+    setActiveTab(
+      requestedTab && availableTabs.includes(requestedTab as AdminTab)
+        ? requestedTab
+        : availableTabs[0] || '',
+    );
+  }, [authenticated, role, tabParam, isAdmin, canPublish, canScore, canReviewLeave]);
 
   const fetchActivities = useCallback(async () => {
     const res = await apiFetch('/api/activities');
     const data = await res.json();
-    if (data.success) setActivities(data.data);
+    if (data.success) {
+      setActivities(data.data);
+      return;
+    }
+    setDataError(data.error || `活动总表加载失败（HTTP ${res.status}）`);
   }, []);
 
   const fetchSubmissions = useCallback(async () => {
     const res = await apiFetch('/api/activities/review');
     const data = await res.json();
-    if (data.success) setSubmissions(data.data);
+    if (data.success) {
+      setSubmissions(data.data);
+      return;
+    }
+    setDataError(data.error || `活动审核数据加载失败（HTTP ${res.status}）`);
   }, []);
 
   const fetchLeaves = useCallback(async () => {
     const res = await apiFetch('/api/leave?role=admin');
     const data = await res.json();
-    if (data.success) setLeaves(data.data);
+    if (data.success) {
+      setLeaves(data.data);
+      return;
+    }
+    setDataError(data.error || `请假审核数据加载失败（HTTP ${res.status}）`);
   }, []);
 
   const fetchScoring = useCallback(async () => {
     const res = await apiFetch('/api/scoring');
     const data = await res.json();
-    if (data.success) setScoringList(data.data);
+    if (data.success) {
+      setScoringList(data.data);
+      return;
+    }
+    setDataError(data.error || `活动赋分数据加载失败（HTTP ${res.status}）`);
   }, []);
 
   const fetchUsers = useCallback(async () => {
     const res = await apiFetch('/api/auth?admin=true');
     const data = await res.json();
-    if (data.success) setUsers(data.data);
+    if (data.success) {
+      setUsers(data.data);
+      return;
+    }
+    setDataError(data.error || `用户管理数据加载失败（HTTP ${res.status}）`);
   }, []);
 
   useEffect(() => {
     if (!authenticated || !role) return;
     setLoading(true);
+    setDataError('');
     Promise.all([
-      role === 'admin' ? fetchActivities() : Promise.resolve(),
-      (role === 'admin' || role === 'publisher') ? fetchSubmissions() : Promise.resolve(),
-      (role === 'admin' || role === 'leave_reviewer') ? fetchLeaves() : Promise.resolve(),
-      (role === 'admin' || role === 'scorer') ? fetchScoring() : Promise.resolve(),
-      role === 'admin' ? fetchUsers() : Promise.resolve(),
+      isAdmin ? fetchActivities() : Promise.resolve(),
+      canPublish ? fetchSubmissions() : Promise.resolve(),
+      canReviewLeave ? fetchLeaves() : Promise.resolve(),
+      canScore ? fetchScoring() : Promise.resolve(),
+      isAdmin ? fetchUsers() : Promise.resolve(),
     ]).finally(() => setLoading(false));
-  }, [authenticated, role, fetchActivities, fetchSubmissions, fetchLeaves, fetchScoring, fetchUsers]);
+  }, [authenticated, role, isAdmin, canPublish, canScore, canReviewLeave, fetchActivities, fetchSubmissions, fetchLeaves, fetchScoring, fetchUsers]);
 
   const handleLoginSuccess = (userData: UserData) => {
     setUser(userData);
@@ -425,7 +459,7 @@ function AdminPage() {
     if (data.success) {
       setReviewNote('');
       fetchSubmissions();
-      if (role === 'admin') fetchActivities();
+      if (isAdmin) fetchActivities();
     } else {
       alert(data.error);
     }
@@ -518,12 +552,6 @@ function AdminPage() {
     );
   }
 
-  // Build tabs based on role and permissions
-  const isAdmin = role === 'admin';
-  const canPublish = isAdmin || user?.canPublish === true;
-  const canScore = isAdmin || user?.canScore === true;
-  const canReviewLeave = isAdmin || user?.canReviewLeave === true;
-
   const tabs = [
     ...(isAdmin ? [{ key: 'activities', label: '活动总表', icon: Table, count: activities.length }] : []),
     ...(canPublish ? [{ key: 'review', label: '活动审核', icon: FileCheck, count: pendingSubmissions.length }] : []),
@@ -538,17 +566,23 @@ function AdminPage() {
     router.push(`/admin?role=${targetRole}&tab=${tabKey}`);
   };
 
+  const activeNavHref = activeTab && TAB_ROLES[activeTab]
+    ? `/admin?role=${TAB_ROLES[activeTab]}&tab=${activeTab}`
+    : undefined;
+  const activeTabLabel = tabs.find(tab => tab.key === activeTab)?.label;
+
   return (
     <DashboardLayout
       user={user}
       onLogout={handleLogout}
+      activeNavHref={activeNavHref}
     >
       <div className="space-y-6">
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">管理后台</h1>
-            <p className="mt-1 text-sm text-gray-500">{ROLE_LABELS[role!]}</p>
+            <p className="mt-1 text-sm text-gray-500">{activeTabLabel || ROLE_LABELS[role!]}</p>
           </div>
         </div>
 
@@ -577,13 +611,26 @@ function AdminPage() {
           </nav>
         </div>
 
+        {dataError && (
+          <div role="alert" className="flex items-center justify-between gap-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span>数据加载失败：{dataError}</span>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="shrink-0 font-medium text-red-800 underline underline-offset-2 hover:text-red-900"
+            >
+              重新加载
+            </button>
+          </div>
+        )}
+
         {/* Main Content */}
         {loading ? (
           <div className="py-20 text-center text-gray-400">加载中...</div>
         ) : (
           <>
             {/* ===== 活动总表 ===== */}
-            {activeTab === 'activities' && role === 'admin' && (
+            {activeTab === 'activities' && isAdmin && (
               <div>
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-2">
@@ -704,7 +751,7 @@ function AdminPage() {
             )}
 
             {/* ===== 活动审核 ===== */}
-            {activeTab === 'review' && (role === 'admin' || role === 'publisher') && (
+            {activeTab === 'review' && canPublish && (
               <div>
                 <h2 className="mb-4 text-base font-semibold text-gray-800">活动审核</h2>
 
@@ -948,7 +995,7 @@ function AdminPage() {
             )}
 
             {/* ===== 活动赋分 ===== */}
-            {activeTab === 'scoring' && (role === 'admin' || role === 'scorer') && (
+            {activeTab === 'scoring' && canScore && (
               <div>
                 <h2 className="mb-4 text-base font-semibold text-gray-800">活动赋分</h2>
 
@@ -1086,7 +1133,7 @@ function AdminPage() {
             )}
 
             {/* Users Tab */}
-            {activeTab === 'users' && (
+            {activeTab === 'users' && isAdmin && (
               <div className="rounded-lg border border-gray-200 bg-white p-4">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-base font-semibold text-gray-800">用户管理</h2>
@@ -1219,6 +1266,219 @@ function AdminPage() {
                                     className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
                                   >
                                     <option value="admin">管理员</option>
+                                    <option value="publisher">发布干事</option>
+                                    <option value="scorer">赋分干事</option>
+                                    <option value="leave_reviewer">请假审核员</option>
+                                    <option value="leader">活动负责人</option>
+                                    <option value="student">学生</option>
+                                  </select>
+                                  <button
+                                    onClick={() => handleDeleteUser(u.id, u.name)}
+                                    className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
+                                  >
+                                    删除
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* 发布干事 */}
+                  {users.filter(u => u.role === 'publisher' && (!userSearch || u.name?.includes(userSearch))).length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                        <span className="rounded bg-blue-100 text-blue-700 px-2 py-0.5 text-xs font-medium">发布干事</span>
+                        <span className="text-gray-500 font-normal">({users.filter(u => u.role === 'publisher').length}人)</span>
+                      </h4>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-200 bg-gray-50">
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">活动审核权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {users.filter(u => u.role === 'publisher' && (!userSearch || u.name?.includes(userSearch))).map((u) => (
+                            <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
+                              <td className="px-3 py-2 text-gray-800">{u.name || '-'}</td>
+                              <td className="px-3 py-2 text-gray-500">{u.studentId || '-'}</td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canPublish || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canPublish', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">
+                                    {u.canPublish ? '已启用' : '已禁用'}
+                                    <span className="text-gray-400 ml-1">(角色权限)</span>
+                                  </span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => handleChangePassword(u.id, u.name)}
+                                    className="text-xs text-blue-600 hover:text-blue-800 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-50"
+                                  >
+                                    改密
+                                  </button>
+                                  <select
+                                    value={u.role}
+                                    onChange={(e) => handleUpdateRole(u.id, e.target.value)}
+                                    className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                  >
+                                    <option value="admin">管理员</option>
+                                    <option value="publisher">发布干事</option>
+                                    <option value="scorer">赋分干事</option>
+                                    <option value="leave_reviewer">请假审核员</option>
+                                    <option value="leader">活动负责人</option>
+                                    <option value="student">学生</option>
+                                  </select>
+                                  <button
+                                    onClick={() => handleDeleteUser(u.id, u.name)}
+                                    className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
+                                  >
+                                    删除
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* 赋分干事 */}
+                  {users.filter(u => u.role === 'scorer' && (!userSearch || u.name?.includes(userSearch))).length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                        <span className="rounded bg-green-100 text-green-700 px-2 py-0.5 text-xs font-medium">赋分干事</span>
+                        <span className="text-gray-500 font-normal">({users.filter(u => u.role === 'scorer').length}人)</span>
+                      </h4>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-200 bg-gray-50">
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">活动赋分权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {users.filter(u => u.role === 'scorer' && (!userSearch || u.name?.includes(userSearch))).map((u) => (
+                            <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
+                              <td className="px-3 py-2 text-gray-800">{u.name || '-'}</td>
+                              <td className="px-3 py-2 text-gray-500">{u.studentId || '-'}</td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canScore || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canScore', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">
+                                    {u.canScore ? '已启用' : '已禁用'}
+                                    <span className="text-gray-400 ml-1">(角色权限)</span>
+                                  </span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => handleChangePassword(u.id, u.name)}
+                                    className="text-xs text-blue-600 hover:text-blue-800 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-50"
+                                  >
+                                    改密
+                                  </button>
+                                  <select
+                                    value={u.role}
+                                    onChange={(e) => handleUpdateRole(u.id, e.target.value)}
+                                    className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                  >
+                                    <option value="admin">管理员</option>
+                                    <option value="publisher">发布干事</option>
+                                    <option value="scorer">赋分干事</option>
+                                    <option value="leave_reviewer">请假审核员</option>
+                                    <option value="leader">活动负责人</option>
+                                    <option value="student">学生</option>
+                                  </select>
+                                  <button
+                                    onClick={() => handleDeleteUser(u.id, u.name)}
+                                    className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
+                                  >
+                                    删除
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* 请假审核员 */}
+                  {users.filter(u => u.role === 'leave_reviewer' && (!userSearch || u.name?.includes(userSearch))).length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                        <span className="rounded bg-orange-100 text-orange-700 px-2 py-0.5 text-xs font-medium">请假审核员</span>
+                        <span className="text-gray-500 font-normal">({users.filter(u => u.role === 'leave_reviewer').length}人)</span>
+                      </h4>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-200 bg-gray-50">
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">请假审核权限</th>
+                            <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {users.filter(u => u.role === 'leave_reviewer' && (!userSearch || u.name?.includes(userSearch))).map((u) => (
+                            <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
+                              <td className="px-3 py-2 text-gray-800">{u.name || '-'}</td>
+                              <td className="px-3 py-2 text-gray-500">{u.studentId || '-'}</td>
+                              <td className="px-3 py-2">
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={u.canReviewLeave || false}
+                                    onChange={(e) => handleUpdatePermission(u.id, 'canReviewLeave', e.target.checked)}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-xs text-gray-600">
+                                    {u.canReviewLeave ? '已启用' : '已禁用'}
+                                    <span className="text-gray-400 ml-1">(角色权限)</span>
+                                  </span>
+                                </label>
+                              </td>
+                              <td className="px-3 py-2">
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => handleChangePassword(u.id, u.name)}
+                                    className="text-xs text-blue-600 hover:text-blue-800 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-50"
+                                  >
+                                    改密
+                                  </button>
+                                  <select
+                                    value={u.role}
+                                    onChange={(e) => handleUpdateRole(u.id, e.target.value)}
+                                    className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                  >
+                                    <option value="admin">管理员</option>
+                                    <option value="publisher">发布干事</option>
+                                    <option value="scorer">赋分干事</option>
+                                    <option value="leave_reviewer">请假审核员</option>
                                     <option value="leader">活动负责人</option>
                                     <option value="student">学生</option>
                                   </select>
@@ -1355,6 +1615,9 @@ function AdminPage() {
                                     className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
                                   >
                                     <option value="admin">管理员</option>
+                                    <option value="publisher">发布干事</option>
+                                    <option value="scorer">赋分干事</option>
+                                    <option value="leave_reviewer">请假审核员</option>
                                     <option value="leader">活动负责人</option>
                                     <option value="student">学生</option>
                                   </select>
@@ -1491,6 +1754,9 @@ function AdminPage() {
                                     className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
                                   >
                                     <option value="admin">管理员</option>
+                                    <option value="publisher">发布干事</option>
+                                    <option value="scorer">赋分干事</option>
+                                    <option value="leave_reviewer">请假审核员</option>
                                     <option value="leader">活动负责人</option>
                                     <option value="student">学生</option>
                                   </select>

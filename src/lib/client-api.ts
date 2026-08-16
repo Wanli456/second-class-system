@@ -21,6 +21,13 @@ export async function refreshCurrentUser<T extends object = Record<string, unkno
       window.localStorage.setItem('user', JSON.stringify(currentUser));
       return currentUser as T;
     }
+
+    // A deployment can invalidate tokens signed with an older session secret.
+    // Do not let stale cached permissions masquerade as a live session.
+    if (response.status === 401) {
+      window.localStorage.removeItem('user');
+      return null;
+    }
   } catch {
     // Keep the cached user available while a transient request fails.
   }

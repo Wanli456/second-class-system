@@ -1,6 +1,38 @@
 import { Pool } from 'pg';
 import { newDb, DataType } from 'pg-mem';
 
+/**
+ * 生产环境安全检查
+ * 防止在生产环境中误用内存数据库导致数据丢失
+ */
+function checkProductionDatabaseConfig() {
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.COZE_PROJECT_ENV === 'PROD';
+  const hasDatabaseUrl = !!process.env.PGDATABASE_URL;
+
+  if (isProduction && !hasDatabaseUrl) {
+    throw new Error(
+      '🚨 生产环境安全检查失败：缺少 PGDATABASE_URL 环境变量。\n' +
+      '在生产环境中使用内存数据库会导致所有数据丢失！\n' +
+      '请确保配置了 PGDATABASE_URL 环境变量后再启动服务。\n' +
+      '本地开发可以忽略此错误。'
+    );
+  }
+}
+
+// 在模块加载时执行安全检查
+try {
+  checkProductionDatabaseConfig();
+} catch (error) {
+  // 在开发环境中给出警告而不是阻止启动
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('⚠️  ' + (error as Error).message);
+    console.warn('继续使用本地测试数据库进行开发...');
+  } else {
+    // 生产环境直接抛出错误
+    throw error;
+  }
+}
+
 const useLocalTestDatabase = !process.env.PGDATABASE_URL;
 
 // Keep the same PostgreSQL API locally so the app can be tested without a paid service.
@@ -120,7 +152,30 @@ if (localDb) {
     );
   `);
 
-  console.log('PGDATABASE_URL 未配置，当前使用本地测试数据库；重启开发服务器后数据会清空。');
+  // Stable accounts for local previews; this database is never used when PGDATABASE_URL is configured.
+  localDb.public.none(`
+    INSERT INTO users (
+      id, username, password, student_id, role,
+      can_publish, can_score, can_review_leave,
+      can_submit_activity, can_view_submission_status, can_submit_scoring
+    ) VALUES
+      ('local-admin', '本地管理员', 'test123', '9000000001', 'admin', false, false, false, false, false, false),
+      ('local-publisher', '本地发布干事', 'test123', '9000000002', 'publisher', true, false, false, false, false, false),
+      ('local-scorer', '本地赋分干事', 'test123', '9000000003', 'scorer', false, true, false, false, false, false),
+      ('local-leave-reviewer', '本地请假审核员', 'test123', '9000000004', 'leave_reviewer', false, false, true, false, false, false),
+      ('local-leader', '本地负责人', 'test123', '9000000005', 'leader', false, false, false, true, true, true),
+      ('local-student', '本地学生', 'test123', '9000000006', 'student', false, false, false, false, false, false);
+  `);
+
+  console.log('🟢 本地开发模式：使用内存测试数据库（重启后数据清空）');
+  console.log('🔑 测试账户：');
+  console.log('   - 管理员：学号 9000000001 / 密码 test123');
+  console.log('   - 发布干事：学号 9000000002 / 密码 test123');
+  console.log('   - 赋分干事：学号 9000000003 / 密码 test123');
+  console.log('   - 请假审核员：学号 9000000004 / 密码 test123');
+  console.log('   - 活动负责人：学号 9000000005 / 密码 test123');
+  console.log('   - 学生：学号 9000000006 / 密码 test123');
+  console.log('💡 如需持久化数据，请配置 PGDATABASE_URL 环境变量');
 }
 
 const pool = useLocalTestDatabase

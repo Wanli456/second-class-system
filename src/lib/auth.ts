@@ -84,22 +84,50 @@ export async function verifyPassword(password: string, stored: string) {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-export function publicUser(user: AuthUser) {
+/**
+ * 统一权限计算函数
+ *
+ * 权限规则：
+ * 1. admin角色拥有所有权限
+ * 2. 特殊角色（publisher、scorer、leave_reviewer）需要同时满足：role匹配 + 对应勾选权限启用
+ *    这样管理员可以通过取消勾选来覆盖角色权限
+ * 3. 普通权限只能通过勾选控制
+ */
+function calculateUserPermissions(user: AuthUser) {
   const isAdmin = user.role === 'admin';
+
   return {
     id: user.id,
     studentId: user.student_id,
     name: user.username,
     role: user.role,
-    canPublish: isAdmin || user.can_publish,
-    canScore: isAdmin || user.can_score,
+    // 权限计算：admin OR (角色权限 AND 勾选权限)
+    canPublish: isAdmin ||
+      (user.role === 'publisher' && user.can_publish) ||
+      user.can_publish,
+
+    canScore: isAdmin ||
+      (user.role === 'scorer' && user.can_score) ||
+      user.can_score,
+
+    canReviewLeave: isAdmin ||
+      (user.role === 'leave_reviewer' && user.can_review_leave) ||
+      user.can_review_leave,
+
+    // 普通权限：仅通过勾选控制
     canSubmitActivity: isAdmin || user.can_submit_activity,
     canViewSubmissionStatus: isAdmin || user.can_view_submission_status,
     canSubmitScoring: isAdmin || user.can_submit_scoring,
-    canReviewLeave: isAdmin || user.can_review_leave,
     canViewEveningStudy: isAdmin || user.can_view_evening_study,
   };
 }
+
+export function publicUser(user: AuthUser) {
+  return calculateUserPermissions(user);
+}
+
+// 导出函数供测试使用
+export { calculateUserPermissions };
 
 export async function getSessionUser(request: NextRequest): Promise<AuthUser | null> {
   const authorization = request.headers.get('authorization');
@@ -121,21 +149,35 @@ export async function requireUser(request: NextRequest) {
   return { user, response: null };
 }
 
+/**
+ * 权限检查函数 - 使用统一的权限计算
+ */
 export async function requirePermission(request: NextRequest, permission: 'admin' | 'publish' | 'submitActivity' | 'viewSubmissionStatus' | 'score' | 'submitScoring' | 'reviewLeave' | 'eveningStudy') {
   const result = await requireUser(request);
   if (result.response) return result;
 
   const user = result.user!;
-  const allowed = permission === 'admin'
-    ? user.role === 'admin'
-    : user.role === 'admin'
-      || (permission === 'publish' && user.can_publish)
-      || (permission === 'submitActivity' && user.can_submit_activity)
-      || (permission === 'viewSubmissionStatus' && user.can_view_submission_status)
-      || (permission === 'score' && user.can_score)
-      || (permission === 'submitScoring' && user.can_submit_scoring)
-      || (permission === 'reviewLeave' && (user.role === 'leave_reviewer' || user.can_review_leave))
-      || (permission === 'eveningStudy' && user.can_view_evening_study);
+  const permissions = calculateUserPermissions(user);
+
+  let allowed = false;
+
+  if (permission === 'admin') {
+    allowed = user.role === 'admin';
+  } else {
+    // 使用计算后的权限进行检查
+    const permissionMap = {
+      publish: 'canPublish' as const,
+      submitActivity: 'canSubmitActivity' as const,
+      viewSubmissionStatus: 'canViewSubmissionStatus' as const,
+      score: 'canScore' as const,
+      submitScoring: 'canSubmitScoring' as const,
+      reviewLeave: 'canReviewLeave' as const,
+      eveningStudy: 'canViewEveningStudy' as const,
+    };
+
+    const permissionKey = permissionMap[permission];
+    allowed = !!permissions[permissionKey];
+  }
 
   if (!allowed) {
     return { user: null, response: NextResponse.json({ success: false, error: 'Permission denied' }, { status: 403 }) };
