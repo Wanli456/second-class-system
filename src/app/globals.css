@@ -108,6 +108,23 @@ html, body {
   background-color: #f5f5f0;
 }
 
+/* 导航链接瞬时反馈优化 - 硬件加速 */
+a[href] {
+  -webkit-tap-highlight-color: transparent;
+  will-change: transform;
+}
+
+a[href]:active {
+  transform: scale(0.98);
+  transition: transform 0.05s ease-out;
+}
+
+/* 按钮瞬时反馈优化 */
+button:active {
+  transform: scale(0.97);
+  transition: transform 0.05s ease-out;
+}
+
 
 .dark {
   --background: oklch(0.145 0 0);
