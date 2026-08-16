@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
+import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { Search, RefreshCw, Pencil } from 'lucide-react';
 import { CATEGORIES, LEVELS, REVIEW_STATUSES, STATUS_COLORS, CATEGORY_COLORS } from '@/lib/types';
 import { apiFetch } from '@/lib/client-api';
@@ -34,13 +35,17 @@ interface CurrentUser {
 }
 
 export default function SubmitStatusPage() {
-  const { user } = useUser();
+  const { user, initialized } = useUser();
   const [keyword, setKeyword] = useState('');
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
 
   const canView = user && (user.role === 'admin' || user.canViewSubmissionStatus === true);
+
+  if (!initialized) {
+    return <AuthLoadingScreen />;
+  }
 
   if (!canView) {
     return (

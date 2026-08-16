@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { GraduationCap, ArrowLeft, Send, Eye, Upload, FileText, LogIn } from 'lucide-react';
 import { CATEGORIES, LEVELS } from '@/lib/types';
 import DashboardLayout from '@/components/DashboardLayout';
+import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 
@@ -124,7 +125,7 @@ export default function SubmitPage() {
 
   // 登录检查 - 等待用户状态初始化完成后再判断
   if (!initialized) {
-    return null; // 初始化中不显示任何内容，避免闪现"需要登录"
+    return <AuthLoadingScreen />;
   }
 
   if (!user) {

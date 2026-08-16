@@ -2,33 +2,25 @@
 
 import { usePathname } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 export function RouteLoadingIndicator() {
   const pathname = usePathname();
-  const { routeChanging } = useUser();
-  const [showLoading, setShowLoading] = useState(false);
+  const { routeChanging, setRouteChanging } = useUser();
+  const previousPathname = useRef(pathname);
 
   useEffect(() => {
-    // 路由切换时显示loading
-    if (routeChanging) {
-      setShowLoading(true);
-      // 最少显示150ms，确保过渡完成
-      const minDisplay = setTimeout(() => {
-        setShowLoading(false);
-      }, 150);
-
-      return () => clearTimeout(minDisplay);
-    } else {
-      setShowLoading(false);
+    if (previousPathname.current !== pathname) {
+      previousPathname.current = pathname;
+      setRouteChanging(false);
     }
-  }, [routeChanging]);
+  }, [pathname, setRouteChanging]);
 
-  if (!showLoading) return null;
+  if (!routeChanging) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 h-1">
-      <div className="h-full w-full bg-teal-600 animate-pulse origin-left"></div>
+    <div className="pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden bg-teal-100" aria-label="页面加载中" role="progressbar">
+      <div className="route-progress-bar h-full w-1/3 bg-teal-600" />
     </div>
   );
 }

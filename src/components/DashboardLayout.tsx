@@ -61,14 +61,14 @@ const NavItemComponent = React.memo(({
   collapsed,
   isMobile,
   onMobileClose,
-  startTransition
+  onNavigate,
 }: {
   item: NavItem;
   isActive: boolean;
   collapsed: boolean;
   isMobile: boolean;
   onMobileClose: () => void;
-  startTransition: React.TransitionStartFunction;
+  onNavigate: (href: string) => void;
 }) => {
   const Icon = item.icon;
 
@@ -76,12 +76,20 @@ const NavItemComponent = React.memo(({
     <li>
       <Link
         href={item.href}
-        onClick={(e) => {
+        onClick={(event) => {
           if (isMobile) onMobileClose();
-          // 使用 startTransition 标记导航为低优先级，保持 UI 响应
-          startTransition(() => {
-            // Link 组件会自动处理导航
-          });
+
+          // Preserve normal browser behaviors such as opening a link in a new tab.
+          if (
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey
+          ) return;
+
+          event.preventDefault();
+          if (!isActive) onNavigate(item.href);
         }}
         className={cn(
           "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
@@ -126,16 +134,27 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
   const isMobile = useIsMobile();
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [collapsed, setCollapsed] = React.useState(false);
-  const [isPending, startTransition] = React.useTransition();
+  const [pendingNavHref, setPendingNavHref] = React.useState<string | null>(null);
+  const [, startTransition] = React.useTransition();
 
   // 使用全局用户状态，避免重复API调用和跨页面卡顿
   const globalUser = useUser();
+  const { setRouteChanging } = globalUser;
   const user = providedUser ?? globalUser.user;
 
   // 使用 Next.js useSearchParams 替代 window.location.search，避免同步阻塞
   const currentSearchParams = React.useMemo(() => searchParams, [searchParams]);
+  const currentRoute = `${pathname}?${currentSearchParams.toString()}`;
+  const previousRoute = React.useRef(currentRoute);
 
-  const canAccessItem = (item: NavItem): boolean => {
+  React.useEffect(() => {
+    if (previousRoute.current === currentRoute) return;
+    previousRoute.current = currentRoute;
+    setPendingNavHref(null);
+    setRouteChanging(false);
+  }, [currentRoute, setRouteChanging]);
+
+  const canAccessItem = React.useCallback((item: NavItem): boolean => {
     if (!user) {
       // Public items
       return !item.requiredRole && !item.requiredPermission;
@@ -151,9 +170,9 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
     }
 
     return roleAllowed && permissionAllowed;
-  };
+  }, [user]);
 
-  const visibleItems = React.useMemo(() => NAV_ITEMS.filter(canAccessItem), [user]);
+  const visibleItems = React.useMemo(() => NAV_ITEMS.filter(canAccessItem), [canAccessItem]);
 
   const getNavGroup = (href: string) => {
     if (href === '/') return '工作台';
@@ -204,6 +223,12 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
   }, [pathname, activeNavHref, currentSearchParams]);
 
   const isItemActive = (href: string) => activeItemsMap.get(href) ?? false;
+
+  const handleNavigation = React.useCallback((href: string) => {
+    setPendingNavHref(href);
+    setRouteChanging(true);
+    startTransition(() => router.push(href));
+  }, [router, setRouteChanging, startTransition]);
 
   const handleLogout = () => {
     localStorage.removeItem('user');
@@ -259,11 +284,11 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
                 )}
                 <NavItemComponent
                   item={item}
-                  isActive={isActive}
+                  isActive={pendingNavHref ? pendingNavHref === item.href : isActive}
                   collapsed={collapsed}
                   isMobile={isMobile}
                   onMobileClose={() => setMobileOpen(false)}
-                  startTransition={startTransition}
+                  onNavigate={handleNavigation}
                 />
               </React.Fragment>
             );

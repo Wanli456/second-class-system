@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import DashboardLayout from "@/components/DashboardLayout";
+import { AuthLoadingScreen } from "@/components/AuthLoadingScreen";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -63,7 +64,7 @@ interface CurrentUser {
 }
 
 export default function EveningStudyPage() {
-  const { user } = useUser();
+  const { user, initialized } = useUser();
   const [searchKeyword, setSearchKeyword] = useState("");
   const [searchType, setSearchType] = useState<SearchType>("class");
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
@@ -85,6 +86,10 @@ export default function EveningStudyPage() {
   }, [searchKeyword, searchType]);
 
   const canView = Boolean(user && (user.role === 'admin' || user.canViewEveningStudy));
+
+  if (!initialized) {
+    return <AuthLoadingScreen />;
+  }
 
   if (!canView) {
     return (
