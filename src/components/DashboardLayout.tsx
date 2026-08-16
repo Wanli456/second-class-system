@@ -43,6 +43,7 @@ interface DashboardLayoutProps {
   user?: User | null;
   onLogout?: () => void;
   title?: string;
+  activeNavHref?: string;
 }
 
 interface NavItem {
@@ -68,7 +69,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: '晚自习查询', href: '/evening-study', icon: Moon, requiredPermission: 'canViewEveningStudy' },
 ];
 
-export function DashboardLayout({ children, user: providedUser, onLogout, title }: DashboardLayoutProps) {
+export function DashboardLayout({ children, user: providedUser, onLogout, title, activeNavHref }: DashboardLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const isMobile = useIsMobile();
@@ -80,7 +81,8 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title 
 
   React.useEffect(() => {
     refreshCurrentUser<User>().then((currentUser) => {
-      if (currentUser) setSyncedUser(currentUser);
+      setSyncedUser(currentUser);
+      if (!currentUser) setStoredUser(null);
     });
   }, []);
 
@@ -99,9 +101,9 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title 
 
   React.useEffect(() => {
     setCurrentQuery(window.location.search);
-  });
+  }, [pathname, activeNavHref]);
 
-  const user = syncedUser ?? providedUser ?? storedUser;
+  const user = providedUser ?? syncedUser ?? storedUser;
 
   const canAccessItem = (item: NavItem): boolean => {
     if (!user) {
@@ -144,6 +146,8 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title 
             : '学生';
 
   const isItemActive = (href: string) => {
+    if (activeNavHref) return href === activeNavHref;
+
     const [itemPath, itemQuery] = href.split('?');
     if (pathname !== itemPath) return false;
     if (!itemQuery) return true;

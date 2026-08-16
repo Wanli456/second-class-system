@@ -88,19 +88,7 @@ export async function GET(request: NextRequest) {
     const userList = await query('SELECT * FROM users ORDER BY created_at DESC');
     return NextResponse.json({
       success: true,
-      data: userList.map((user) => ({
-        id: user.id,
-        studentId: user.student_id,
-        name: user.username,
-        role: user.role,
-        canPublish: user.can_publish,
-        canScore: user.can_score,
-        canSubmitActivity: user.can_submit_activity,
-        canViewSubmissionStatus: user.can_view_submission_status,
-        canSubmitScoring: user.can_submit_scoring,
-        canReviewLeave: user.can_review_leave,
-        canViewEveningStudy: user.can_view_evening_study,
-      })),
+      data: userList.map((user) => publicUser(user)),  // 使用 publicUser 进行统一权限计算
     });
   } catch (error) {
     console.error('Failed to list users:', error);

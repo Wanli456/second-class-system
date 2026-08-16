@@ -3,8 +3,10 @@ import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 
 const getCloudStorageConfig = () => {
-  const url = process.env.SUPABASE_URL?.replace(/\/$/, '');
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Coze injects these values for its managed Supabase-compatible storage.
+  // Keep the generic names as a fallback for local or legacy deployments.
+  const url = (process.env.COZE_SUPABASE_URL || process.env.SUPABASE_URL)?.replace(/\/$/, '');
+  const serviceRoleKey = process.env.COZE_SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'app-files';
 
   if (!url || !serviceRoleKey) return null;
@@ -83,7 +85,7 @@ export async function POST(request: NextRequest) {
     if (process.env.PGDATABASE_URL) {
       return NextResponse.json({
         success: false,
-        error: '公网部署缺少 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY，无法保存上传文件',
+        error: '公网部署缺少扣子文件存储配置，无法保存上传文件',
       }, { status: 500 });
     }
 
