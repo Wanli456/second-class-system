@@ -97,6 +97,13 @@ function AdminPage() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [userSearch, setUserSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [tabLoadingStates, setTabLoadingStates] = useState<Record<AdminTab, boolean>>({
+    activities: false,
+    review: false,
+    scoring: false,
+    leave: false,
+    users: false,
+  });
   const [dataError, setDataError] = useState('');
 
   const [activeTab, setActiveTab] = useState(() => normalizeTab(tabParam));
@@ -229,18 +236,59 @@ function AdminPage() {
     setDataError(data.error || `用户管理数据加载失败（HTTP ${res.status}）`);
   }, []);
 
+  // 按需加载数据，避免页面切换卡顿，使用数据缓存
   useEffect(() => {
     if (!authenticated || !role) return;
-    setLoading(true);
-    setDataError('');
-    Promise.all([
-      isAdmin ? fetchActivities() : Promise.resolve(),
-      canPublish ? fetchSubmissions() : Promise.resolve(),
-      canReviewLeave ? fetchLeaves() : Promise.resolve(),
-      canScore ? fetchScoring() : Promise.resolve(),
-      isAdmin ? fetchUsers() : Promise.resolve(),
-    ]).finally(() => setLoading(false));
-  }, [authenticated, role, isAdmin, canPublish, canScore, canReviewLeave, fetchActivities, fetchSubmissions, fetchLeaves, fetchScoring, fetchUsers]);
+
+    // 根据当前激活的标签页加载数据
+    const loadCurrentTabData = async () => {
+      // 只在数据为空时才显示加载状态，避免页面切换时的闪烁
+      const hasData = (() => {
+        switch (activeTab) {
+          case 'activities': return activities.length > 0;
+          case 'review': return submissions.length > 0;
+          case 'leave': return leaves.length > 0;
+          case 'scoring': return scoringList.length > 0;
+          case 'users': return users.length > 0;
+          default: return false;
+        }
+      })();
+
+      if (!hasData) {
+        setLoading(true);
+      }
+      setTabLoadingStates(prev => ({ ...prev, [activeTab]: true }));
+      setDataError('');
+
+      try {
+        switch (activeTab) {
+          case 'activities':
+            if (isAdmin && activities.length === 0) await fetchActivities();
+            break;
+          case 'review':
+            if (canPublish && submissions.length === 0) await fetchSubmissions();
+            break;
+          case 'leave':
+            if (canReviewLeave && leaves.length === 0) await fetchLeaves();
+            break;
+          case 'scoring':
+            if (canScore && scoringList.length === 0) await fetchScoring();
+            break;
+          case 'users':
+            if (isAdmin && users.length === 0) await fetchUsers();
+            break;
+        }
+      } catch (error) {
+        console.error('数据加载失败:', error);
+        setDataError('数据加载失败，请重试');
+      } finally {
+        setLoading(false);
+        setTabLoadingStates(prev => ({ ...prev, [activeTab]: false }));
+      }
+    };
+
+    loadCurrentTabData();
+  }, [authenticated, role, activeTab, isAdmin, canPublish, canScore, canReviewLeave, fetchActivities, fetchSubmissions, fetchLeaves, fetchScoring, fetchUsers, activities.length, submissions.length, leaves.length, scoringList.length, users.length]);
 
   const handleLoginSuccess = (userData: UserData) => {
     setUser(userData);
@@ -625,8 +673,21 @@ function AdminPage() {
         )}
 
         {/* Main Content */}
-        {loading ? (
-          <div className="py-20 text-center text-gray-400">加载中...</div>
+        {/* 优化：只在首次加载且没有数据时显示全局loading，避免切换时的闪烁 */}
+        {loading && (() => {
+          switch (activeTab) {
+            case 'activities': return activities.length === 0;
+            case 'review': return submissions.length === 0;
+            case 'leave': return leaves.length === 0;
+            case 'scoring': return scoringList.length === 0;
+            case 'users': return users.length === 0;
+            default: return true;
+          }
+        })() ? (
+          <div className="py-20 text-center text-gray-400">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent"></div>
+            <p className="mt-4">加载中...</p>
+          </div>
         ) : (
           <>
             {/* ===== 活动总表 ===== */}
