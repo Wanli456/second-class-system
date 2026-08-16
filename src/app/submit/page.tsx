@@ -122,18 +122,7 @@ export default function SubmitPage() {
     }
   };
 
-  // 登录检查
-  if (userLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-solid border-teal-600 border-r-transparent"></div>
-          <p className="text-gray-500">加载中...</p>
-        </div>
-      </div>
-    );
-  }
-
+  // 登录检查（移除加载状态遮挡，直接判断用户）
   if (!user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0] p-4">

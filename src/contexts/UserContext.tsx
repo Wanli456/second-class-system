@@ -31,8 +31,18 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  // 同步从 localStorage 初始化用户状态，避免页面切换时的加载闪烁
+  const [user, setUser] = useState<User | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const savedUser = localStorage.getItem('user');
+      return savedUser ? JSON.parse(savedUser) as User : null;
+    } catch {
+      localStorage.removeItem('user');
+      return null;
+    }
+  });
+  const [loading, setLoading] = useState(false);
   const [routeChanging, setRouteChanging] = useState(false);
 
   const refreshUser = async () => {
@@ -48,17 +58,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // 从localStorage初始化用户状态
-    try {
-      const savedUser = localStorage.getItem('user');
-      if (savedUser) {
-        setUser(JSON.parse(savedUser) as User);
-      }
-    } catch {
-      localStorage.removeItem('user');
-    }
-    setLoading(false);
-
     // 设置定时刷新（每5分钟刷新一次用户信息）
     const interval = setInterval(() => {
       refreshUser();

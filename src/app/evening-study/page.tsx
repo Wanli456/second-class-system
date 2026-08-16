@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { refreshCurrentUser } from "@/lib/client-api";
-import { 
+import { useUser } from "@/contexts/UserContext";
+import {
   Search, Calendar, User, Users, FileText,
   AlertCircle, CheckCircle2, XCircle, Clock, RefreshCw, GraduationCap
 } from "lucide-react";
@@ -63,8 +63,7 @@ interface CurrentUser {
 }
 
 export default function EveningStudyPage() {
-  const [user, setUser] = useState<CurrentUser | null>(null);
-  const [checking, setChecking] = useState(true);
+  const { user } = useUser();
   const [searchKeyword, setSearchKeyword] = useState("");
   const [searchType, setSearchType] = useState<SearchType>("class");
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
@@ -75,10 +74,6 @@ export default function EveningStudyPage() {
   const [todayCount, setTodayCount] = useState<number>(0);
 
   useEffect(() => {
-    refreshCurrentUser<CurrentUser>().then((currentUser) => {
-      if (currentUser) setUser(currentUser);
-    });
-    setChecking(false);
     const dateStr = new Date().toISOString().split("T")[0];
     setToday(dateStr);
   }, []);
@@ -90,10 +85,6 @@ export default function EveningStudyPage() {
   }, [searchKeyword, searchType]);
 
   const canView = Boolean(user && (user.role === 'admin' || user.canViewEveningStudy));
-
-  if (checking) {
-    return <div className="flex min-h-screen items-center justify-center bg-gray-50 text-sm text-gray-500">加载中...</div>;
-  }
 
   if (!canView) {
     return (
