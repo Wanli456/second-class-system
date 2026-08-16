@@ -54,6 +54,56 @@ interface NavItem {
   requiredPermission?: keyof User;
 }
 
+// 独立的导航项组件，使用 React.memo 避免不必要的重新渲染
+const NavItemComponent = React.memo(({
+  item,
+  isActive,
+  collapsed,
+  isMobile,
+  onMobileClose,
+  startTransition
+}: {
+  item: NavItem;
+  isActive: boolean;
+  collapsed: boolean;
+  isMobile: boolean;
+  onMobileClose: () => void;
+  startTransition: React.TransitionStartFunction;
+}) => {
+  const Icon = item.icon;
+
+  return (
+    <li>
+      <Link
+        href={item.href}
+        onClick={(e) => {
+          if (isMobile) onMobileClose();
+          // 使用 startTransition 标记导航为低优先级，保持 UI 响应
+          startTransition(() => {
+            // Link 组件会自动处理导航
+          });
+        }}
+        className={cn(
+          "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+          isActive
+            ? "bg-slate-900 text-white shadow-sm"
+            : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+          collapsed && "justify-center px-2"
+        )}
+        title={collapsed ? item.label : undefined}
+      >
+        <Icon className={cn(
+          "size-4 flex-shrink-0",
+          isActive ? "text-teal-300" : "text-slate-400 group-hover:text-slate-700",
+        )} />
+        {!collapsed && <span>{item.label}</span>}
+      </Link>
+    </li>
+  );
+});
+
+NavItemComponent.displayName = 'NavItemComponent';
+
 const NAV_ITEMS: NavItem[] = [
   { label: '首页', href: '/', icon: LayoutDashboard },
   { label: '活动总表', href: '/admin?role=admin&tab=activities', icon: ClipboardList, requiredRole: 'admin' },
@@ -76,6 +126,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
   const isMobile = useIsMobile();
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [collapsed, setCollapsed] = React.useState(false);
+  const [isPending, startTransition] = React.useTransition();
 
   // 使用全局用户状态，避免重复API调用和跨页面卡顿
   const globalUser = useUser();
@@ -161,7 +212,9 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
     } else {
       globalUser.setUser(null);
     }
-    router.push('/');
+    startTransition(() => {
+      router.push('/');
+    });
   };
 
   const sidebarContent = (
@@ -196,7 +249,6 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
         </div>
         <ul className="space-y-1">
           {visibleItems.map((item, index) => {
-            const Icon = item.icon;
             const isActive = isItemActive(item.href);
             return (
               <React.Fragment key={item.href}>
@@ -205,26 +257,14 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
                     {getNavGroup(item.href)}
                   </li>
                 )}
-                <li>
-                  <Link
-                    href={item.href}
-                    onClick={() => isMobile && setMobileOpen(false)}
-                    className={cn(
-                      "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-slate-900 text-white shadow-sm"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
-                      collapsed && "justify-center px-2"
-                    )}
-                    title={collapsed ? item.label : undefined}
-                  >
-                    <Icon className={cn(
-                      "size-4 flex-shrink-0",
-                      isActive ? "text-teal-300" : "text-slate-400 group-hover:text-slate-700",
-                    )} />
-                    {!collapsed && <span>{item.label}</span>}
-                  </Link>
-                </li>
+                <NavItemComponent
+                  item={item}
+                  isActive={isActive}
+                  collapsed={collapsed}
+                  isMobile={isMobile}
+                  onMobileClose={() => setMobileOpen(false)}
+                  startTransition={startTransition}
+                />
               </React.Fragment>
             );
           })}
