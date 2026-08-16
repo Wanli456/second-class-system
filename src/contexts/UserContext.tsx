@@ -22,6 +22,7 @@ interface User {
 interface UserContextType {
   user: User | null;
   loading: boolean;
+  initialized: boolean;  // 新增：标记用户状态是否已初始化
   routeChanging: boolean;
   refreshUser: () => Promise<void>;
   setUser: (user: User | null) => void;
@@ -43,7 +44,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   });
   const [loading, setLoading] = useState(false);
+  const [initialized, setInitialized] = useState(typeof window !== 'undefined'); // 客户端立即标记为已初始化
   const [routeChanging, setRouteChanging] = useState(false);
+
+  // SSR 情况下，在客户端挂载后立即标记为已初始化
+  useEffect(() => {
+    setInitialized(true);
+  }, []);
 
   const refreshUser = async () => {
     setLoading(true);
@@ -67,7 +74,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <UserContext.Provider value={{ user, loading, routeChanging, refreshUser, setUser, setRouteChanging }}>
+    <UserContext.Provider value={{ user, loading, initialized, routeChanging, refreshUser, setUser, setRouteChanging }}>
       {children}
     </UserContext.Provider>
   );

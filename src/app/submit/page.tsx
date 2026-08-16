@@ -12,7 +12,7 @@ import { useUser } from '@/contexts/UserContext';
 export default function SubmitPage() {
   const router = useRouter();
   // 使用全局用户状态，避免重复API调用
-  const { user, loading: userLoading } = useUser();
+  const { user, initialized } = useUser();
   const [form, setForm] = useState({
     full_name: '',
     start_time: '',
@@ -122,9 +122,9 @@ export default function SubmitPage() {
     }
   };
 
-  // 登录检查 - 等待用户状态加载完成后再判断
-  if (userLoading) {
-    return null; // 加载中不显示任何内容，避免闪现"需要登录"
+  // 登录检查 - 等待用户状态初始化完成后再判断
+  if (!initialized) {
+    return null; // 初始化中不显示任何内容，避免闪现"需要登录"
   }
 
   if (!user) {
