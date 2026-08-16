@@ -292,7 +292,7 @@ function AdminPage() {
     };
 
     loadCurrentTabData();
-  }, [authenticated, role, activeTab, isAdmin, canPublish, canScore, canReviewLeave, fetchActivities, fetchSubmissions, fetchLeaves, fetchScoring, fetchUsers, activities.length, submissions.length, leaves.length, scoringList.length, users.length]);
+  }, [authenticated, role, activeTab, isAdmin, canPublish, canScore, canReviewLeave, fetchActivities, fetchSubmissions, fetchLeaves, fetchScoring, fetchUsers]);
 
   const handleLoginSuccess = (userData: UserData) => {
     setUser(userData);
@@ -599,8 +599,8 @@ function AdminPage() {
 
   const handleTabChange = (tabKey: string) => {
     setActiveTab(tabKey);
-    const targetRole = TAB_ROLES[tabKey] || role || 'admin';
-    router.push(`/admin?role=${targetRole}&tab=${tabKey}`);
+    // 不要使用 router.push()，避免触发整页重新渲染
+    // 只在组件内部切换标签，保持 SPA 的流畅体验
   };
 
   const activeNavHref = activeTab && TAB_ROLES[activeTab]
