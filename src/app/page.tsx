@@ -8,7 +8,8 @@ import {
 } from 'lucide-react';
 import { NotificationBell } from '@/components/NotificationBell';
 import { DashboardLayout } from '@/components/DashboardLayout';
-import { apiFetch, refreshCurrentUser } from '@/lib/client-api';
+import { apiFetch } from '@/lib/client-api';
+import { useUser } from '@/contexts/UserContext';
 
 interface User {
   id: string;
@@ -40,7 +41,8 @@ function getLeaderButtonState(user: User | null): 'active' | 'grayed' | 'locked'
 }
 
 export default function Home() {
-  const [user, setUser] = useState<User | null>(null);
+  const { user: globalUser, setUser: setGlobalUser } = useUser();
+  const [user, setUser] = useState<User | null>(globalUser);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
@@ -48,31 +50,36 @@ export default function Home() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
 
+  // 同步全局用户状态到本地状态
   useEffect(() => {
-    refreshCurrentUser<User>().then((parsed) => {
-      if (!parsed) return;
+    if (globalUser) {
       // 管理员自动拥有所有权限
-      if (parsed.role === 'admin') {
-        parsed.canPublish = true;
-        parsed.canScore = true;
-        parsed.canSubmitActivity = true;
-        parsed.canViewSubmissionStatus = true;
-        parsed.canSubmitScoring = true;
-        parsed.canReviewLeave = true;
-        parsed.canViewEveningStudy = true;
+      const enrichedUser = { ...globalUser };
+      if (globalUser.role === 'admin') {
+        enrichedUser.canPublish = true;
+        enrichedUser.canScore = true;
+        enrichedUser.canSubmitActivity = true;
+        enrichedUser.canViewSubmissionStatus = true;
+        enrichedUser.canSubmitScoring = true;
+        enrichedUser.canReviewLeave = true;
+        enrichedUser.canViewEveningStudy = true;
       }
-      setUser(parsed);
-    });
-  }, []);
+      setUser(enrichedUser);
+    } else {
+      setUser(null);
+    }
+  }, [globalUser]);
 
   const handleLoginSuccess = (u: User) => {
     setUser(u);
+    setGlobalUser(u);
     setShowLoginModal(false);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('user');
     setUser(null);
+    setGlobalUser(null);
   };
 
   const handleChangePassword = async () => {
