@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { refreshCurrentUser } from '@/lib/client-api';
+import { useUser } from '@/contexts/UserContext';
 
 interface User {
   id: string;
@@ -76,34 +76,14 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [collapsed, setCollapsed] = React.useState(false);
   const [currentQuery, setCurrentQuery] = React.useState('');
-  const [storedUser, setStoredUser] = React.useState<User | null>(null);
-  const [syncedUser, setSyncedUser] = React.useState<User | null>(null);
 
-  React.useEffect(() => {
-    refreshCurrentUser<User>().then((currentUser) => {
-      setSyncedUser(currentUser);
-      if (!currentUser) setStoredUser(null);
-    });
-  }, []);
-
-  React.useEffect(() => {
-    if (providedUser) return;
-
-    const savedUser = localStorage.getItem('user');
-    if (!savedUser) return;
-
-    try {
-      setStoredUser(JSON.parse(savedUser) as User);
-    } catch {
-      localStorage.removeItem('user');
-    }
-  }, [providedUser]);
+  // 使用全局用户状态，避免重复API调用和跨页面卡顿
+  const globalUser = useUser();
+  const user = providedUser ?? globalUser.user;
 
   React.useEffect(() => {
     setCurrentQuery(window.location.search);
   }, [pathname, activeNavHref]);
-
-  const user = providedUser ?? syncedUser ?? storedUser;
 
   const canAccessItem = (item: NavItem): boolean => {
     if (!user) {
@@ -164,7 +144,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
     if (onLogout) {
       onLogout();
     } else {
-      setStoredUser(null);
+      globalUser.setUser(null);
     }
     router.push('/');
   };

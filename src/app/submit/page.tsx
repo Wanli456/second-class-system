@@ -6,12 +6,13 @@ import { useRouter } from 'next/navigation';
 import { GraduationCap, ArrowLeft, Send, Eye, Upload, FileText, LogIn } from 'lucide-react';
 import { CATEGORIES, LEVELS } from '@/lib/types';
 import DashboardLayout from '@/components/DashboardLayout';
-import { apiFetch, refreshCurrentUser } from '@/lib/client-api';
+import { apiFetch } from '@/lib/client-api';
+import { useUser } from '@/contexts/UserContext';
 
 export default function SubmitPage() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [checking, setChecking] = useState(true);
+  // 使用全局用户状态，避免重复API调用
+  const { user, loading: userLoading } = useUser();
   const [form, setForm] = useState({
     full_name: '',
     start_time: '',
@@ -29,11 +30,7 @@ export default function SubmitPage() {
   const [submissionId, setSubmissionId] = useState<string | null>(null);
 
   useEffect(() => {
-    refreshCurrentUser().then((currentUser) => {
-      if (currentUser) setUser(currentUser);
-    });
     setSubmissionId(new URLSearchParams(window.location.search).get('submissionId'));
-    setChecking(false);
   }, []);
 
   useEffect(() => {
@@ -126,10 +123,13 @@ export default function SubmitPage() {
   };
 
   // 登录检查
-  if (checking) {
+  if (userLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0]">
-        <p className="text-gray-500">加载中...</p>
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-solid border-teal-600 border-r-transparent"></div>
+          <p className="text-gray-500">加载中...</p>
+        </div>
       </div>
     );
   }
