@@ -7,7 +7,19 @@ import { query, queryOne, withTransaction } from '@/storage/database/supabase-cl
 const REVIEW_STATUSES = ['待审核', '已通过', '已驳回'];
 
 function dateCondition(index: number) {
-  return `(start_time::date=$${index} OR (start_time IS NULL AND created_at::date=$${index}))`;
+  const dateParam = `$${index}`;
+  // datetime-local values are submitted as UTC ISO strings but the database
+  // columns are TIMESTAMP without time zone. Convert the selected China day
+  // to its UTC-stored range before checking whether a leave overlaps it.
+  return `(
+    (
+      start_time IS NOT NULL
+      AND end_time IS NOT NULL
+      AND start_time < ((${dateParam}::timestamp + INTERVAL '1 day') - INTERVAL '8 hours')
+      AND end_time > (${dateParam}::timestamp - INTERVAL '8 hours')
+    )
+    OR (start_time IS NULL AND (created_at + INTERVAL '8 hours')::date = ${dateParam})
+  )`;
 }
 
 function validTimes(startTime: unknown, endTime: unknown) {

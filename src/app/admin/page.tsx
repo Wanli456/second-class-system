@@ -1873,6 +1873,24 @@ function UserManagement({
     { key: 'canViewSubmissionStatus', label: '提交状态' },
     { key: 'canStartGroupLeave', label: '班级集体请假发起' },
   ];
+  const roleTextStyles: Record<string, string> = {
+    admin: 'text-red-600',
+    leader: 'text-emerald-600',
+    student: 'text-gray-600',
+  };
+  const roleTextColors: Record<string, string> = {
+    admin: '#dc2626',
+    leader: '#059669',
+    student: '#4b5563',
+  };
+
+  const getEnabledPermissions = (item: UserData) => permissions.filter((permission) => item.role === 'admin' || item[permission.key]);
+
+  const getPermissionSummary = (item: UserData) => {
+    if (item.role === 'admin') return '全部权限';
+    const enabled = getEnabledPermissions(item).map((permission) => permission.label);
+    return enabled.length ? enabled.join('、') : '未开通功能权限';
+  };
 
   const loadRoster = async () => {
     const className = rosterClassName.trim();
@@ -2040,6 +2058,7 @@ function UserManagement({
                 <th className="px-3 py-2 text-left font-medium text-gray-600">角色</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-600">部门</th>
                 <th className="px-3 py-2 text-left font-medium text-gray-600">班级</th>
+                <th className="min-w-64 px-3 py-2 text-left font-medium text-gray-600">权限总览</th>
                 {permissions.map(permission => <th key={permission.key} className="px-3 py-2 text-left font-medium text-gray-600">{permission.label}</th>)}
                 <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
               </tr>
@@ -2049,14 +2068,15 @@ function UserManagement({
                 <tr key={item.id} className="hover:bg-gray-50">
                   <td className="px-3 py-2 text-gray-800">{item.name || '-'}</td>
                   <td className="px-3 py-2 text-gray-500">{item.studentId || '-'}</td>
-                  <td className="px-3 py-2"><select value={item.role} onChange={(event) => void onUpdateRole(item.id, event.target.value)} className="rounded border border-gray-200 bg-white px-2 py-1 text-xs"><option value="admin">管理员</option><option value="leader">部门负责人</option><option value="student">学生</option></select></td>
+                  <td className="px-3 py-2"><select aria-label={`${item.name}的角色`} value={item.role} onChange={(event) => void onUpdateRole(item.id, event.target.value)} className={`rounded border border-gray-200 bg-white px-2 py-1 text-xs ${roleTextStyles[item.role] || roleTextStyles.student}`}><option value="admin" style={{ color: roleTextColors.admin }}>管理员</option><option value="leader" style={{ color: roleTextColors.leader }}>部门负责人</option><option value="student" style={{ color: roleTextColors.student }}>学生</option></select></td>
                   <td className="px-3 py-2"><select value={item.department || ''} onChange={(event) => void onUpdateDepartment(item.id, event.target.value || null)} className="rounded border border-gray-200 bg-white px-2 py-1 text-xs"><option value="">未设置</option>{departments.map((department) => <option key={department.id} value={department.name}>{department.name}</option>)}</select></td>
                   <td className="px-3 py-2 text-xs text-gray-600">{item.className || '-'}</td>
+                  <td className="max-w-96 px-3 py-2 align-top"><div title={getPermissionSummary(item)}><div className="mb-1 text-[11px] font-medium text-gray-500">{item.role === 'admin' ? '系统全部权限' : `已开通 ${getEnabledPermissions(item).length} 项`}</div><div className="flex flex-wrap gap-1">{item.role === 'admin' ? <span className="rounded border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">全部权限</span> : getEnabledPermissions(item).map((permission) => <span key={permission.key} className="rounded border border-blue-100 bg-blue-50 px-2 py-0.5 text-xs text-blue-700">{permission.label}</span>)}{item.role !== 'admin' && !getEnabledPermissions(item).length && <span className="text-xs text-gray-400">未开通功能权限</span>}</div></div></td>
                   {permissions.map(permission => <td key={permission.key} className="px-3 py-2"><label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap"><input type="checkbox" aria-label={`${item.name}的${permission.label}权限`} checked={item[permission.key]} disabled={item.role === 'admin'} onChange={(event) => void onUpdatePermission(item.id, permission.key, event.target.checked)} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed" /><span className="text-xs text-gray-600">{item[permission.key] ? '已开启' : '未开启'}</span></label></td>)}
                   <td className="px-3 py-2"><div className="flex gap-1"><button onClick={() => void onChangePassword(item.id, item.name)} className="rounded border border-blue-200 px-1.5 py-0.5 text-xs text-blue-600 hover:bg-blue-50">改密</button><button onClick={() => setDeleteTarget({ id: item.id, name: item.name })} className="rounded border border-red-200 px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50">删除</button></div></td>
                 </tr>
               ))}
-              {filteredUsers.length === 0 && <tr><td colSpan={14} className="px-3 py-8 text-center text-gray-400">没有匹配用户</td></tr>}
+              {filteredUsers.length === 0 && <tr><td colSpan={15} className="px-3 py-8 text-center text-gray-400">没有匹配用户</td></tr>}
             </tbody>
           </table>
         </div>
