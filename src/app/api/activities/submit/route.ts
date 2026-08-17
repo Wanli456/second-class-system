@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/storage/database/supabase-client';
 import { requirePermission } from '@/lib/auth';
-import { getActivityScopes, hasAnyScopePermission, normalizeIds, normalizeScopes, serializeIds, serializeScopes, scopeMatchesUser, validateHostingScope } from '@/lib/business-rules';
+import { canSelectActivityLeader } from '@/lib/activity-leader-rules';
+import { getActivityScopes, hasAnyScopePermission, normalizeIds, normalizeScopes, serializeIds, serializeScopes, validateHostingScope } from '@/lib/business-rules';
+
+class ActivityLeaderValidationError extends Error {}
 
 function scopeFromUser(user: { department?: string | null; class_name?: string | null }) {
   return user.department ? { scopeType: 'department' as const, scopeName: user.department } : { scopeType: 'class' as const, scopeName: user.class_name || null };
@@ -17,8 +20,14 @@ async function resolveLeaders(ids: string[], fallbackName: string, fallbackPhone
     department: string | null;
     class_name: string | null;
     role: string;
-  }>(`SELECT id, username, student_id, department, class_name FROM users WHERE id IN (${placeholders})`, leaderIds);
-  if (users.length !== leaderIds.length || users.some((leader) => !scopeMatchesUser(leader, scopes))) throw new Error('负责人必须来自活动所属部门或班级');
+    can_submit_activity: boolean;
+    can_submit_scoring: boolean;
+  }>(`SELECT id, username, student_id, department, class_name, role, can_submit_activity, can_submit_scoring FROM users WHERE id IN (${placeholders})`, leaderIds);
+  if (users.length !== leaderIds.length || users.some((leader) => !canSelectActivityLeader(leader, scopes))) {
+    throw new ActivityLeaderValidationError(scopes[0]?.type === 'department'
+      ? '部门活动负责人必须是所属部门的部门负责人或管理员'
+      : '班级活动负责人必须来自主办班级或联办班级，并拥有活动提交或赋分材料权限');
+  }
   const first = users[0];
   return { ids: users.map((leader) => leader.id), name: users.map((leader) => leader.username).join('、') || fallbackName, phone: first.student_id || fallbackPhone };
 }
@@ -100,6 +109,9 @@ export async function POST(request: NextRequest) {
     const data = await queryOne(`INSERT INTO activity_submissions (full_name,start_time,end_time,category,level,plan_file_url,plan_file_name,record_file_url,record_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,leader_ids,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,review_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'待审核') RETURNING *`, [full_name, start_time, end_time, category, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader.name, leader.phone, firstScope.type, firstScope.name, serializeScopes(scopes), serializeIds(leader.ids), user.id, user.username, user.student_id]);
     return NextResponse.json({ success: true, data });
   } catch (err) {
+    if (err instanceof ActivityLeaderValidationError) {
+      return NextResponse.json({ success: false, error: err.message }, { status: 400 });
+    }
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '提交失败' }, { status: 500 });
   }
 }

@@ -44,7 +44,7 @@ async function createTestUsers() {
   };
   await query(
     `INSERT INTO users (id,username,password,student_id,role,can_submit_activity,can_view_submission_status,can_submit_scoring,department,class_name)
-     VALUES ($1,$2,'test123',$3,'student',true,true,true,'团委','计算机2101'),
+     VALUES ($1,$2,'test123',$3,'leader',true,true,true,'团委','计算机2101'),
             ($4,$5,'test123',$6,'student',true,true,true,'学生会','计算机2101'),
             ($7,$8,'test123',$9,'student',false,true,true,'宣传部','计算机2101')`,
     [users.crossLeader, '团委负责人', `910${suffix}1`, users.submitter, '联办活动提交人', `910${suffix}2`, users.outsider, '无关部门提交人', `910${suffix}3`],
@@ -95,6 +95,13 @@ async function runActivityWorkflow(users: { crossLeader: string; submitter: stri
     scope_names: [{ type: 'department', name: '学生会' }, { type: 'class', name: '计算机2101' }],
   }));
   await expectStatus(invalidMixed, 400, '部门和班级不能混合联办');
+
+  const invalidLeader = await postSubmission(request('/api/activities/submit', 'POST', users.submitter, {
+    ...base,
+    full_name: `ECC-负责人范围校验-${suffix}`,
+    leader_ids: [users.outsider],
+  }));
+  await expectStatus(invalidLeader, 400, '不符合所属范围的负责人应被拒绝');
 
   const studentDenied = await postSubmission(request('/api/activities/submit', 'POST', 'local-student', {
     ...base,

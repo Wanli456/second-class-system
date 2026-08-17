@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
     if (searchParams.get('directory') === 'true') {
       const auth = await requireUser(request);
       if (auth.response) return auth.response;
-      const data = await query('SELECT id,username,student_id,role,department,class_name FROM users ORDER BY username');
+      const data = await query('SELECT id,username,student_id,role,can_submit_activity,can_submit_scoring,department,class_name FROM users ORDER BY username');
       return NextResponse.json({ success: true, data });
     }
     const auth = await requirePermission(request, 'admin');
