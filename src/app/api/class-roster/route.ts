@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission, requireUser } from '@/lib/auth';
-import { query, queryOne } from '@/storage/database/supabase-client';
+import { ensureDatabaseSchema, query, queryOne } from '@/storage/database/supabase-client';
 
 type NormalizedRosterStudent = { studentId: string; studentName: string };
 
@@ -13,14 +13,15 @@ function normalizeStudent(value: unknown): NormalizedRosterStudent | null {
 }
 
 export async function GET(request: NextRequest) {
+  await ensureDatabaseSchema();
   const auth = await requireUser(request);
   if (auth.response) return auth.response;
   const searchParams = new URL(request.url).searchParams;
   if (searchParams.get('classes') === 'true') {
     const rows = await query<{ class_name: string }>(
-      `SELECT class_name FROM class_roster WHERE TRIM(class_name) <> ''
+      `SELECT class_name FROM class_roster WHERE class_name <> ''
        UNION
-       SELECT class_name FROM users WHERE class_name IS NOT NULL AND TRIM(class_name) <> ''
+       SELECT class_name FROM users WHERE class_name IS NOT NULL AND class_name <> ''
        ORDER BY class_name`,
     );
     return NextResponse.json({ success: true, data: rows.map((row) => row.class_name) });
@@ -34,6 +35,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureDatabaseSchema();
     const auth = await requirePermission(request, 'admin');
     if (auth.response) return auth.response;
     const body = await request.json();
@@ -65,6 +67,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    await ensureDatabaseSchema();
     const auth = await requirePermission(request, 'admin');
     if (auth.response) return auth.response;
     const body = await request.json();
@@ -80,6 +83,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  await ensureDatabaseSchema();
   const auth = await requirePermission(request, 'admin');
   if (auth.response) return auth.response;
   const id = new URL(request.url).searchParams.get('id');

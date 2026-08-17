@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query, queryOne } from '@/storage/database/supabase-client';
+import { ensureDatabaseSchema, query, queryOne } from '@/storage/database/supabase-client';
 import {
   clearSessionCookie,
   createSessionToken,
@@ -60,6 +60,7 @@ export async function PUT(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    await ensureDatabaseSchema();
     const { searchParams } = new URL(request.url);
     if (searchParams.get('me') === 'true') {
       const auth = await requireUser(request);

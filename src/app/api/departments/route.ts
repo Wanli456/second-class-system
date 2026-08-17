@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission, requireUser } from '@/lib/auth';
-import { ensureDepartmentsTable, query, queryOne } from '@/storage/database/supabase-client';
+import { ensureDatabaseSchema, query, queryOne } from '@/storage/database/supabase-client';
 
 function normalizeName(value: unknown) {
   return String(value ?? '').trim();
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   const auth = await requireUser(request);
   if (auth.response) return auth.response;
   try {
-    await ensureDepartmentsTable();
+    await ensureDatabaseSchema();
   } catch (error) {
     return schemaError(error);
   }
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
   const auth = await requirePermission(request, 'admin');
   if (auth.response) return auth.response;
   try {
-    await ensureDepartmentsTable();
+    await ensureDatabaseSchema();
   } catch (error) {
     return schemaError(error);
   }
@@ -64,7 +64,7 @@ export async function DELETE(request: NextRequest) {
   const auth = await requirePermission(request, 'admin');
   if (auth.response) return auth.response;
   try {
-    await ensureDepartmentsTable();
+    await ensureDatabaseSchema();
   } catch (error) {
     return schemaError(error);
   }
