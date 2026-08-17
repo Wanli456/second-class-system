@@ -6,12 +6,20 @@ export interface Activity {
   category: '德' | '智' | '体' | '美' | '劳';
   level: '院系级' | '校级';
   plan_file_url: string | null;
+  plan_file_name?: string | null;
   record_file_url: string | null;
+  record_file_name?: string | null;
   leader_name: string;
   leader_phone: string;
+  scope_names?: string | null;
+  scope_type?: 'department' | 'class' | null;
+  scope_name?: string | null;
+  activity_submitter_name?: string | null;
+  activity_submitter_student_id?: string | null;
   status: '正常活动' | '活动取消';
   scoring_status: '待赋分' | '已赋分';
   scoring_table_url: string | null;
+  scoring_table_file_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -24,9 +32,16 @@ export interface ActivitySubmission {
   category: '德' | '智' | '体' | '美' | '劳';
   level: '院系级' | '校级';
   plan_file_url: string | null;
+  plan_file_name?: string | null;
   record_file_url: string | null;
+  record_file_name?: string | null;
   leader_name: string;
   leader_phone: string;
+  scope_names?: string | null;
+  scope_type?: 'department' | 'class' | null;
+  scope_name?: string | null;
+  activity_submitter_name?: string | null;
+  activity_submitter_student_id?: string | null;
   review_status: '待审核' | '已通过' | '已驳回';
   review_note: string | null;
   created_at: string;
@@ -40,7 +55,15 @@ export interface LeaveRequest {
   student_name: string;
   leave_type: '事假' | '病假' | '活动公假';
   leave_image_url: string | null;
+  leave_image_name?: string | null;
+  applicant_name?: string | null;
+  applicant_student_id?: string | null;
   activity_name: string | null;
+  activity_id?: string | null;
+  group_id?: string | null;
+  applicant_user_id?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
   review_status: '待审核' | '已通过' | '已驳回';
   review_note: string | null;
   created_at: string;
@@ -84,4 +107,5 @@ export interface UserData {
   canSubmitScoring: boolean;
   canReviewLeave: boolean;
   canViewEveningStudy: boolean;
+  canStartGroupLeave: boolean;
 }

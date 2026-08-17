@@ -1,4 +1,4 @@
-import { pgTable, serial, timestamp, varchar, text, index } from "drizzle-orm/pg-core"
+import { pgTable, serial, timestamp, varchar, text, index, uniqueIndex } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 export const healthCheck = pgTable("health_check", {
@@ -17,12 +17,23 @@ export const activities = pgTable(
     category: varchar("category", { length: 10 }).notNull(), // 德智体美劳
     level: varchar("level", { length: 20 }).notNull(), // 院系级/校级
     plan_file_url: text("plan_file_url"),
+    plan_file_name: text("plan_file_name"),
     record_file_url: text("record_file_url"),
+    record_file_name: text("record_file_name"),
     leader_name: varchar("leader_name", { length: 50 }).notNull(),
     leader_phone: varchar("leader_phone", { length: 20 }).notNull(),
+    scope_type: varchar("scope_type", { length: 20 }).default("department"),
+    scope_name: varchar("scope_name", { length: 100 }),
+    scope_names: text("scope_names"),
+    leader_ids: text("leader_ids"),
+    activity_submitter_id: varchar("activity_submitter_id", { length: 36 }),
+    activity_submitter_name: varchar("activity_submitter_name", { length: 50 }),
+    activity_submitter_student_id: varchar("activity_submitter_student_id", { length: 20 }),
+    scoring_material_submitter_id: varchar("scoring_material_submitter_id", { length: 36 }),
     status: varchar("status", { length: 20 }).notNull().default("正常活动"), // 正常活动/活动取消
     scoring_status: varchar("scoring_status", { length: 20 }).notNull().default("待赋分"), // 待赋分/已赋分
     scoring_table_url: text("scoring_table_url"), // 活动赋分表
+    scoring_table_file_name: text("scoring_table_file_name"),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -46,9 +57,19 @@ export const activity_submissions = pgTable(
     category: varchar("category", { length: 10 }).notNull(),
     level: varchar("level", { length: 20 }).notNull(),
     plan_file_url: text("plan_file_url"),
+    plan_file_name: text("plan_file_name"),
     record_file_url: text("record_file_url"),
+    record_file_name: text("record_file_name"),
     leader_name: varchar("leader_name", { length: 50 }).notNull(),
     leader_phone: varchar("leader_phone", { length: 20 }).notNull(),
+    scope_type: varchar("scope_type", { length: 20 }).default("department"),
+    scope_name: varchar("scope_name", { length: 100 }),
+    scope_names: text("scope_names"),
+    leader_ids: text("leader_ids"),
+    activity_submitter_id: varchar("activity_submitter_id", { length: 36 }),
+    activity_submitter_name: varchar("activity_submitter_name", { length: 50 }),
+    activity_submitter_student_id: varchar("activity_submitter_student_id", { length: 20 }),
+    scoring_material_submitter_id: varchar("scoring_material_submitter_id", { length: 36 }),
     review_status: varchar("review_status", { length: 20 }).notNull().default("待审核"), // 待审核/已通过/已驳回
     review_note: text("review_note"),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -71,7 +92,15 @@ export const leave_requests = pgTable(
     student_name: varchar("student_name", { length: 50 }).notNull(),
     leave_type: varchar("leave_type", { length: 20 }).notNull(), // 事假/病假/活动公假
     leave_image_url: text("leave_image_url"),
+    leave_image_name: text("leave_image_name"),
     activity_name: varchar("activity_name", { length: 255 }),
+    activity_id: varchar("activity_id", { length: 32 }),
+    applicant_user_id: varchar("applicant_user_id", { length: 36 }),
+    applicant_name: varchar("applicant_name", { length: 50 }),
+    applicant_student_id: varchar("applicant_student_id", { length: 20 }),
+    group_id: varchar("group_id", { length: 36 }),
+    start_time: timestamp("start_time", { withTimezone: true }),
+    end_time: timestamp("end_time", { withTimezone: true }),
     review_status: varchar("review_status", { length: 20 }).notNull().default("待审核"), // 待审核/已通过/已驳回
     review_note: text("review_note"),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -84,6 +113,48 @@ export const leave_requests = pgTable(
     index("leave_requests_created_at_idx").on(table.created_at),
   ]
 );
+
+// 集体请假组及组内学生明细
+export const leave_groups = pgTable("leave_groups", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  class_name: varchar("class_name", { length: 50 }).notNull(),
+  applicant_user_id: varchar("applicant_user_id", { length: 36 }).notNull(),
+  applicant_name: varchar("applicant_name", { length: 50 }),
+  applicant_student_id: varchar("applicant_student_id", { length: 20 }),
+  leave_type: varchar("leave_type", { length: 20 }).notNull().default("活动公假"),
+  activity_name: varchar("activity_name", { length: 255 }),
+  activity_id: varchar("activity_id", { length: 32 }),
+  start_time: timestamp("start_time", { withTimezone: true }).notNull(),
+  end_time: timestamp("end_time", { withTimezone: true }).notNull(),
+  review_status: varchar("review_status", { length: 20 }).notNull().default("待审核"),
+  review_note: text("review_note"),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const leave_group_members = pgTable("leave_group_members", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  group_id: varchar("group_id", { length: 36 }).notNull(),
+  student_id: varchar("student_id", { length: 20 }).notNull(),
+  student_name: varchar("student_name", { length: 50 }).notNull(),
+  class_name: varchar("class_name", { length: 50 }).notNull(),
+  leave_request_id: varchar("leave_request_id", { length: 36 }),
+});
+
+export const class_roster = pgTable("class_roster", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  class_name: varchar("class_name", { length: 50 }).notNull(),
+  student_id: varchar("student_id", { length: 20 }).notNull(),
+  student_name: varchar("student_name", { length: 50 }).notNull(),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const departments = pgTable("departments", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 100 }).notNull(),
+  created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("departments_name_idx").on(table.name)]);
 
 // 晚自习安排表
 export const evening_study_schedules = pgTable(

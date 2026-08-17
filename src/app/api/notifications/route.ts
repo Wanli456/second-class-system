@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 
 // GET /api/notifications - 获取用户通知列表
 // PUT /api/notifications - 标记通知为已读
+// DELETE /api/notifications - 删除通知
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireUser(request);
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: result,
-      unreadCount: parseInt(unreadResult.count) || 0,
+      unreadCount: parseInt(String(unreadResult?.count || 0), 10) || 0,
     });
   } catch (error) {
     console.error("获取通知失败:", error);
@@ -67,6 +68,36 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     console.error("标记已读失败:", error);
     return NextResponse.json({ success: false, error: "标记已读失败" }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const auth = await requireUser(request);
+    if (auth.response) return auth.response;
+    const body = await request.json();
+    const { notificationId, userId, deleteAll } = body;
+
+    if (deleteAll && userId === auth.user!.id) {
+      await query('DELETE FROM notifications WHERE user_id = $1', [userId]);
+      return NextResponse.json({ success: true, message: '已清空通知' });
+    }
+
+    if (notificationId) {
+      const deleted = await query(
+        'DELETE FROM notifications WHERE id = $1 AND user_id = $2 RETURNING id',
+        [notificationId, auth.user!.id]
+      );
+      if (!deleted.length) {
+        return NextResponse.json({ success: false, error: '通知不存在' }, { status: 404 });
+      }
+      return NextResponse.json({ success: true, message: '通知已删除' });
+    }
+
+    return NextResponse.json({ success: false, error: '缺少删除参数' }, { status: 400 });
+  } catch (error) {
+    console.error('删除通知失败:', error);
+    return NextResponse.json({ success: false, error: '删除通知失败' }, { status: 500 });
   }
 }
 

@@ -6,7 +6,6 @@ import {
   ClipboardList, Send, Award, FileText, UserCheck, Moon, Lock, LogOut, Key, ArrowLeft, ArrowUpRight,
   LayoutDashboard, Users, FileCheck,
 } from 'lucide-react';
-import { NotificationBell } from '@/components/NotificationBell';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
@@ -235,7 +234,6 @@ export default function Home() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <NotificationBell userId={user.id} />
                 <button
                   onClick={() => setShowPasswordModal(true)}
                   className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 transition-colors hover:bg-slate-50"

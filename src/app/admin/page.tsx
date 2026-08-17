@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, Fragment, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import * as XLSX from 'xlsx';
 import {
   GraduationCap, Lock, LogOut, Table, FileCheck, UserCheck, Award, Users,
   Plus, Pencil, Trash2, Eye, Check, X, Upload, FileText, Image as ImageIcon,
@@ -17,25 +18,23 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch, refreshCurrentUser } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
+import { canOpenAdminTab, formatActivityScopes } from '@/lib/business-rules';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 type ReviewStatus = '待审核' | '已通过' | '已驳回';
 type LeaveStatus = '待审核' | '已通过' | '已驳回';
 type ScoringStatus = '待赋分' | '已赋分';
-type AdminRole = 'admin' | 'publisher' | 'scorer' | 'leave_reviewer';
+type AdminRole = 'admin' | 'leader' | 'student';
 type AdminTab = 'activities' | 'review' | 'scoring' | 'leave' | 'users';
+type UserPermission = 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave';
 
 const ROLE_LABELS: Record<AdminRole, string> = {
   admin: '管理员',
-  publisher: '发布干事',
-  scorer: '赋分干事',
-  leave_reviewer: '请假审核',
-};
-
-const ROLE_PASSWORDS: Record<AdminRole, string> = {
-  admin: 'admin123',
-  publisher: 'pub123',
-  scorer: 'score123',
-  leave_reviewer: 'leave123',
+  leader: '部门负责人',
+  student: '学生',
 };
 
 const normalizeTab = (tab: string | null) => {
@@ -44,13 +43,22 @@ const normalizeTab = (tab: string | null) => {
   return tab || '';
 };
 
-const TAB_ROLES: Record<string, AdminRole> = {
-  activities: 'admin',
-  review: 'publisher',
-  scoring: 'scorer',
-  leave: 'leave_reviewer',
-  users: 'admin',
-};
+function canAccessAdminWorkspace(userData: UserData, requestedTab: string) {
+  if (userData.role === 'admin') return true;
+  if (requestedTab) {
+    return canOpenAdminTab({
+      role: userData.role,
+      can_publish: userData.canPublish,
+      can_score: userData.canScore,
+      can_review_leave: userData.canReviewLeave,
+    }, requestedTab);
+  }
+  return userData.canPublish || userData.canScore || userData.canReviewLeave;
+}
+
+const formatDateTime = (value?: string | null) => value
+  ? new Date(value).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  : '未填写';
 
 interface ScoringActivity {
   id: string;
@@ -58,11 +66,16 @@ interface ScoringActivity {
   level: string;
   scoring_status: string;
   scoring_table_url: string | null;
+  scoring_table_file_name: string | null;
   record_file_url: string | null;
+  record_file_name: string | null;
   leader_name: string;
   leader_phone: string;
   category: string;
   status: string;
+  scope_names?: string | null;
+  scope_type?: 'department' | 'class' | null;
+  scope_name?: string | null;
 }
 
 interface UserData {
@@ -77,7 +90,38 @@ interface UserData {
   canSubmitScoring: boolean;
   canReviewLeave: boolean;
   canViewEveningStudy: boolean;
+  canStartGroupLeave: boolean;
+  department?: string | null;
+  className?: string | null;
   createdAt?: string;
+}
+
+interface LeaveGroup {
+  id: string;
+  class_name: string;
+  applicant_user_id: string;
+  applicant_name?: string | null;
+  applicant_student_id?: string | null;
+  leave_type: string;
+  activity_id?: string | null;
+  activity_name?: string | null;
+  start_time: string;
+  end_time: string;
+  review_status: LeaveStatus;
+  review_note?: string | null;
+  member_count: number;
+}
+
+interface RosterStudent {
+  id: string;
+  class_name: string;
+  student_id: string;
+  student_name: string;
+}
+
+interface DepartmentRecord {
+  id: string;
+  name: string;
 }
 
 function AdminPage() {
@@ -99,6 +143,7 @@ function AdminPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [submissions, setSubmissions] = useState<ActivitySubmission[]>([]);
   const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
+  const [leaveGroups, setLeaveGroups] = useState<LeaveGroup[]>([]);
   const [scoringList, setScoringList] = useState<ScoringActivity[]>([]);
   const [users, setUsers] = useState<UserData[]>([]);
   const [userSearch, setUserSearch] = useState('');
@@ -123,6 +168,8 @@ function AdminPage() {
   const [expandedScoring, setExpandedScoring] = useState<string | null>(null);
   const [scoringFile, setScoringFile] = useState<File | null>(null);
   const [scoringInProgress, setScoringInProgress] = useState(false);
+  const [expandedLeaveGroup, setExpandedLeaveGroup] = useState<string | null>(null);
+  const [leaveGroupMembers, setLeaveGroupMembers] = useState<Record<string, LeaveRequest[]>>({});
 
   // 权限计算必须与后端 auth.ts 中的 calculateUserPermissions 逻辑完全一致
   const isAdmin = user?.role === 'admin';
@@ -159,17 +206,22 @@ function AdminPage() {
       canSubmitScoring: globalUser.canSubmitScoring || false,
       canReviewLeave: globalUser.canReviewLeave || false,
       canViewEveningStudy: globalUser.canViewEveningStudy || false,
+      canStartGroupLeave: globalUser.canStartGroupLeave || false,
+      department: globalUser.department || null,
+      className: globalUser.className || null,
     };
 
     setUser(userData);
-    // Admin can access all roles
-    if (userData.role === 'admin') {
+    const requestedTab = normalizeTab(tabParam);
+    const hasWorkspaceAccess = canAccessAdminWorkspace(userData, requestedTab);
+
+    // `role=admin` identifies the management workspace URL. It does not
+    // change the user's base role or require the user to be an administrator.
+    if (hasWorkspaceAccess && (!roleParam || roleParam === 'admin' || roleParam === userData.role)) {
       setAuthenticated(true);
-      setRole('admin');
-    } else if (roleParam && userData.role === roleParam) {
-      setAuthenticated(true);
+      setRole(userData.role as AdminRole);
     } else if (roleParam) {
-      setLoginError(`当前账号没有管理员权限`);
+      setLoginError('当前账号没有该管理功能权限');
       setShowLoginModal(true);
     }
     setAuthResolved(true);
@@ -218,7 +270,8 @@ function AdminPage() {
     const res = await apiFetch('/api/leave?role=admin');
     const data = await res.json();
     if (data.success) {
-      setLeaves(data.data);
+      setLeaves(data.data || []);
+      setLeaveGroups(data.groups || []);
       return;
     }
     setDataError(data.error || `请假审核数据加载失败（HTTP ${res.status}）`);
@@ -255,7 +308,7 @@ function AdminPage() {
         switch (activeTab) {
           case 'activities': return activities.length > 0;
           case 'review': return submissions.length > 0;
-          case 'leave': return leaves.length > 0;
+          case 'leave': return leaves.length > 0 || leaveGroups.length > 0;
           case 'scoring': return scoringList.length > 0;
           case 'users': return users.length > 0;
           default: return false;
@@ -277,7 +330,7 @@ function AdminPage() {
             if (canPublish && submissions.length === 0) await fetchSubmissions();
             break;
           case 'leave':
-            if (canReviewLeave && leaves.length === 0) await fetchLeaves();
+            if (canReviewLeave && leaves.length === 0 && leaveGroups.length === 0) await fetchLeaves();
             break;
           case 'scoring':
             if (canScore && scoringList.length === 0) await fetchScoring();
@@ -296,24 +349,54 @@ function AdminPage() {
     };
 
     loadCurrentTabData();
-  }, [authenticated, role, activeTab, isAdmin, canPublish, canScore, canReviewLeave, fetchActivities, fetchSubmissions, fetchLeaves, fetchScoring, fetchUsers]);
+  }, [authenticated, role, activeTab, isAdmin, canPublish, canScore, canReviewLeave, activities.length, submissions.length, leaves.length, leaveGroups.length, scoringList.length, users.length, fetchActivities, fetchSubmissions, fetchLeaves, fetchScoring, fetchUsers]);
+
+  const retryCurrentTab = useCallback(async () => {
+    if (!authenticated || !role || !activeTab) return;
+
+    setDataError('');
+    setLoading(true);
+    setTabLoadingStates(previous => ({ ...previous, [activeTab]: true }));
+    try {
+      switch (activeTab) {
+        case 'activities':
+          if (isAdmin) await fetchActivities();
+          break;
+        case 'review':
+          if (canPublish) await fetchSubmissions();
+          break;
+        case 'leave':
+          if (canReviewLeave) await fetchLeaves();
+          break;
+        case 'scoring':
+          if (canScore) await fetchScoring();
+          break;
+        case 'users':
+          if (isAdmin) await fetchUsers();
+          break;
+      }
+    } catch (error) {
+      console.error('重试数据加载失败:', error);
+      setDataError('数据加载失败，请稍后重试');
+    } finally {
+      setLoading(false);
+      setTabLoadingStates(previous => ({ ...previous, [activeTab]: false }));
+    }
+  }, [activeTab, authenticated, canPublish, canReviewLeave, canScore, fetchActivities, fetchLeaves, fetchScoring, fetchSubmissions, fetchUsers, isAdmin, role]);
 
   const handleLoginSuccess = (userData: UserData) => {
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
-    // Admin can access all roles and see all tabs
-    if (userData.role === 'admin') {
+    const requestedTab = normalizeTab(tabParam);
+    const hasWorkspaceAccess = canAccessAdminWorkspace(userData, requestedTab);
+
+    if (hasWorkspaceAccess && (!roleParam || roleParam === 'admin' || roleParam === userData.role)) {
       setAuthenticated(true);
-      setRole('admin'); // Admin sees all tabs
-      setLoginError('');
-      setShowLoginModal(false);
-    } else if (roleParam && userData.role === roleParam) {
-      setAuthenticated(true);
-      setRole(roleParam);
+      setRole(userData.role as AdminRole);
       setLoginError('');
       setShowLoginModal(false);
     } else if (roleParam) {
-      setLoginError(`当前账号没有管理员权限`);
+      setLoginError('当前账号没有该管理功能权限');
     }
   };
 
@@ -411,7 +494,7 @@ function AdminPage() {
     }
   };
 
-  const handleUpdatePermission = async (userId: string, permission: 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canReviewLeave' | 'canViewEveningStudy', value: boolean) => {
+  const handleUpdatePermission = async (userId: string, permission: UserPermission, value: boolean) => {
     const apiFieldMap = {
       canPublish: 'canPublish',
       canScore: 'canScore',
@@ -420,6 +503,7 @@ function AdminPage() {
       canSubmitScoring: 'canSubmitScoring',
       canReviewLeave: 'canReviewLeave',
       canViewEveningStudy: 'canViewEveningStudy',
+      canStartGroupLeave: 'canStartGroupLeave',
     };
     const apiField = apiFieldMap[permission];
     try {
@@ -450,7 +534,6 @@ function AdminPage() {
   };
 
   const handleDeleteUser = async (userId: string, userName: string) => {
-    if (!confirm(`确定要删除用户"${userName}"吗？此操作不可恢复。`)) return;
     try {
       const res = await apiFetch(`/api/auth?id=${userId}`, { method: 'DELETE' });
       const data = await res.json();
@@ -476,7 +559,7 @@ function AdminPage() {
       const res = await apiFetch('/api/auth', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: userId, password: newPassword }),
+        body: JSON.stringify({ userId, password: newPassword }),
       });
       const data = await res.json();
       if (data.success) {
@@ -506,11 +589,11 @@ function AdminPage() {
     }
   };
 
-  const handleReviewLeave = async (id: string, status: LeaveStatus) => {
+  const handleReviewLeave = async (id: string, status: LeaveStatus, isGroup = false) => {
     const res = await apiFetch('/api/leave', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, review_status: status, review_note: reviewNote || null }),
+      body: JSON.stringify({ ...(isGroup ? { group_id: id } : { id }), review_status: status, review_note: reviewNote || null }),
     });
     const data = await res.json();
     if (data.success) {
@@ -519,6 +602,45 @@ function AdminPage() {
     } else {
       alert(data.error);
     }
+  };
+
+  const handleUpdateDepartment = async (userId: string, department: string | null) => {
+    try {
+      const res = await apiFetch('/api/auth', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, department }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || '更新部门失败');
+        return;
+      }
+      setUsers(previous => previous.map(item => item.id === userId ? { ...item, department } : item));
+      if (user?.id === userId && data.data) {
+        const updatedUser = { ...user, department };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify({ ...JSON.parse(localStorage.getItem('user') || '{}'), ...data.data }));
+      }
+    } catch (error) {
+      console.error('更新部门失败:', error);
+      alert('更新部门失败');
+    }
+  };
+
+  const loadLeaveGroupMembers = async (groupId: string) => {
+    if (leaveGroupMembers[groupId]) {
+      setExpandedLeaveGroup(expandedLeaveGroup === groupId ? null : groupId);
+      return;
+    }
+    const res = await apiFetch(`/api/leave?group_id=${encodeURIComponent(groupId)}`);
+    const data = await res.json();
+    if (!data.success) {
+      alert(data.error || '加载集体请假成员失败');
+      return;
+    }
+    setLeaveGroupMembers(prev => ({ ...prev, [groupId]: data.data || [] }));
+    setExpandedLeaveGroup(groupId);
   };
 
   const handleDeleteActivity = async (id: string) => {
@@ -538,6 +660,8 @@ function AdminPage() {
 
   const pendingSubmissions = submissions.filter(s => s.review_status === '待审核');
   const pendingLeaves = leaves.filter(l => l.review_status === '待审核');
+  const pendingLeaveGroups = leaveGroups.filter(group => group.review_status === '待审核');
+  const pendingLeaveCount = pendingLeaves.length + pendingLeaveGroups.length;
 
   if (!initialized || !authResolved) {
     return <AuthLoadingScreen />;
@@ -560,7 +684,7 @@ function AdminPage() {
 
           {!role ? (
             <div className="space-y-3">
-              {(['admin', 'publisher', 'scorer'] as AdminRole[]).map(r => (
+              {(['admin', 'leader', 'student'] as AdminRole[]).map(r => (
                 <button
                   key={r}
                   onClick={() => setRole(r)}
@@ -601,7 +725,7 @@ function AdminPage() {
     ...(isAdmin ? [{ key: 'activities', label: '活动总表', icon: Table, count: activities.length }] : []),
     ...(canPublish ? [{ key: 'review', label: '活动审核', icon: FileCheck, count: pendingSubmissions.length }] : []),
     ...(canScore ? [{ key: 'scoring', label: '活动赋分', icon: Award, count: scoringList.filter(s => s.scoring_status === '待赋分').length }] : []),
-    ...(canReviewLeave ? [{ key: 'leave', label: '请假审核', icon: UserCheck, count: pendingLeaves.length }] : []),
+    ...(canReviewLeave ? [{ key: 'leave', label: '请假审核', icon: UserCheck, count: pendingLeaveCount }] : []),
     ...(isAdmin ? [{ key: 'users', label: '用户管理', icon: Users, count: 0 }] : []),
   ];
 
@@ -611,8 +735,8 @@ function AdminPage() {
     // 只在组件内部切换标签，保持 SPA 的流畅体验
   };
 
-  const activeNavHref = activeTab && TAB_ROLES[activeTab]
-    ? `/admin?role=${TAB_ROLES[activeTab]}&tab=${activeTab}`
+  const activeNavHref = activeTab
+    ? `/admin?role=admin&tab=${activeTab}`
     : undefined;
   const activeTabLabel = tabs.find(tab => tab.key === activeTab)?.label;
 
@@ -661,10 +785,11 @@ function AdminPage() {
             <span>数据加载失败：{dataError}</span>
             <button
               type="button"
-              onClick={() => window.location.reload()}
-              className="shrink-0 font-medium text-red-800 underline underline-offset-2 hover:text-red-900"
+              onClick={() => void retryCurrentTab()}
+              disabled={tabLoadingStates[activeTab as AdminTab]}
+              className="shrink-0 font-medium text-red-800 underline underline-offset-2 hover:text-red-900 disabled:cursor-wait disabled:opacity-60"
             >
-              重新加载
+              {tabLoadingStates[activeTab as AdminTab] ? '重试中...' : '重试'}
             </button>
           </div>
         )}
@@ -762,7 +887,9 @@ function AdminPage() {
                         <th className="px-3 py-2.5 text-left font-medium text-gray-600">时间</th>
                         <th className="px-3 py-2.5 text-left font-medium text-gray-600">分类</th>
                         <th className="px-3 py-2.5 text-left font-medium text-gray-600">级别</th>
+                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">联办单位</th>
                         <th className="px-3 py-2.5 text-left font-medium text-gray-600">负责人</th>
+                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">提交人</th>
                         <th className="px-3 py-2.5 text-left font-medium text-gray-600">状态</th>
                         <th className="px-3 py-2.5 text-left font-medium text-gray-600">赋分</th>
                         <th className="px-3 py-2.5 text-left font-medium text-gray-600">操作</th>
@@ -780,7 +907,9 @@ function AdminPage() {
                             <span className="rounded px-1.5 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-700">{a.category}</span>
                           </td>
                           <td className="px-3 py-2.5 text-xs">{a.level}</td>
+                          <td className="px-3 py-2.5 text-xs">{formatActivityScopes(a)}</td>
                           <td className="px-3 py-2.5 text-xs">{a.leader_name}</td>
+                          <td className="px-3 py-2.5 text-xs">{a.activity_submitter_name || '-'}{a.activity_submitter_student_id ? `（${a.activity_submitter_student_id}）` : ''}</td>
                           <td className="px-3 py-2.5">
                             <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[a.status] || 'bg-gray-100 text-gray-700'}`}>
                               {a.status}
@@ -800,7 +929,7 @@ function AdminPage() {
                         </tr>
                       ))}
                       {filteredActivities.length === 0 && (
-                        <tr><td colSpan={9} className="px-3 py-8 text-center text-gray-400">暂无活动数据</td></tr>
+                        <tr><td colSpan={11} className="px-3 py-8 text-center text-gray-400">暂无活动数据</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -827,6 +956,8 @@ function AdminPage() {
                                 <span>电话: {s.leader_phone}</span>
                                 <span>分类: {s.category}</span>
                                 <span>级别: {s.level}</span>
+                                <span>联办单位: {formatActivityScopes(s)}</span>
+                                <span>提交人: {s.activity_submitter_name || '-'}{s.activity_submitter_student_id ? `（${s.activity_submitter_student_id}）` : ''}</span>
                                 <span>提交时间: {new Date(s.created_at).toLocaleDateString()}</span>
                               </div>
                               <div className="mt-1 text-xs text-gray-500">
@@ -847,14 +978,14 @@ function AdminPage() {
                                 <div className="mt-2 flex flex-wrap gap-3">
                                   {s.plan_file_url ? (
                                     <a href={s.plan_file_url} target="_blank" className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50">
-                                      <FileText className="h-3 w-3" /> 策划书
+                                      <FileText className="h-3 w-3" /> {s.plan_file_name || '策划书（已上传）'}
                                     </a>
                                   ) : (
                                     <span className="text-xs text-gray-400">未上传策划书</span>
                                   )}
                                   {s.record_file_url ? (
                                     <a href={s.record_file_url} target="_blank" className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50">
-                                      <FileText className="h-3 w-3" /> 备案表
+                                      <FileText className="h-3 w-3" /> {s.record_file_name || '备案表（已上传）'}
                                     </a>
                                   ) : (
                                     <span className="text-xs text-gray-400">未上传备案表</span>
@@ -898,7 +1029,7 @@ function AdminPage() {
                         <div key={s.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3">
                           <div>
                             <span className="font-medium text-gray-900">{s.full_name}</span>
-                            <span className="ml-2 text-xs text-gray-500">{s.leader_name} | {s.category} | {s.level}</span>
+                            <span className="ml-2 text-xs text-gray-500">{s.leader_name} | {s.category} | {s.level} | {formatActivityScopes(s)} | 提交人：{s.activity_submitter_name || '-'}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[s.review_status as ReviewStatus]}`}>
@@ -915,12 +1046,12 @@ function AdminPage() {
                             <div className="mt-2 flex flex-wrap gap-3 border-t pt-2">
                               {s.plan_file_url ? (
                                 <a href={s.plan_file_url} target="_blank" download className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50">
-                                  <FileText className="h-3 w-3" /> 策划书
+                                  <FileText className="h-3 w-3" /> {s.plan_file_name || '策划书（已上传）'}
                                 </a>
                               ) : <span className="text-xs text-gray-400">未上传策划书</span>}
                               {s.record_file_url ? (
                                 <a href={s.record_file_url} target="_blank" download className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50">
-                                  <FileText className="h-3 w-3" /> 备案表
+                                  <FileText className="h-3 w-3" /> {s.record_file_name || '备案表（已上传）'}
                                 </a>
                               ) : <span className="text-xs text-gray-400">未上传备案表</span>}
                               {s.review_note && <span className="text-xs text-gray-500">备注: {s.review_note}</span>}
@@ -943,9 +1074,47 @@ function AdminPage() {
               <div>
                 <h2 className="mb-4 text-base font-semibold text-gray-800">请假审核</h2>
 
+                {pendingLeaveGroups.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="mb-3 text-sm font-medium text-gray-600">待审核集体请假 ({pendingLeaveGroups.length})</h3>
+                    <div className="space-y-3">
+                      {pendingLeaveGroups.map(group => (
+                        <div key={group.id} className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                              <span><span className="text-gray-500">班级:</span> {group.class_name}</span>
+                              <span><span className="text-gray-500">成员:</span> {group.member_count} 人</span>
+                              <span><span className="text-gray-500">发起人:</span> {group.applicant_name || '-'}{group.applicant_student_id ? `（${group.applicant_student_id}）` : ''}</span>
+                              <span><span className="text-gray-500">类型:</span> {group.leave_type}</span>
+                              {group.activity_name && <span><span className="text-gray-500">活动:</span> {group.activity_name}</span>}
+                            </div>
+                            <button onClick={() => void loadLeaveGroupMembers(group.id)} className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">
+                              <Eye className="h-3.5 w-3.5" />{expandedLeaveGroup === group.id ? '收起成员' : '查看成员'}
+                            </button>
+                          </div>
+                          <p className="mt-2 text-xs text-gray-500">请假时间：{formatDateTime(group.start_time)} 至 {formatDateTime(group.end_time)}</p>
+                          {expandedLeaveGroup === group.id && (
+                            <div className="mt-3 rounded-md border border-amber-100 bg-white p-3">
+                              <div className="flex flex-wrap gap-2">
+                                {(leaveGroupMembers[group.id] || []).map(member => <span key={member.id} className="rounded border px-2 py-1 text-xs text-gray-600">{member.student_name}（{member.student_id}）</span>)}
+                              </div>
+                              {leaveGroupMembers[group.id]?.[0]?.leave_image_url && <a href={leaveGroupMembers[group.id][0].leave_image_url!} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs text-[#1e3a5f] hover:underline">{leaveGroupMembers[group.id][0].leave_image_name || '查看请假条'}</a>}
+                            </div>
+                          )}
+                          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-amber-200 pt-3">
+                            <input type="text" placeholder="审核备注（可选）" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} className="min-w-48 flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-[#1e3a5f] focus:outline-none" />
+                            <button onClick={() => handleReviewLeave(group.id, '已通过', true)} className="flex items-center gap-1 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"><Check className="h-3 w-3" />整组通过</button>
+                            <button onClick={() => handleReviewLeave(group.id, '已驳回', true)} className="flex items-center gap-1 rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"><X className="h-3 w-3" />整组驳回</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {pendingLeaves.length > 0 && (
                   <div className="mb-6">
-                    <h3 className="mb-3 text-sm font-medium text-gray-600">待审核 ({pendingLeaves.length})</h3>
+                    <h3 className="mb-3 text-sm font-medium text-gray-600">待审核个人请假 ({pendingLeaves.length})</h3>
                     <div className="space-y-3">
                       {pendingLeaves.map(l => (
                         <div key={l.id} className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
@@ -953,6 +1122,7 @@ function AdminPage() {
                             <div><span className="text-gray-500">学号:</span> {l.student_id}</div>
                             <div><span className="text-gray-500">姓名:</span> {l.student_name}</div>
                             <div><span className="text-gray-500">班级:</span> {l.class_name}</div>
+                            <div><span className="text-gray-500">提交人:</span> {l.applicant_name || '-'}{l.applicant_student_id ? `（${l.applicant_student_id}）` : ''}</div>
                             <div><span className="text-gray-500">类型:</span> {l.leave_type}</div>
                             {l.activity_name && <div><span className="text-gray-500">活动:</span> {l.activity_name}</div>}
                           </div>
@@ -960,7 +1130,7 @@ function AdminPage() {
                           {/* 请假条图片 */}
                           {l.leave_image_url && (
                             <div className="mt-3">
-                              <span className="text-xs text-gray-500">请假条截图:</span>
+                              <span className="text-xs text-gray-500">请假条截图：{l.leave_image_name || '已上传'}</span>
                               <div className="mt-1">
                                 <a href={l.leave_image_url} target="_blank" className="inline-block">
                                   <img
@@ -1010,6 +1180,7 @@ function AdminPage() {
                             <th className="px-3 py-2.5 text-left font-medium text-gray-600">学号</th>
                             <th className="px-3 py-2.5 text-left font-medium text-gray-600">姓名</th>
                             <th className="px-3 py-2.5 text-left font-medium text-gray-600">班级</th>
+                            <th className="px-3 py-2.5 text-left font-medium text-gray-600">提交人</th>
                             <th className="px-3 py-2.5 text-left font-medium text-gray-600">类型</th>
                             <th className="px-3 py-2.5 text-left font-medium text-gray-600">活动</th>
                             <th className="px-3 py-2.5 text-left font-medium text-gray-600">请假条</th>
@@ -1023,6 +1194,7 @@ function AdminPage() {
                               <td className="px-3 py-2.5">{l.student_id}</td>
                               <td className="px-3 py-2.5">{l.student_name}</td>
                               <td className="px-3 py-2.5 text-xs">{l.class_name}</td>
+                              <td className="px-3 py-2.5 text-xs">{l.applicant_name || '-'}{l.applicant_student_id ? `（${l.applicant_student_id}）` : ''}</td>
                               <td className="px-3 py-2.5 text-xs">{l.leave_type}</td>
                               <td className="px-3 py-2.5 text-xs">{l.activity_name || '-'}</td>
                               <td className="px-3 py-2.5">
@@ -1046,7 +1218,24 @@ function AdminPage() {
                   </div>
                 )}
 
-                {leaves.length === 0 && (
+                {leaveGroups.filter(group => group.review_status !== '待审核').length > 0 && (
+                  <div className="mt-6">
+                    <h3 className="mb-3 text-sm font-medium text-gray-600">已处理集体请假</h3>
+                    <div className="space-y-2">
+                      {leaveGroups.filter(group => group.review_status !== '待审核').map(group => (
+                        <div key={group.id} className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div><span className="font-medium">{group.class_name}集体请假</span><span className="ml-2 text-xs text-gray-500">{group.member_count} 人 | 发起人：{group.applicant_name || '-'} | {group.leave_type}{group.activity_name ? ` | ${group.activity_name}` : ''}</span></div>
+                            <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[group.review_status]}`}>{group.review_status}</span>
+                          </div>
+                          <p className="mt-1 text-xs text-gray-500">请假时间：{formatDateTime(group.start_time)} 至 {formatDateTime(group.end_time)}{group.review_note ? ` | 审核备注：${group.review_note}` : ''}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {leaves.length === 0 && leaveGroups.length === 0 && (
                   <div className="py-16 text-center text-gray-400">暂无请假记录</div>
                 )}
               </div>
@@ -1109,7 +1298,7 @@ function AdminPage() {
                                 <div className="flex gap-2">
                                   {a.scoring_table_url && (
                                     <a href={a.scoring_table_url} target="_blank" download className="flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline">
-                                      <FileText className="h-3 w-3" /> 赋分表
+                                      <FileText className="h-3 w-3" /> {a.scoring_table_file_name || '赋分表（已上传）'}
                                     </a>
                                   )}
                                 </div>
@@ -1128,7 +1317,7 @@ function AdminPage() {
                                       {a.scoring_table_url ? (
                                         <div className="flex items-center gap-2">
                                           <a href={a.scoring_table_url} target="_blank" className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[#1e3a5f] hover:bg-blue-50">
-                                            <FileText className="h-3 w-3" /> 查看
+                                            <FileText className="h-3 w-3" /> {a.scoring_table_file_name || '查看赋分表'}
                                           </a>
                                           <a href={a.scoring_table_url} download className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-emerald-600 hover:bg-emerald-50">
                                             <Download className="h-3 w-3" /> 下载
@@ -1144,9 +1333,9 @@ function AdminPage() {
                                         <span className="text-gray-500">备案表:</span>
                                         {a.record_file_url ? (
                                           <div className="flex items-center gap-2">
-                                            <a href={a.record_file_url} target="_blank" className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[#1e3a5f] hover:bg-blue-50">
-                                              <FileText className="h-3 w-3" /> 查看
-                                            </a>
+                                          <a href={a.record_file_url} target="_blank" className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[#1e3a5f] hover:bg-blue-50">
+                                            <FileText className="h-3 w-3" /> {a.record_file_name || '查看备案表'}
+                                          </a>
                                             <a href={a.record_file_url} download className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-emerald-600 hover:bg-emerald-50">
                                               <Download className="h-3 w-3" /> 下载
                                             </a>
@@ -1192,6 +1381,19 @@ function AdminPage() {
 
             {/* Users Tab */}
             {activeTab === 'users' && isAdmin && (
+              <UserManagement
+                users={users}
+                userSearch={userSearch}
+                onUserSearchChange={setUserSearch}
+                onUpdatePermission={handleUpdatePermission}
+                onUpdateRole={handleUpdateRole}
+                onUpdateDepartment={handleUpdateDepartment}
+                onChangePassword={handleChangePassword}
+                onDeleteUser={handleDeleteUser}
+              />
+            )}
+
+            {false && (
               <div className="rounded-lg border border-gray-200 bg-white p-4">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-base font-semibold text-gray-800">用户管理</h2>
@@ -1624,6 +1826,263 @@ function AdminPage() {
         )}
       </div>
     </DashboardLayout>
+  );
+}
+
+function UserManagement({
+  users,
+  userSearch,
+  onUserSearchChange,
+  onUpdatePermission,
+  onUpdateRole,
+  onUpdateDepartment,
+  onChangePassword,
+  onDeleteUser,
+}: {
+  users: UserData[];
+  userSearch: string;
+  onUserSearchChange: (value: string) => void;
+  onUpdatePermission: (userId: string, permission: UserPermission, value: boolean) => Promise<void>;
+  onUpdateRole: (userId: string, role: string) => Promise<void>;
+  onUpdateDepartment: (userId: string, department: string | null) => Promise<void>;
+  onChangePassword: (userId: string, userName: string) => Promise<void>;
+  onDeleteUser: (userId: string, userName: string) => Promise<void>;
+}) {
+  const [rosterClassName, setRosterClassName] = useState('');
+  const [rosterText, setRosterText] = useState('');
+  const [rosterStudents, setRosterStudents] = useState<RosterStudent[]>([]);
+  const [rosterError, setRosterError] = useState('');
+  const [loadingRoster, setLoadingRoster] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [rosterDeleteTarget, setRosterDeleteTarget] = useState<RosterStudent | null>(null);
+  const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
+  const [newDepartment, setNewDepartment] = useState('');
+  const [departmentError, setDepartmentError] = useState('');
+
+  const filteredUsers = users.filter((item) => {
+    const keyword = userSearch.trim();
+    return !keyword || item.name.includes(keyword) || item.studentId.includes(keyword) || (item.department || '').includes(keyword) || (item.className || '').includes(keyword);
+  });
+  const permissions: Array<{ key: UserPermission; label: string }> = [
+    { key: 'canPublish', label: '活动审核' },
+    { key: 'canScore', label: '活动赋分' },
+    { key: 'canSubmitScoring', label: '赋分材料' },
+    { key: 'canReviewLeave', label: '请假审核' },
+    { key: 'canViewEveningStudy', label: '晚自习查询' },
+    { key: 'canSubmitActivity', label: '活动提交' },
+    { key: 'canViewSubmissionStatus', label: '提交状态' },
+    { key: 'canStartGroupLeave', label: '班级集体请假发起' },
+  ];
+
+  const loadRoster = async () => {
+    const className = rosterClassName.trim();
+    if (!className) {
+      setRosterError('请先填写班级名称');
+      return;
+    }
+    setLoadingRoster(true);
+    setRosterError('');
+    try {
+      const response = await apiFetch(`/api/class-roster?class=${encodeURIComponent(className)}`);
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || '加载花名册失败');
+      setRosterStudents(data.data || []);
+    } catch (error) {
+      setRosterError(error instanceof Error ? error.message : '加载花名册失败');
+    } finally {
+      setLoadingRoster(false);
+    }
+  };
+
+  const loadDepartments = async () => {
+    try {
+      const response = await apiFetch('/api/departments?managed=true');
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || '加载部门失败');
+      setDepartments(data.data || []);
+    } catch (error) {
+      setDepartmentError(error instanceof Error ? error.message : '加载部门失败');
+    }
+  };
+
+  useEffect(() => {
+    void loadDepartments();
+  }, []);
+
+  const addDepartment = async () => {
+    const name = newDepartment.trim();
+    if (!name) {
+      setDepartmentError('请输入部门名称');
+      return;
+    }
+    setDepartmentError('');
+    try {
+      const response = await apiFetch('/api/departments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || '新增部门失败');
+      setNewDepartment('');
+      await loadDepartments();
+    } catch (error) {
+      setDepartmentError(error instanceof Error ? error.message : '新增部门失败');
+    }
+  };
+
+  const deleteDepartment = async (department: DepartmentRecord) => {
+    if (!confirm(`确认删除部门“${department.name}”？`)) return;
+    setDepartmentError('');
+    try {
+      const response = await apiFetch(`/api/departments?id=${encodeURIComponent(department.id)}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || '删除部门失败');
+      await loadDepartments();
+    } catch (error) {
+      setDepartmentError(error instanceof Error ? error.message : '删除部门失败');
+    }
+  };
+
+  const saveRoster = async () => {
+    const className = rosterClassName.trim();
+    const lines = rosterText.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    const students = lines.map((line) => {
+      const [studentId, studentName, ...rest] = line.split(/[，,]/).map(part => part.trim());
+      return { student_id: studentId, student_name: [studentName, ...rest].filter(Boolean).join(',') };
+    });
+    if (!className || !students.length || students.some(student => !student.student_id || !student.student_name)) {
+      setRosterError('请填写班级，并按“学号,姓名”格式每行录入一名学生');
+      return;
+    }
+    setLoadingRoster(true);
+    setRosterError('');
+    try {
+      const response = await apiFetch('/api/class-roster', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ className, students }),
+      });
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || '保存花名册失败');
+      setRosterText('');
+      await loadRoster();
+    } catch (error) {
+      setRosterError(error instanceof Error ? error.message : '保存花名册失败');
+    } finally {
+      setLoadingRoster(false);
+    }
+  };
+
+  const deleteRosterStudent = async () => {
+    if (!rosterDeleteTarget) return;
+    const response = await apiFetch(`/api/class-roster?id=${encodeURIComponent(rosterDeleteTarget.id)}`, { method: 'DELETE' });
+    const data = await response.json();
+    if (!data.success) {
+      setRosterError(data.error || '删除花名册成员失败');
+      return;
+    }
+    setRosterStudents(previous => previous.filter(student => student.id !== rosterDeleteTarget.id));
+    setRosterDeleteTarget(null);
+  };
+
+  const importRosterFile = async (file: File) => {
+    const className = rosterClassName.trim();
+    if (!className) {
+      setRosterError('请先填写班级名称');
+      return;
+    }
+    setLoadingRoster(true);
+    setRosterError('');
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      if (!sheet) throw new Error('Excel 中没有可读取的工作表');
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+      const students = rows.map((row) => {
+        const entries = Object.entries(row);
+        const findValue = (aliases: string[]) => entries.find(([key]) => aliases.some((alias) => key.trim().toLowerCase().includes(alias)))?.[1];
+        return {
+          student_id: String(findValue(['学号', 'student_id', 'studentid', 'id']) ?? '').trim(),
+          student_name: String(findValue(['姓名', 'student_name', 'studentname', 'name']) ?? '').trim(),
+        };
+      }).filter((student) => student.student_id && student.student_name);
+      if (!students.length) throw new Error('未识别到有效数据，请确认首行包含“学号”和“姓名”列');
+      const response = await apiFetch('/api/class-roster', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ className, students }),
+      });
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error || '导入花名册失败');
+      await loadRoster();
+      setRosterError(`已导入 ${students.length} 名学生`);
+    } catch (error) {
+      setRosterError(error instanceof Error ? error.message : '导入花名册失败');
+    } finally {
+      setLoadingRoster(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-gray-800">用户管理</h2>
+          <input type="search" placeholder="搜索姓名、学号或班级" value={userSearch} onChange={(event) => onUserSearchChange(event.target.value)} className="rounded border border-gray-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none" />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-max text-sm">
+            <thead className="border-b border-gray-200 bg-gray-50">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600">角色</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600">部门</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-600">班级</th>
+                {permissions.map(permission => <th key={permission.key} className="px-3 py-2 text-left font-medium text-gray-600">{permission.label}</th>)}
+                <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filteredUsers.map(item => (
+                <tr key={item.id} className="hover:bg-gray-50">
+                  <td className="px-3 py-2 text-gray-800">{item.name || '-'}</td>
+                  <td className="px-3 py-2 text-gray-500">{item.studentId || '-'}</td>
+                  <td className="px-3 py-2"><select value={item.role} onChange={(event) => void onUpdateRole(item.id, event.target.value)} className="rounded border border-gray-200 bg-white px-2 py-1 text-xs"><option value="admin">管理员</option><option value="leader">部门负责人</option><option value="student">学生</option></select></td>
+                  <td className="px-3 py-2"><select value={item.department || ''} onChange={(event) => void onUpdateDepartment(item.id, event.target.value || null)} className="rounded border border-gray-200 bg-white px-2 py-1 text-xs"><option value="">未设置</option>{departments.map((department) => <option key={department.id} value={department.name}>{department.name}</option>)}</select></td>
+                  <td className="px-3 py-2 text-xs text-gray-600">{item.className || '-'}</td>
+                  {permissions.map(permission => <td key={permission.key} className="px-3 py-2"><label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap"><input type="checkbox" aria-label={`${item.name}的${permission.label}权限`} checked={item[permission.key]} disabled={item.role === 'admin'} onChange={(event) => void onUpdatePermission(item.id, permission.key, event.target.checked)} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed" /><span className="text-xs text-gray-600">{item[permission.key] ? '已开启' : '未开启'}</span></label></td>)}
+                  <td className="px-3 py-2"><div className="flex gap-1"><button onClick={() => void onChangePassword(item.id, item.name)} className="rounded border border-blue-200 px-1.5 py-0.5 text-xs text-blue-600 hover:bg-blue-50">改密</button><button onClick={() => setDeleteTarget({ id: item.id, name: item.name })} className="rounded border border-red-200 px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50">删除</button></div></td>
+                </tr>
+              ))}
+              {filteredUsers.length === 0 && <tr><td colSpan={14} className="px-3 py-8 text-center text-gray-400">没有匹配用户</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="mb-3"><h2 className="text-base font-semibold text-gray-800">部门维护</h2><p className="mt-1 text-sm text-gray-500">部门名称用于活动主办、联办和人员归属选择。</p></div>
+        <div className="flex flex-wrap gap-2"><input value={newDepartment} onChange={(event) => setNewDepartment(event.target.value)} placeholder="输入部门名称" className="rounded border border-gray-300 px-3 py-2 text-sm" /><button onClick={() => void addDepartment()} className="inline-flex items-center gap-1 rounded bg-[#1e3a5f] px-3 py-2 text-sm font-medium text-white"><Plus className="h-4 w-4" />新增部门</button></div>
+        <div className="mt-3 flex flex-wrap gap-2">{departments.map((department) => <span key={department.id} className="inline-flex items-center gap-1 rounded border border-gray-200 bg-gray-50 px-2 py-1 text-sm text-gray-700">{department.name}<button type="button" title={`删除${department.name}`} onClick={() => void deleteDepartment(department)} className="text-gray-400 hover:text-red-600"><X className="h-3.5 w-3.5" /></button></span>)}</div>
+        {departmentError && <p className="mt-2 text-sm text-red-600">{departmentError}</p>}
+      </section>
+
+      <section className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="mb-4"><h2 className="text-base font-semibold text-gray-800">班级花名册</h2><p className="mt-1 text-sm text-gray-500">为集体请假维护班级成员。重复学号会更新姓名。</p></div>
+        <div className="grid gap-3 md:grid-cols-[minmax(12rem,1fr)_auto]">
+          <input type="text" placeholder="班级名称，例如：计算机2101" value={rosterClassName} onChange={(event) => setRosterClassName(event.target.value)} className="rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
+          <button onClick={() => void loadRoster()} disabled={loadingRoster} className="rounded bg-[#1e3a5f] px-3 py-2 text-sm font-medium text-white hover:bg-[#1e3a5f]/90 disabled:opacity-50">查看花名册</button>
+        </div>
+        <textarea value={rosterText} onChange={(event) => setRosterText(event.target.value)} placeholder={'批量导入，每行一名学生\n学号,姓名'} className="mt-3 min-h-28 w-full rounded border border-gray-300 px-3 py-2 font-mono text-sm focus:border-blue-500 focus:outline-none" />
+        <div className="mt-3 flex flex-wrap items-center gap-3"><button onClick={() => void saveRoster()} disabled={loadingRoster} className="rounded bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">保存花名册</button><label className="inline-flex cursor-pointer items-center gap-1 rounded border border-blue-200 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50"><Upload className="h-4 w-4" />导入 Excel<input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importRosterFile(file); event.target.value = ''; }} /></label>{rosterError && <p className="text-sm text-red-600">{rosterError}</p>}</div>
+        {rosterStudents.length > 0 && <div className="mt-4 overflow-x-auto rounded border border-gray-200"><table className="w-full text-sm"><thead className="bg-gray-50"><tr><th className="px-3 py-2 text-left font-medium text-gray-600">学号</th><th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th><th className="px-3 py-2 text-right font-medium text-gray-600">操作</th></tr></thead><tbody className="divide-y divide-gray-100">{rosterStudents.map(student => <tr key={student.id}><td className="px-3 py-2">{student.student_id}</td><td className="px-3 py-2">{student.student_name}</td><td className="px-3 py-2 text-right"><button onClick={() => setRosterDeleteTarget(student)} className="text-xs text-red-600 hover:underline">移除</button></td></tr>)}</tbody></table></div>}
+      </section>
+
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>删除用户</AlertDialogTitle><AlertDialogDescription>将删除“{deleteTarget?.name}”的账号。历史提交记录会保留。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={() => deleteTarget && void onDeleteUser(deleteTarget.id, deleteTarget.name)} className="bg-red-600 hover:bg-red-700">删除</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+      <AlertDialog open={Boolean(rosterDeleteTarget)} onOpenChange={(open) => !open && setRosterDeleteTarget(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>移除花名册成员</AlertDialogTitle><AlertDialogDescription>将从 {rosterDeleteTarget?.class_name} 花名册中移除“{rosterDeleteTarget?.student_name}”。不会删除该学生的账号或历史记录。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={() => void deleteRosterStudent()} className="bg-red-600 hover:bg-red-700">移除</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+    </div>
   );
 }
 

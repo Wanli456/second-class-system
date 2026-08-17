@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
+import { requireUser } from '@/lib/auth';
 
 const getCloudStorageConfig = () => {
   // Coze injects these values for its managed Supabase-compatible storage.
@@ -60,12 +61,16 @@ async function uploadToCloudStorage(fileName: string, file: File, buffer: Buffer
 // POST /api/upload - 上传文件到本地存储
 export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
+    const auth = await requireUser(request);
+    if (auth.response) return auth.response;
 
-    if (!file) {
+    const formData = await request.formData();
+    const fileEntry = formData.get('file');
+
+    if (!(fileEntry instanceof File)) {
       return NextResponse.json({ success: false, error: '缺少文件' }, { status: 400 });
     }
+    const file = fileEntry;
 
     // 检查文件大小 (最大 5MB)
     if (file.size > 5 * 1024 * 1024) {
@@ -79,7 +84,7 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
     const cloudUrl = await uploadToCloudStorage(fileName, file, buffer);
     if (cloudUrl) {
-      return NextResponse.json({ success: true, url: cloudUrl });
+      return NextResponse.json({ success: true, url: cloudUrl, file_name: file.name });
     }
 
     if (process.env.PGDATABASE_URL) {
@@ -100,7 +105,7 @@ export async function POST(request: NextRequest) {
     // 返回公开URL
     const publicUrl = `/uploads/${fileName}`;
 
-    return NextResponse.json({ success: true, url: publicUrl });
+    return NextResponse.json({ success: true, url: publicUrl, file_name: file.name });
   } catch (err) {
     const message = err instanceof Error ? err.message : '未知错误';
     return NextResponse.json({ success: false, error: message }, { status: 500 });

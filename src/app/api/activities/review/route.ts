@@ -2,131 +2,63 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/storage/database/supabase-client';
 import { createNotification } from '@/app/api/notifications/route';
 import { requirePermission } from '@/lib/auth';
+import { getActivityScopes, newActivityId, normalizeIds, scopeMatchesUser } from '@/lib/business-rules';
 
-// GET /api/activities/review - 管理员获取待审核提交
+async function notifyUsers(ids: string[], type: string, title: string, content: string, relatedId: string) {
+  for (const userId of [...new Set(ids)].filter(Boolean)) await createNotification(userId, type, title, content, relatedId);
+}
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await requirePermission(request, 'publish');
     if (auth.response) return auth.response;
-    const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status');
-
-    let sql = 'SELECT * FROM activity_submissions';
-    const params: any[] = [];
-
-    if (status) {
-      sql += ' WHERE review_status = $1';
-      params.push(status);
-    }
-
-    sql += ' ORDER BY created_at DESC';
-
-    const data = await query(sql, params);
-
+    const status = new URL(request.url).searchParams.get('status');
+    const clauses: string[] = [];
+    const params: unknown[] = [];
+    if (status) { params.push(status); clauses.push(`review_status=$${params.length}`); }
+    const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '';
+    const allData = await query(`SELECT * FROM activity_submissions${where} ORDER BY created_at DESC`, params);
+    const data = auth.user!.role === 'admin' ? allData : allData.filter((item) => scopeMatchesUser(auth.user!, getActivityScopes(item)));
     return NextResponse.json({ success: true, data });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : '未知错误';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+  } catch (error) {
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '获取活动审核数据失败' }, { status: 500 });
   }
 }
 
-// PUT /api/activities/review - 管理员审核提交
 export async function PUT(request: NextRequest) {
   try {
     const auth = await requirePermission(request, 'publish');
     if (auth.response) return auth.response;
-    const body = await request.json();
-    const { id, review_status, review_note } = body;
-
-    if (!id || !review_status) {
-      return NextResponse.json({ success: false, error: '缺少必要参数' }, { status: 400 });
+    const { id, review_status, review_note } = await request.json();
+    if (!id || !['待审核', '已通过', '已驳回'].includes(review_status)) return NextResponse.json({ success: false, error: '缺少或无效的审核参数' }, { status: 400 });
+    const submission = await queryOne('SELECT * FROM activity_submissions WHERE id=$1', [id]);
+    if (!submission) return NextResponse.json({ success: false, error: '提交记录不存在' }, { status: 404 });
+    if (submission.review_status !== '待审核') return NextResponse.json({ success: false, error: '该提交已处理，不能重复审核' }, { status: 400 });
+    if (auth.user!.role !== 'admin') {
+      const allowed = scopeMatchesUser(auth.user!, getActivityScopes(submission));
+      if (!allowed) return NextResponse.json({ success: false, error: '你没有审核该范围活动的权限' }, { status: 403 });
     }
 
-    if (!['待审核', '已通过', '已驳回'].includes(review_status)) {
-      return NextResponse.json({ success: false, error: '无效的审核状态' }, { status: 400 });
-    }
-
-    // 先获取提交记录
-    const submission = await queryOne(
-      'SELECT * FROM activity_submissions WHERE id = $1',
-      [id]
-    );
-
-    if (!submission) {
-      return NextResponse.json({ success: false, error: '提交记录不存在' }, { status: 404 });
-    }
-
-    if (submission.review_status !== '待审核') {
-      return NextResponse.json({ success: false, error: '该提交已处理，不能重复审核' }, { status: 400 });
-    }
-
-    // 更新审核状态
-    await query(
-      `UPDATE activity_submissions SET review_status = $1, review_note = $2, updated_at = NOW() WHERE id = $3`,
-      [review_status, review_note || null, id]
-    );
-
-    // 如果审核通过，自动写入活动总表并通知负责人
+    let activityId: string | null = null;
     if (review_status === '已通过') {
-      const now = new Date();
-      const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const prefix = `EK${yearMonth}`;
-
-      const existing = await query(
-        `SELECT id FROM activities WHERE id LIKE $1 ORDER BY id DESC LIMIT 1`,
-        [`${prefix}%`]
-      );
-
-      let seq = 1;
-      if (existing && existing.length > 0) {
-        const lastId = existing[0].id;
-        const lastSeq = parseInt(lastId.slice(-3), 10);
-        seq = lastSeq + 1;
-      }
-      const activityId = `${prefix}${String(seq).padStart(3, '0')}`;
-
-      await query(
-        `INSERT INTO activities (id, full_name, start_time, end_time, category, level, plan_file_url, record_file_url, leader_name, leader_phone, status, scoring_status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, '正常活动', '待赋分')`,
-        [activityId, submission.full_name, submission.start_time, submission.end_time, submission.category, submission.level, submission.plan_file_url, submission.record_file_url, submission.leader_name, submission.leader_phone]
-      );
-
-      // 查找负责人的用户 ID 并发送通知
-      const leader = await queryOne(
-        `SELECT id FROM users WHERE username = $1 OR student_id = $2 LIMIT 1`,
-        [submission.leader_name, submission.leader_phone]
-      );
-
-      if (leader) {
-        await createNotification(
-          leader.id,
-          'activity_approved',
-          '活动审核通过',
-          `您提交的活动「${submission.full_name}」已审核通过，活动ID：${activityId}`,
-          activityId
-        );
-      }
-    } else if (review_status === '已驳回') {
-      // 驳回时也通知负责人
-      const leader = await queryOne(
-        `SELECT id FROM users WHERE username = $1 OR student_id = $2 LIMIT 1`,
-        [submission.leader_name, submission.leader_phone]
-      );
-
-      if (leader) {
-        await createNotification(
-          leader.id,
-          'activity_rejected',
-          '活动审核被驳回',
-          `您提交的活动「${submission.full_name}」审核未通过。${review_note ? '原因：' + review_note : ''}`,
-          submission.id
-        );
-      }
+      activityId = newActivityId();
+      await query(`INSERT INTO activities (id,full_name,start_time,end_time,category,level,plan_file_url,plan_file_name,record_file_url,record_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,leader_ids,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,status,scoring_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'正常活动','待赋分')`, [
+        activityId, submission.full_name, submission.start_time, submission.end_time, submission.category, submission.level,
+        submission.plan_file_url, submission.plan_file_name || null, submission.record_file_url, submission.record_file_name || null, submission.leader_name, submission.leader_phone,
+        submission.scope_type || 'department', submission.scope_name, submission.scope_names || null, submission.leader_ids || '[]', submission.activity_submitter_id || null, submission.activity_submitter_name || null, submission.activity_submitter_student_id || null,
+      ]);
     }
+    const updated = await queryOne(`UPDATE activity_submissions SET review_status=$1,review_note=$2,updated_at=NOW() WHERE id=$3 AND review_status='待审核' RETURNING *`, [review_status, review_note || null, id]);
+    if (!updated) return NextResponse.json({ success: false, error: '审核状态已被其他操作更新，请刷新后重试' }, { status: 409 });
 
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : '未知错误';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    const recipients = normalizeIds(submission.leader_ids);
+    if (submission.activity_submitter_id) recipients.push(submission.activity_submitter_id);
+    const isApproved = review_status === '已通过';
+    await notifyUsers(recipients, isApproved ? 'activity_approved' : 'activity_rejected', isApproved ? '活动审核通过' : '活动审核被驳回', isApproved
+      ? `活动「${submission.full_name}」已审核通过，活动ID：${activityId}`
+      : `活动「${submission.full_name}」审核未通过。${review_note ? `原因：${review_note}` : ''}`, activityId || submission.id);
+    return NextResponse.json({ success: true, data: updated, activityId });
+  } catch (error) {
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '审核活动失败' }, { status: 500 });
   }
 }

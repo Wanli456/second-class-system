@@ -16,6 +16,9 @@ interface User {
   canSubmitScoring?: boolean;
   canReviewLeave?: boolean;
   canViewEveningStudy?: boolean;
+  canStartGroupLeave?: boolean;
+  department?: string | null;
+  className?: string | null;
   sessionToken?: string;
 }
 

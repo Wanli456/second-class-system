@@ -8,6 +8,7 @@ import { Search, RefreshCw, Pencil } from 'lucide-react';
 import { CATEGORIES, LEVELS, REVIEW_STATUSES, STATUS_COLORS, CATEGORY_COLORS } from '@/lib/types';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
+import { formatActivityScopes } from '@/lib/business-rules';
 
 interface Submission {
   id: string;
@@ -18,10 +19,15 @@ interface Submission {
   level: string;
   leader_name: string;
   leader_phone: string;
+  scope_names?: string | null;
+  scope_type?: 'department' | 'class' | null;
+  scope_name?: string | null;
   review_status: string;
   review_note?: string;
   plan_file_url?: string;
+  plan_file_name?: string;
   record_file_url?: string;
+  record_file_name?: string;
   created_at: string;
   source?: 'submission' | 'activity';
 }
@@ -40,8 +46,33 @@ export default function SubmitStatusPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
-
+  const [targetId, setTargetId] = useState<string | null>(null);
   const canView = user && (user.role === 'admin' || user.canViewSubmissionStatus === true);
+
+  useEffect(() => {
+    if (!initialized || !user || !canView) return;
+    const params = new URLSearchParams(window.location.search);
+    const submissionId = params.get('submissionId');
+    const activityId = params.get('activityId');
+    const id = submissionId || activityId;
+    if (!id) return;
+    const endpoint = submissionId
+      ? `/api/activities/submit?target_submission_id=${encodeURIComponent(submissionId)}`
+      : `/api/activities/submit?activity_id=${encodeURIComponent(activityId || '')}`;
+    setTargetId(id);
+    setLoading(true);
+    setSearched(true);
+    apiFetch(endpoint)
+      .then(res => res.json())
+      .then(result => setSubmissions(result.success ? result.data || [] : []))
+      .catch(err => console.error('读取通知关联记录失败:', err))
+      .finally(() => setLoading(false));
+  }, [initialized, user, canView]);
+
+  useEffect(() => {
+    if (!targetId || loading || !submissions.length) return;
+    document.getElementById(`submission-record-${targetId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [loading, submissions, targetId]);
 
   if (!initialized) {
     return <AuthLoadingScreen />;
@@ -134,7 +165,7 @@ export default function SubmitStatusPage() {
                   </button>
                 </div>
                 {submissions.map(s => (
-                  <div key={s.id} className="rounded-lg border border-gray-200 bg-white p-4">
+                  <div id={`submission-record-${s.id}`} key={s.id} className={`rounded-lg border border-gray-200 bg-white p-4 ${s.id === targetId ? 'border-teal-500 ring-2 ring-teal-100' : ''}`}>
                     <div className="flex items-start justify-between">
                       <div>
                         <div className="flex items-center gap-2">
@@ -148,6 +179,7 @@ export default function SubmitStatusPage() {
                           {new Date(s.start_time).toLocaleString('zh-CN')} ~ {new Date(s.end_time).toLocaleString('zh-CN')}
                         </p>
                         <p className="mt-0.5 text-xs text-gray-500">负责人：{s.leader_name} · {s.leader_phone}</p>
+                        <p className="mt-0.5 text-xs text-gray-500">联办单位：{formatActivityScopes(s)}</p>
                       </div>
                       <span className={`shrink-0 rounded border px-2 py-0.5 text-xs ${STATUS_COLORS[s.review_status]}`}>
                         {s.review_status}
@@ -156,6 +188,12 @@ export default function SubmitStatusPage() {
                     {s.review_note && (
                       <div className="mt-2 rounded bg-gray-50 px-3 py-2 text-xs text-gray-600">
                         <span className="font-medium">审核备注：</span>{s.review_note}
+                      </div>
+                    )}
+                    {(s.plan_file_url || s.record_file_url) && (
+                      <div className="mt-3 flex flex-wrap gap-3 border-t border-gray-100 pt-3 text-xs text-gray-600">
+                        {s.plan_file_url && <a href={s.plan_file_url} target="_blank" rel="noreferrer" className="text-teal-700 underline" title={s.plan_file_name || '策划书'}>{s.plan_file_name || '策划书（已上传）'}</a>}
+                        {s.record_file_url && <a href={s.record_file_url} target="_blank" rel="noreferrer" className="text-teal-700 underline" title={s.record_file_name || '备案表'}>{s.record_file_name || '备案表（已上传）'}</a>}
                       </div>
                     )}
                     {s.source === 'submission' && s.review_status !== '已通过' && (

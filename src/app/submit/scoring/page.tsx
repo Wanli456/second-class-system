@@ -8,6 +8,7 @@ import { GraduationCap, Upload, FileText, Search, CheckCircle2, AlertCircle, Log
 import { LEVELS, SCORING_STATUSES } from '@/lib/types';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
+import { formatActivityScopes } from '@/lib/business-rules';
 
 interface Activity {
   id: string;
@@ -18,7 +19,12 @@ interface Activity {
   leader_phone: string;
   scoring_status: string;
   scoring_table_url: string | null;
+  scoring_table_file_name: string | null;
   record_file_url: string | null;
+  record_file_name: string | null;
+  scope_names?: string | null;
+  scope_type?: 'department' | 'class' | null;
+  scope_name?: string | null;
 }
 
 export default function SubmitScoringPage() {
@@ -31,8 +37,33 @@ export default function SubmitScoringPage() {
   const [scoringFile, setScoringFile] = useState<File | null>(null);
   const [recordFile, setRecordFile] = useState<File | null>(null);
   const [selectedActivityId, setSelectedActivityId] = useState<string>('');
+  const [targetActivityId, setTargetActivityId] = useState<string | null>(null);
   const [submittedActivityId, setSubmittedActivityId] = useState<string | null>(null);
   const [showResubmit, setShowResubmit] = useState(false);
+  const canAccessScoringMaterials = user?.role === 'admin' || user?.canSubmitScoring === true;
+
+  useEffect(() => {
+    if (!initialized || !user || !canAccessScoringMaterials) return;
+    const activityId = new URLSearchParams(window.location.search).get('activityId');
+    if (!activityId) return;
+    setTargetActivityId(activityId);
+    setSearched(true);
+    setLoading(true);
+    apiFetch(`/api/activities?purpose=scoring&id=${encodeURIComponent(activityId)}`)
+      .then(res => res.json())
+      .then((data: { success?: boolean; data?: Activity[]; error?: string }) => {
+        if (!data.success) throw new Error(data.error || '查询活动失败');
+        setActivities(data.data || []);
+        setSelectedActivityId(data.data?.[0]?.id || activityId);
+      })
+      .catch(error => alert(error instanceof Error ? error.message : '查询活动失败'))
+      .finally(() => setLoading(false));
+  }, [canAccessScoringMaterials, initialized, user]);
+
+  useEffect(() => {
+    if (!targetActivityId || loading || !activities.length) return;
+    document.getElementById(`scoring-activity-${targetActivityId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [activities, loading, targetActivityId]);
 
   const handleSearch = async () => {
     if (!activityName) {
@@ -42,7 +73,7 @@ export default function SubmitScoringPage() {
     setLoading(true);
     setSearched(true);
     try {
-      const res = await apiFetch(`/api/activities?keyword=${encodeURIComponent(activityName)}`);
+      const res = await apiFetch(`/api/activities?purpose=scoring&keyword=${encodeURIComponent(activityName)}`);
       const data = await res.json();
       if (data.success) {
         setActivities(data.data);
@@ -54,14 +85,14 @@ export default function SubmitScoringPage() {
     }
   };
 
-  const uploadFile = async (file: File): Promise<string> => {
+  const uploadFile = async (file: File): Promise<{ url: string; fileName: string }> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('bucket', 'app-files');
     const res = await apiFetch('/api/upload', { method: 'POST', body: formData });
     const data = await res.json();
     if (!data.success) throw new Error(data.error || '上传失败');
-    return data.url;
+    return { url: String(data.url), fileName: String(data.file_name || file.name) };
   };
 
   const handleSubmitScoring = async () => {
@@ -91,10 +122,14 @@ export default function SubmitScoringPage() {
 
     setUploadingId(selectedActivityId);
     try {
-      const scoring_table_url = await uploadFile(scoringFile);
+      const scoringUpload = await uploadFile(scoringFile);
+      const scoring_table_url = scoringUpload.url;
       let record_file_url = activity.record_file_url;
+      let record_file_name = activity.record_file_name;
       if (recordFile) {
-        record_file_url = await uploadFile(recordFile);
+        const recordUpload = await uploadFile(recordFile);
+        record_file_url = recordUpload.url;
+        record_file_name = recordUpload.fileName;
       }
 
       const res = await apiFetch('/api/activities', {
@@ -103,7 +138,9 @@ export default function SubmitScoringPage() {
         body: JSON.stringify({
           id: selectedActivityId,
           scoring_table_url,
+          scoring_table_file_name: scoringUpload.fileName,
           record_file_url,
+          record_file_name,
         }),
       });
       const data = await res.json();
@@ -227,6 +264,10 @@ export default function SubmitScoringPage() {
                       <span className="text-gray-500">活动级别</span>
                       <span className="font-medium">{selectedActivity.level}</span>
                     </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="shrink-0 text-gray-500">联办单位</span>
+                      <span className="text-right font-medium">{formatActivityScopes(selectedActivity)}</span>
+                    </div>
                     <div className="flex justify-between">
                       <span className="text-gray-500">赋分状态</span>
                       <span className={`font-medium ${selectedActivity.scoring_status === '已赋分' ? 'text-emerald-600' : 'text-amber-600'}`}>
@@ -236,8 +277,8 @@ export default function SubmitScoringPage() {
                     {selectedActivity.record_file_url && (
                       <div className="flex justify-between">
                         <span className="text-gray-500">备案表</span>
-                        <a href={selectedActivity.record_file_url} target="_blank" className="text-teal-600 underline">
-                          已上传
+                        <a href={selectedActivity.record_file_url} target="_blank" className="max-w-[65%] truncate text-right text-teal-600 underline" title={selectedActivity.record_file_name || '已上传'}>
+                          {selectedActivity.record_file_name || '已上传'}
                         </a>
                       </div>
                     )}
@@ -339,13 +380,14 @@ export default function SubmitScoringPage() {
               <h3 className="mb-4 text-base font-semibold text-gray-900">我的活动列表</h3>
               <div className="space-y-3">
                 {activities.map((a) => (
-                  <div key={a.id} className="rounded-lg border border-gray-100 p-3">
+                  <div id={`scoring-activity-${a.id}`} key={a.id} className={`rounded-lg border border-gray-100 p-3 ${a.id === selectedActivityId ? 'border-teal-500 ring-2 ring-teal-100' : ''}`}>
                     <div className="flex items-start justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-900">{a.full_name}</p>
                         <p className="mt-1 text-xs text-gray-500">
                           {a.id} | {a.category} | {a.level}
                         </p>
+                        <p className="mt-1 text-xs text-gray-500">{formatActivityScopes(a)}</p>
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         <span className={`rounded px-2 py-0.5 text-xs font-medium ${

@@ -14,6 +14,10 @@ __pycache__/
 .env
 .cozeproj/reduction
 
+# Local verification and runtime data
+/cn_debug/browser-profiles/
+/public/uploads/
+
 # JS/TS bundlers & build outputs
 .next
 .nuxt
