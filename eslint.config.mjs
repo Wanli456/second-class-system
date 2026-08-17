@@ -46,7 +46,7 @@ const eslintConfig = defineConfig([
     'server.js',
     'dist/**',
     // Browser automation profiles are generated runtime assets, not source code.
-    'cn_debug/browser-profiles/**',
+    'cn_debug/**',
     // Script files (CommonJS):
     'scripts/**/*.js',
   ]),

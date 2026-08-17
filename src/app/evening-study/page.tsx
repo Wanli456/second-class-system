@@ -10,8 +10,25 @@ import { useUser } from '@/contexts/UserContext';
 
 interface LeaveRecord { id: string; student_id: string; student_name: string; class_name: string; leave_type: string; activity_name: string | null; start_time: string; end_time: string; review_status: string; }
 interface QueryResult { success?: boolean; data?: LeaveRecord[]; students?: LeaveRecord[]; pendingStudents?: LeaveRecord[]; stats?: { approvedCount: number; pendingCount: number; rejectedCount: number }; error?: string; }
-function today() { const date = new Date(); const offset = date.getTimezoneOffset() * 60000; return new Date(date.getTime() - offset).toISOString().slice(0, 10); }
-function formatTime(value: string) { return value ? new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '未填写'; }
+const BUSINESS_TIME_ZONE = 'Asia/Shanghai';
+
+function businessDate(value: Date) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+function today() { return businessDate(new Date()); }
+function formatTime(value: string) {
+  return value
+    ? new Date(value).toLocaleString('zh-CN', { timeZone: BUSINESS_TIME_ZONE, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : '未填写';
+}
 
 export default function EveningStudyPage() {
   const { user, initialized } = useUser();
