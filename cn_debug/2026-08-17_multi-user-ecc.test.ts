@@ -9,8 +9,8 @@ type ApiResult = { status: number; body: Record<string, unknown> };
 
 const accounts: Record<AccountKey, Account> = {
   admin: { studentId: '9000000001', name: '\u672c\u5730\u7ba1\u7406\u5458', password: 'test123' },
-  publisher: { studentId: '9000000002', name: '\u672c\u5730\u53d1\u5e03\u5e72\u4e8b', password: 'test123' },
-  scorer: { studentId: '9000000003', name: '\u672c\u5730\u8d4b\u5206\u5e72\u4e8b', password: 'test123' },
+  publisher: { studentId: '9000000002', name: '\u672c\u5730\u6d3b\u52a8\u5ba1\u6838\u5458', password: 'test123' },
+  scorer: { studentId: '9000000003', name: '\u672c\u5730\u6d3b\u52a8\u8d4b\u5206\u5458', password: 'test123' },
   leaveReviewer: { studentId: '9000000004', name: '\u672c\u5730\u8bf7\u5047\u5ba1\u6838\u5458', password: 'test123' },
   leader: { studentId: '9000000005', name: '\u672c\u5730\u8d1f\u8d23\u4eba', password: 'test123' },
   student: { studentId: '9000000006', name: '\u672c\u5730\u5b66\u751f', password: 'test123' },
