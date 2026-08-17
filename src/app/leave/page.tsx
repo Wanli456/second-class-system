@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, Eye, LogIn, Send, Upload } from 'lucide-react';
+import { AlertCircle, Eye, LogIn, Search, Send, Upload } from 'lucide-react';
 import { LEAVE_TYPES } from '@/lib/types';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
@@ -27,6 +27,11 @@ export default function LeavePage() {
   const [leaveType, setLeaveType] = useState('');
   const [activityId, setActivityId] = useState('');
   const [activityList, setActivityList] = useState<ActivityOption[]>([]);
+  const [activitySearch, setActivitySearch] = useState('');
+  const [activityPickerOpen, setActivityPickerOpen] = useState(false);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState<string | null>(null);
+  const [activityReloadKey, setActivityReloadKey] = useState(0);
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -40,6 +45,14 @@ export default function LeavePage() {
   const classMembers = roster;
   const allClassStudentIds = useMemo(() => selectAllClassStudents(classMembers, user?.studentId), [classMembers, user?.studentId]);
   const canGroupLeave = user?.role === 'admin' || user?.canStartGroupLeave === true;
+  const filteredActivities = useMemo(() => {
+    const keyword = activitySearch.trim().toLowerCase();
+    const matches = keyword
+      ? activityList.filter((activity) => `${activity.full_name} ${activity.id}`.toLowerCase().includes(keyword))
+      : activityList;
+    return matches.slice(0, 50);
+  }, [activityList, activitySearch]);
+  const selectedActivity = useMemo(() => activityList.find((activity) => activity.id === activityId) || null, [activityId, activityList]);
 
   useEffect(() => {
     if (!user) return;
@@ -60,9 +73,39 @@ export default function LeavePage() {
   }, [router, user?.studentId]);
 
   useEffect(() => {
-    if (leaveType !== '活动公假') { setActivityList([]); setActivityId(''); return; }
-    apiFetch('/api/activities?purpose=leave').then((res) => res.json()).then((data: { success?: boolean; data?: ActivityOption[] }) => { if (data.success) setActivityList(data.data || []); }).catch(() => alert('读取活动列表失败'));
-  }, [leaveType]);
+    if (leaveType !== '活动公假') {
+      setActivityList([]);
+      setActivityId('');
+      setActivityError(null);
+      setActivityLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setActivityLoading(true);
+    setActivityError(null);
+    apiFetch('/api/activities?purpose=leave')
+      .then((res) => res.json() as Promise<{ success?: boolean; data?: ActivityOption[]; error?: string }>)
+      .then((data) => {
+        if (cancelled) return;
+        if (!data.success) throw new Error(data.error || '读取活动列表失败');
+        setActivityList(data.data || []);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setActivityError(error instanceof Error ? error.message : '读取活动列表失败');
+      })
+      .finally(() => {
+        if (!cancelled) setActivityLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [activityReloadKey, leaveType]);
+
+  useEffect(() => {
+    if (!activityId) return;
+    const selected = activityList.find((activity) => activity.id === activityId);
+    if (selected) setActivitySearch(`${selected.full_name}（${selected.id}）`);
+  }, [activityId, activityList]);
 
   useEffect(() => {
     if (mode !== 'group' || requestId || !classMembers.length) return;
@@ -94,7 +137,7 @@ export default function LeavePage() {
       if (imageFile) { const body = new FormData(); body.append('file', imageFile); const upload = await apiFetch('/api/upload', { method: 'POST', body }); const data = await upload.json(); if (!data.success) throw new Error(data.error || '图片上传失败'); imageUrl = data.url; imageName = data.file_name || imageFile.name; }
       const response = await apiFetch('/api/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode, ...(requestId ? { leave_request_id: requestId } : {}), student_ids: selectedIds, leave_type: leaveType, activity_id: leaveType === '活动公假' ? activityId : null, start_time: new Date(startTime).toISOString(), end_time: new Date(endTime).toISOString(), leave_image_url: imageUrl, leave_image_name: imageName }) });
       const data = await response.json(); if (!data.success) throw new Error(data.error || '提交失败');
-      setSuccess(true); setRequestId(null); setLeaveType(''); setActivityId(''); setStartTime(''); setEndTime(''); setSelectedIds([]); setImageFile(null); setImagePreview(null); setExistingImageUrl(null); setExistingImageName(null); router.replace('/leave');
+      setSuccess(true); setRequestId(null); setLeaveType(''); setActivityId(''); setActivitySearch(''); setStartTime(''); setEndTime(''); setSelectedIds([]); setImageFile(null); setImagePreview(null); setExistingImageUrl(null); setExistingImageName(null); router.replace('/leave');
     } catch (error) { alert(error instanceof Error ? error.message : '提交失败'); } finally { setSubmitting(false); }
   };
 
@@ -108,8 +151,13 @@ export default function LeavePage() {
         <div className="grid gap-3 sm:grid-cols-3"><ReadOnly label="学号" value={user.studentId || ''} /><ReadOnly label="姓名" value={user.name || user.username || ''} /><ReadOnly label="班级" value={user.className || '未填写'} /></div>
         <div><span className="mb-2 block text-sm font-medium">请假方式 *</span><div className="flex flex-wrap gap-4 text-sm"><label className="flex items-center gap-2"><input type="radio" checked={mode === 'individual'} onChange={() => setMode('individual')} />个人请假</label>{canGroupLeave && <label className="flex items-center gap-2"><input type="radio" checked={mode === 'group'} onChange={() => { setMode('group'); setSelectedIds(allClassStudentIds); }} />班级集体请假</label>}</div></div>
         {mode === 'group' && <fieldset className="rounded-md border border-teal-100 bg-teal-50 p-3"><legend className="px-1 text-sm font-medium">本班请假学生 *</legend>{classMembers.length === 0 ? <p className="mt-2 text-sm text-amber-700">本班尚未维护花名册，请联系管理员导入后再发起集体请假。</p> : <><div className="mt-2 max-h-56 space-y-1 overflow-y-auto rounded-md border bg-white p-2">{classMembers.map((member) => { const isApplicant = member.student_id === user.studentId; const isSelected = selectedIds.includes(member.student_id); return <label key={member.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-gray-50"><input type="checkbox" checked={isSelected} disabled={isApplicant} onChange={(event) => toggleGroupMember(member.student_id, event.target.checked)} /> <span>{member.student_name}（{member.student_id}）</span>{isApplicant && <span className="text-xs text-gray-500">发起人</span>}</label>; })}</div><p className="mt-2 text-xs text-gray-500">已默认选择本班全体学生；取消勾选不请假的学生即可。发起人会自动包含，审核时按整组处理。</p></>}</fieldset>}
-        <div><span className="mb-2 block text-sm font-medium">请假类型 *</span><div className="flex flex-wrap gap-4 text-sm">{LEAVE_TYPES.map((type) => <label key={type} className="flex items-center gap-2"><input type="radio" checked={leaveType === type} onChange={() => { setLeaveType(type); setActivityId(''); }} />{type}</label>)}</div></div>
-        {leaveType === '活动公假' && <label className="block text-sm font-medium">活动全称 *<select value={activityId} onChange={(e) => setActivityId(e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 font-normal"><option value="">请选择已审核活动</option>{activityList.map((activity) => <option key={activity.id} value={activity.id}>{activity.full_name}（{activity.id}）</option>)}</select><span className="mt-1 flex items-center gap-1 text-xs text-amber-700"><AlertCircle className="h-3 w-3" />按唯一活动 ID 绑定活动，避免同名活动误匹配。</span></label>}
+        <div><span className="mb-2 block text-sm font-medium">请假类型 *</span><div className="flex flex-wrap gap-4 text-sm">{LEAVE_TYPES.map((type) => <label key={type} className="flex items-center gap-2"><input type="radio" checked={leaveType === type} onChange={() => { setLeaveType(type); setActivityId(''); setActivitySearch(''); }} />{type}</label>)}</div></div>
+        {leaveType === '活动公假' && <div className="block text-sm font-medium"><span>活动全称 *</span><div className="relative mt-1"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /><input value={activitySearch} onChange={(event) => { setActivitySearch(event.target.value); setActivityId(''); setActivityPickerOpen(true); }} onFocus={() => setActivityPickerOpen(true)} onBlur={() => window.setTimeout(() => setActivityPickerOpen(false), 120)} className="w-full rounded-md border py-2 pr-3 font-normal" style={{ paddingLeft: '2.75rem' }} placeholder="输入活动名称或活动 ID搜索" role="combobox" aria-expanded={activityPickerOpen} aria-controls="activity-options" aria-autocomplete="list" aria-describedby="activity-search-hint" /><span className="sr-only">当前已选择活动 ID：{activityId || '未选择'}</span>{activityPickerOpen && <div id="activity-options" role="listbox" className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md border bg-white p-1 shadow-lg">
+          {activityLoading ? <p className="px-3 py-4 text-center text-sm text-gray-500">正在加载已审核活动...</p>
+            : activityError ? <div className="space-y-2 px-3 py-4 text-center text-sm text-red-600"><p>{activityError}</p><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => setActivityReloadKey((value) => value + 1)} className="rounded border border-red-200 px-3 py-1 text-xs text-red-700 hover:bg-red-50">重新加载</button></div>
+              : filteredActivities.length ? filteredActivities.map((activity) => <button type="button" role="option" aria-selected={activity.id === activityId} key={activity.id} onMouseDown={(event) => event.preventDefault()} onClick={() => { setActivityId(activity.id); setActivitySearch(`${activity.full_name}（${activity.id}）`); setActivityPickerOpen(false); }} className={`block w-full rounded px-3 py-2 text-left text-sm hover:bg-gray-50 ${activity.id === activityId ? 'bg-teal-50 text-teal-800' : ''}`}><span className="block truncate">{activity.full_name}</span><span className="text-xs text-gray-500">活动 ID：{activity.id}</span></button>)
+                : <p className="px-3 py-4 text-center text-sm text-gray-500">{activityList.length ? '没有匹配的已审核活动' : '暂无已审核活动可用于活动公假'}</p>}
+        </div>}</div>{selectedActivity && <div className="mt-2 rounded-md border border-teal-100 bg-teal-50 px-3 py-2 text-sm"><span className="text-teal-700">已选择：</span><span className="font-medium text-teal-900">{selectedActivity.full_name}</span><span className="ml-2 text-xs text-teal-700">活动 ID：{selectedActivity.id}</span></div>}<span id="activity-search-hint" className="mt-1 flex items-center gap-1 text-xs text-amber-700"><AlertCircle className="h-3 w-3" />共 {activityList.length} 个已审核活动；可按活动名称或唯一活动 ID筛选，提交时按活动 ID绑定{activityList.length > 50 ? '，结果最多显示 50 条' : ''}。</span></div>}
         <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium">请假开始时间 *<input type="datetime-local" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" /></label><label className="text-sm font-medium">请假结束时间 *<input type="datetime-local" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" /></label></div>
         <label className="block text-sm font-medium">请假条图片 *<span className="mt-1 flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-3 text-sm font-normal text-gray-500"><Upload className="h-4 w-4" /><span className="truncate">{imageFile?.name || existingImageName || (existingImageUrl ? '已上传图片，选择新图片可替换' : '选择图片')}</span><input type="file" accept="image/*" className="hidden" onChange={handleImageChange} /></span>{imagePreview && <img src={imagePreview} alt="请假条预览" className="mt-2 h-20 rounded border object-contain" />}</label>
       </div>
