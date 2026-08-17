@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Pool, type QueryResultRow } from 'pg';
 import { newDb, DataType } from 'pg-mem';
 
 /**
@@ -35,10 +35,30 @@ try {
 
 const useLocalTestDatabase = !process.env.PGDATABASE_URL;
 
-// Keep the same PostgreSQL API locally so the app can be tested without a paid service.
-const localDb = useLocalTestDatabase ? newDb({ autoCreateForeignKeyIndices: true }) : null;
+type DatabasePool = {
+  query: <T extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]) => Promise<{ rows: T[] }>;
+  connect: () => Promise<DatabaseClient>;
+  end: () => Promise<void>;
+};
 
-if (localDb) {
+type DatabaseClient = Pick<DatabasePool, 'query'> & { release?: () => void };
+
+type LocalDatabaseState = {
+  db: ReturnType<typeof newDb>;
+  pool: DatabasePool;
+};
+
+const runtimeGlobal = globalThis as typeof globalThis & {
+  __secondClassLocalDatabase?: LocalDatabaseState;
+};
+const shouldInitializeLocalDb = useLocalTestDatabase && !runtimeGlobal.__secondClassLocalDatabase;
+
+// Keep the same PostgreSQL API locally so the app can be tested without a paid service.
+const localDb = useLocalTestDatabase
+  ? runtimeGlobal.__secondClassLocalDatabase?.db ?? newDb({ autoCreateForeignKeyIndices: true })
+  : null;
+
+if (localDb && shouldInitializeLocalDb) {
   localDb.public.registerFunction({
     name: 'gen_random_uuid',
     args: [],
@@ -61,6 +81,15 @@ if (localDb) {
       can_submit_scoring BOOLEAN NOT NULL DEFAULT false,
       can_review_leave BOOLEAN NOT NULL DEFAULT false,
       can_view_evening_study BOOLEAN NOT NULL DEFAULT false,
+      can_start_group_leave BOOLEAN NOT NULL DEFAULT false,
+      department TEXT,
+      class_name TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE departments (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL UNIQUE,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
 
@@ -72,12 +101,23 @@ if (localDb) {
       category TEXT NOT NULL,
       level TEXT NOT NULL,
       plan_file_url TEXT,
+      plan_file_name TEXT,
       record_file_url TEXT,
+      record_file_name TEXT,
       leader_name TEXT NOT NULL,
       leader_phone TEXT NOT NULL,
+      scope_type TEXT DEFAULT 'department',
+      scope_name TEXT,
+      scope_names TEXT,
+      leader_ids TEXT,
+      activity_submitter_id TEXT,
+      activity_submitter_name TEXT,
+      activity_submitter_student_id TEXT,
+      scoring_material_submitter_id TEXT,
       status TEXT NOT NULL DEFAULT '正常活动',
       scoring_status TEXT NOT NULL DEFAULT '待赋分',
       scoring_table_url TEXT,
+      scoring_table_file_name TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
@@ -90,9 +130,19 @@ if (localDb) {
       category TEXT NOT NULL,
       level TEXT NOT NULL,
       plan_file_url TEXT,
+      plan_file_name TEXT,
       record_file_url TEXT,
+      record_file_name TEXT,
       leader_name TEXT NOT NULL,
       leader_phone TEXT NOT NULL,
+      scope_type TEXT DEFAULT 'department',
+      scope_name TEXT,
+      scope_names TEXT,
+      leader_ids TEXT,
+      activity_submitter_id TEXT,
+      activity_submitter_name TEXT,
+      activity_submitter_student_id TEXT,
+      scoring_material_submitter_id TEXT,
       review_status TEXT NOT NULL DEFAULT '待审核',
       review_note TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -106,11 +156,55 @@ if (localDb) {
       student_name TEXT NOT NULL,
       leave_type TEXT NOT NULL,
       leave_image_url TEXT,
+      leave_image_name TEXT,
       activity_name TEXT,
+      activity_id TEXT,
+      applicant_user_id TEXT,
+      applicant_name TEXT,
+      applicant_student_id TEXT,
+      group_id TEXT,
+      start_time TIMESTAMP,
+      end_time TIMESTAMP,
       review_status TEXT NOT NULL DEFAULT '待审核',
       review_note TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE leave_groups (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+      class_name TEXT NOT NULL,
+      applicant_user_id TEXT NOT NULL,
+      applicant_name TEXT,
+      applicant_student_id TEXT,
+      leave_type TEXT NOT NULL DEFAULT '活动公假',
+      activity_name TEXT,
+      activity_id TEXT,
+      start_time TIMESTAMP NOT NULL,
+      end_time TIMESTAMP NOT NULL,
+      review_status TEXT NOT NULL DEFAULT '待审核',
+      review_note TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE leave_group_members (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+      group_id TEXT NOT NULL,
+      student_id TEXT NOT NULL,
+      student_name TEXT NOT NULL,
+      class_name TEXT NOT NULL,
+      leave_request_id TEXT
+    );
+
+    CREATE TABLE class_roster (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+      class_name TEXT NOT NULL,
+      student_id TEXT NOT NULL,
+      student_name TEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      UNIQUE(class_name, student_id)
     );
 
     CREATE TABLE evening_study_schedules (
@@ -157,54 +251,179 @@ if (localDb) {
     INSERT INTO users (
       id, username, password, student_id, role,
       can_publish, can_score, can_review_leave,
-      can_submit_activity, can_view_submission_status, can_submit_scoring
+      can_submit_activity, can_view_submission_status, can_submit_scoring,
+      can_start_group_leave, department, class_name
     ) VALUES
-      ('local-admin', '本地管理员', 'test123', '9000000001', 'admin', false, false, false, false, false, false),
-      ('local-publisher', '本地发布干事', 'test123', '9000000002', 'publisher', true, false, false, false, false, false),
-      ('local-scorer', '本地赋分干事', 'test123', '9000000003', 'scorer', false, true, false, false, false, false),
-      ('local-leave-reviewer', '本地请假审核员', 'test123', '9000000004', 'leave_reviewer', false, false, true, false, false, false),
-      ('local-leader', '本地负责人', 'test123', '9000000005', 'leader', false, false, false, true, true, true),
-      ('local-student', '本地学生', 'test123', '9000000006', 'student', false, false, false, false, false, false);
+      ('local-admin', '本地管理员', 'test123', '9000000001', 'admin', false, false, false, false, false, false, true, '学生会', '计算机2101'),
+      ('local-publisher', '本地活动审核员', 'test123', '9000000002', 'student', true, false, false, false, false, false, false, '学生会', '计算机2101'),
+      ('local-scorer', '本地活动赋分员', 'test123', '9000000003', 'student', false, true, false, false, false, false, false, '学生会', '计算机2101'),
+      ('local-leave-reviewer', '本地请假审核员', 'test123', '9000000004', 'student', false, false, true, false, false, false, false, '学生会', '计算机2101'),
+      ('local-leader', '本地负责人', 'test123', '9000000005', 'leader', false, false, false, true, true, true, true, '学生会', '计算机2101'),
+      ('local-student', '本地学生', 'test123', '9000000006', 'student', false, false, false, false, false, false, false, '学生会', '计算机2101');
+
+    INSERT INTO class_roster (class_name, student_id, student_name) VALUES
+      ('计算机2101', '9000000001', '本地管理员'),
+      ('计算机2101', '9000000002', '本地发布干事'),
+      ('计算机2101', '9000000003', '本地赋分干事'),
+      ('计算机2101', '9000000004', '本地请假审核员'),
+      ('计算机2101', '9000000005', '本地负责人'),
+      ('计算机2101', '9000000006', '本地学生'),
+      ('计算机2101', '9000000007', '本地未注册学生');
+
+    INSERT INTO departments (name) VALUES ('学生会') ON CONFLICT (name) DO NOTHING;
   `);
 
   console.log('🟢 本地开发模式：使用内存测试数据库（重启后数据清空）');
   console.log('🔑 测试账户：');
   console.log('   - 管理员：学号 9000000001 / 密码 test123');
-  console.log('   - 发布干事：学号 9000000002 / 密码 test123');
-  console.log('   - 赋分干事：学号 9000000003 / 密码 test123');
-  console.log('   - 请假审核员：学号 9000000004 / 密码 test123');
-  console.log('   - 活动负责人：学号 9000000005 / 密码 test123');
+  console.log('   - 活动审核权限：学号 9000000002 / 密码 test123');
+  console.log('   - 活动赋分权限：学号 9000000003 / 密码 test123');
+  console.log('   - 请假审核权限：学号 9000000004 / 密码 test123');
+  console.log('   - 部门负责人：学号 9000000005 / 密码 test123');
   console.log('   - 学生：学号 9000000006 / 密码 test123');
   console.log('💡 如需持久化数据，请配置 PGDATABASE_URL 环境变量');
 }
 
-const pool = useLocalTestDatabase
-  ? new (localDb!.adapters.createPg().Pool)()
+const pool: DatabasePool = useLocalTestDatabase
+  ? runtimeGlobal.__secondClassLocalDatabase?.pool ?? new (localDb!.adapters.createPg().Pool)() as DatabasePool
   : new Pool({
       connectionString: process.env.PGDATABASE_URL,
       ssl: { rejectUnauthorized: false },
-    });
+    }) as DatabasePool;
+
+if (useLocalTestDatabase && !runtimeGlobal.__secondClassLocalDatabase) {
+  runtimeGlobal.__secondClassLocalDatabase = { db: localDb!, pool };
+}
 
 export async function ensureDatabaseSchema() {
+  await ensureDepartmentsTable();
   if (useLocalTestDatabase) return;
 
   await pool.query(`
+    UPDATE users SET role='student' WHERE role IN ('publisher','scorer','leave_reviewer');
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_activity BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_submission_status BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_start_group_leave BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_scoring BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS scope_type TEXT DEFAULT 'department';
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS scope_name TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS scope_names TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS leader_ids TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_submitter_id TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_submitter_name TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_submitter_student_id TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_material_submitter_id TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS plan_file_name TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_file_name TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_table_file_name TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_type TEXT DEFAULT 'department';
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_name TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_names TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS leader_ids TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_submitter_id TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_submitter_name TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_submitter_student_id TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scoring_material_submitter_id TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS plan_file_name TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS record_file_name TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scoring_table_file_name TEXT;
+    ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_user_id TEXT;
+    ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_name TEXT;
+    ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_student_id TEXT;
+    ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS group_id TEXT;
+    ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS start_time TIMESTAMP;
+    ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS end_time TIMESTAMP;
+    ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS leave_image_name TEXT;
+    ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS activity_id TEXT;
+    CREATE TABLE IF NOT EXISTS leave_groups (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      class_name TEXT NOT NULL,
+      applicant_user_id TEXT NOT NULL,
+      applicant_name TEXT,
+      applicant_student_id TEXT,
+      leave_type TEXT NOT NULL DEFAULT '活动公假',
+      activity_name TEXT,
+      activity_id TEXT,
+      start_time TIMESTAMP NOT NULL,
+      end_time TIMESTAMP NOT NULL,
+      review_status TEXT NOT NULL DEFAULT '待审核',
+      review_note TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS leave_group_members (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      group_id TEXT NOT NULL,
+      student_id TEXT NOT NULL,
+      student_name TEXT NOT NULL,
+      class_name TEXT NOT NULL,
+      leave_request_id TEXT
+    );
+    CREATE TABLE IF NOT EXISTS class_roster (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      class_name TEXT NOT NULL,
+      student_id TEXT NOT NULL,
+      student_name TEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      UNIQUE(class_name, student_id)
+    );
+    ALTER TABLE leave_groups ADD COLUMN IF NOT EXISTS activity_id TEXT;
+  `);
+}
+
+// 部门功能独立迁移，保证热更新或旧本地进程也能补齐新增表。
+export async function ensureDepartmentsTable() {
+  const departmentIdDefault = useLocalTestDatabase ? 'gen_random_uuid()' : 'gen_random_uuid()::text';
+  const table = await pool.query<{ table_name: string }>(
+    `SELECT table_name FROM information_schema.tables
+     WHERE table_schema='public' AND table_name='departments'`,
+  );
+  if (table.rows.length === 0) {
+    await pool.query(`
+      CREATE TABLE departments (
+        id TEXT PRIMARY KEY DEFAULT ${departmentIdDefault},
+        name TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+  }
+
+  await pool.query(`
+    INSERT INTO departments (name)
+      SELECT DISTINCT department FROM users
+      WHERE department IS NOT NULL AND department <> ''
+      ON CONFLICT (name) DO NOTHING;
   `);
 }
 
 // 通用查询函数
-export async function query(sql: string, params: any[] = []): Promise<any[]> {
+export async function query<T extends QueryResultRow = QueryResultRow>(sql: string, params: unknown[] = []): Promise<T[]> {
   const result = await pool.query(sql, params);
-  return result.rows as any[];
+  return result.rows as T[];
 }
 
 // 单行查询
-export async function queryOne(sql: string, params: any[] = []): Promise<any | null> {
-  const rows = await query(sql, params);
+export async function queryOne<T extends QueryResultRow = QueryResultRow>(sql: string, params: unknown[] = []): Promise<T | null> {
+  const rows = await query<T>(sql, params);
   return rows[0] || null;
+}
+
+export async function withTransaction<T>(callback: (client: DatabaseClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release?.();
+  }
 }
 
 // 关闭连接池（用于优雅关闭）

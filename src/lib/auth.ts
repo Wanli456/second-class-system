@@ -32,10 +32,24 @@ export type AuthUser = {
   can_submit_scoring: boolean;
   can_review_leave: boolean;
   can_view_evening_study: boolean;
+  can_start_group_leave: boolean;
+  department?: string | null;
+  class_name?: string | null;
 };
 
+export type BaseRole = 'admin' | 'leader' | 'student';
+
+export function normalizeRole(role: unknown): BaseRole {
+  if (role === 'admin' || role === 'leader' || role === 'student') return role;
+  // Legacy capability roles are retained only as data migration compatibility.
+  return 'student';
+}
+
 function secret() {
-  return process.env.AUTH_SESSION_SECRET || FALLBACK_SECRET;
+  if (process.env.AUTH_SESSION_SECRET) return process.env.AUTH_SESSION_SECRET;
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.COZE_PROJECT_ENV === 'PROD';
+  if (isProduction) throw new Error('生产环境缺少 AUTH_SESSION_SECRET，拒绝使用固定会话密钥');
+  return FALLBACK_SECRET;
 }
 
 function sign(value: string) {
@@ -89,18 +103,20 @@ export async function verifyPassword(password: string, stored: string) {
  *
  * 权限规则：
  * 1. admin角色拥有所有权限
- * 2. 特殊角色（publisher、scorer、leave_reviewer）需要同时满足：role匹配 + 对应勾选权限启用
- *    这样管理员可以通过取消勾选来覆盖角色权限
- * 3. 普通权限只能通过勾选控制
+ * 2. 业务能力由独立权限字段控制，基础角色不再绑定审核、赋分或请假权限
+ * 3. 管理员拥有全部权限，其余用户由管理员逐项授予
  */
 function calculateUserPermissions(user: AuthUser) {
-  const isAdmin = user.role === 'admin';
+  const role = normalizeRole(user.role);
+  const isAdmin = role === 'admin';
 
   return {
     id: user.id,
     studentId: user.student_id,
     name: user.username,
-    role: user.role,
+    role,
+    department: user.department || null,
+    className: user.class_name || null,
     // 权限计算：admin OR 勾选权限
     canPublish: isAdmin || user.can_publish,
     canScore: isAdmin || user.can_score,
@@ -111,6 +127,7 @@ function calculateUserPermissions(user: AuthUser) {
     canViewSubmissionStatus: isAdmin || user.can_view_submission_status,
     canSubmitScoring: isAdmin || user.can_submit_scoring,
     canViewEveningStudy: isAdmin || user.can_view_evening_study,
+    canStartGroupLeave: isAdmin || user.can_start_group_leave,
   };
 }
 
@@ -127,7 +144,7 @@ export async function getSessionUser(request: NextRequest): Promise<AuthUser | n
   const userId = readSession(request.cookies.get(SESSION_COOKIE)?.value) || readSession(bearerToken);
   if (!userId) return null;
   return queryOne(
-    `SELECT id, username, student_id, role, can_publish, can_score, can_submit_activity, can_view_submission_status, can_submit_scoring, can_review_leave, can_view_evening_study
+    `SELECT id, username, student_id, role, can_publish, can_score, can_submit_activity, can_view_submission_status, can_submit_scoring, can_review_leave, can_view_evening_study, can_start_group_leave, department, class_name
      FROM users WHERE id = $1`,
     [userId],
   );

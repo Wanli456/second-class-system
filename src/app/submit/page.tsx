@@ -1,326 +1,155 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { GraduationCap, ArrowLeft, Send, Eye, Upload, FileText, LogIn } from 'lucide-react';
+import { LogIn, Send, Upload, Eye } from 'lucide-react';
 import { CATEGORIES, LEVELS } from '@/lib/types';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 
+interface DirectoryUser { id: string; username: string; student_id: string; department?: string | null; class_name?: string | null; }
+interface ActivityScope { type: 'department' | 'class'; name: string; label: string; }
+interface Submission { id: string; full_name: string; start_time: string; end_time: string; category: string; level: string; scope_names?: string | null; scope_type?: 'department' | 'class'; scope_name?: string | null; leader_ids?: string | null; plan_file_url: string | null; plan_file_name?: string | null; record_file_url: string | null; record_file_name?: string | null; review_status: string; }
+
+function localDateTime(value: string) { const date = new Date(value); const offset = date.getTimezoneOffset() * 60000; return new Date(date.getTime() - offset).toISOString().slice(0, 16); }
+function parseIds(value?: string | null) { if (!value) return []; try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) ? parsed.map(String) : []; } catch { return value.split(',').map((item) => item.trim()).filter(Boolean); } }
+
 export default function SubmitPage() {
   const router = useRouter();
-  // 使用全局用户状态，避免重复API调用
   const { user, initialized } = useUser();
-  const [form, setForm] = useState({
-    full_name: '',
-    start_time: '',
-    end_time: '',
-    category: '',
-    level: '',
-    leader_name: '',
-    leader_phone: '',
-  });
+  const [directory, setDirectory] = useState<DirectoryUser[]>([]);
+  const [departments, setDepartments] = useState<string[]>([]);
+  const [classes, setClasses] = useState<string[]>([]);
+  const [form, setForm] = useState({ full_name: '', start_time: '', end_time: '', category: '', level: '' });
+  const [hostScope, setHostScope] = useState<ActivityScope | null>(null);
+  const [cohostScopes, setCohostScopes] = useState<ActivityScope[]>([]);
+  const [leaderIds, setLeaderIds] = useState<string[]>([]);
   const [planFile, setPlanFile] = useState<File | null>(null);
   const [recordFile, setRecordFile] = useState<File | null>(null);
+  const [existingPlanUrl, setExistingPlanUrl] = useState<string | null>(null);
+  const [existingPlanName, setExistingPlanName] = useState<string | null>(null);
+  const [existingRecordUrl, setExistingRecordUrl] = useState<string | null>(null);
+  const [existingRecordName, setExistingRecordName] = useState<string | null>(null);
+  const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [resubmissionId, setResubmissionId] = useState<string | null>(null);
-  const [submissionId, setSubmissionId] = useState<string | null>(null);
+
+  const scopes = useMemo(() => {
+    const values = new Map<string, ActivityScope>();
+    directory.forEach((item) => {
+      if (item.department) values.set(`department:${item.department}`, { type: 'department', name: item.department, label: `部门：${item.department}` });
+      if (item.class_name) values.set(`class:${item.class_name}`, { type: 'class', name: item.class_name, label: `班级：${item.class_name}` });
+    });
+    departments.forEach((name) => values.set(`department:${name}`, { type: 'department', name, label: `部门：${name}` }));
+    classes.forEach((name) => values.set(`class:${name}`, { type: 'class', name, label: `班级：${name}` }));
+    if (user?.department) values.set(`department:${user.department}`, { type: 'department', name: user.department, label: `部门：${user.department}` });
+    if (user?.className) values.set(`class:${user.className}`, { type: 'class', name: user.className, label: `班级：${user.className}` });
+    return [...values.values()];
+  }, [classes, departments, directory, user]);
+  const hostScopes = useMemo(() => scopes.filter((scope) => (
+    (scope.type === 'department' && scope.name === user?.department)
+    || (scope.type === 'class' && scope.name === user?.className)
+  )), [scopes, user?.className, user?.department]);
+  const selectedScopes = useMemo(() => hostScope ? [hostScope, ...cohostScopes] : [], [cohostScopes, hostScope]);
+  const cohostCandidates = useMemo(() => hostScope
+    ? scopes.filter((scope) => scope.type === hostScope.type && scope.name !== hostScope.name)
+    : [], [hostScope, scopes]);
+  const leaders = useMemo(() => {
+    const selected = new Set(selectedScopes.map((scope) => `${scope.type}:${scope.name}`));
+    return directory.filter((item) => selected.has(`department:${item.department}`) || selected.has(`class:${item.class_name}`));
+  }, [directory, selectedScopes]);
 
   useEffect(() => {
-    setSubmissionId(new URLSearchParams(window.location.search).get('submissionId'));
-  }, []);
+    if (!user) return;
+    setHostScope(user.department
+      ? { type: 'department', name: user.department, label: `部门：${user.department}` }
+      : user.className ? { type: 'class', name: user.className, label: `班级：${user.className}` } : null);
+    setCohostScopes([]);
+    setLeaderIds([user.id]);
+    Promise.all([
+      apiFetch('/api/auth?directory=true').then((res) => res.json() as Promise<{ success?: boolean; data?: DirectoryUser[] }>),
+      apiFetch('/api/departments').then((res) => res.json() as Promise<{ success?: boolean; data?: string[] }>),
+      apiFetch('/api/class-roster?classes=true').then((res) => res.json() as Promise<{ success?: boolean; data?: string[] }>),
+    ]).then(([directoryData, departmentData, classData]) => {
+      if (directoryData.success) setDirectory(directoryData.data || []);
+      if (departmentData.success) setDepartments(departmentData.data || []);
+      if (classData.success) setClasses(classData.data || []);
+    }).catch(() => alert('读取部门、班级或人员目录失败，请稍后重试'));
+  }, [user]);
 
   useEffect(() => {
-    if (!submissionId) return;
+    const id = new URLSearchParams(window.location.search).get('submissionId');
+    setSubmissionId(id);
+    if (!id) return;
+    apiFetch(`/api/activities/submit?submission_id=${encodeURIComponent(id)}`).then((res) => res.json()).then((data: { success?: boolean; data?: Submission[]; error?: string }) => {
+      const submission = data.success ? data.data?.[0] : null;
+      if (!submission) { alert(data.error || '未找到原活动提交记录'); router.replace('/submit'); return; }
+      if (submission.review_status === '已通过') { alert('该活动已审核通过，不能重新提交'); router.replace('/submit'); return; }
+      setForm({ full_name: submission.full_name, start_time: localDateTime(submission.start_time), end_time: localDateTime(submission.end_time), category: submission.category, level: submission.level });
+      let restoredScopes: ActivityScope[] = [];
+      try {
+        const parsed: unknown = submission.scope_names ? JSON.parse(submission.scope_names) : null;
+        if (Array.isArray(parsed)) restoredScopes = parsed.flatMap((item) => item && typeof item === 'object' && ((item as { type?: unknown }).type === 'department' || (item as { type?: unknown }).type === 'class') && typeof (item as { name?: unknown }).name === 'string' ? [{ type: (item as { type: 'department' | 'class' }).type, name: (item as { name: string }).name, label: `${(item as { type: string }).type === 'department' ? '部门' : '班级'}：${(item as { name: string }).name}` }] : []);
+      } catch { restoredScopes = []; }
+      if (!restoredScopes.length && submission.scope_name) restoredScopes = [{ type: submission.scope_type || 'department', name: submission.scope_name, label: `${submission.scope_type === 'class' ? '班级' : '部门'}：${submission.scope_name}` }];
+      setHostScope(restoredScopes[0] || null); setCohostScopes(restoredScopes.slice(1)); setLeaderIds(parseIds(submission.leader_ids));
+      setExistingPlanUrl(submission.plan_file_url); setExistingPlanName(submission.plan_file_name || null); setExistingRecordUrl(submission.record_file_url); setExistingRecordName(submission.record_file_name || null);
+    }).catch(() => alert('读取原活动提交记录失败'));
+  }, [router]);
 
-    apiFetch(`/api/activities/submit?submission_id=${encodeURIComponent(submissionId)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        const submission = data.success ? data.data?.[0] : null;
-        if (!submission) {
-          alert('未找到原活动提交记录');
-          router.replace('/submit');
-          return;
-        }
-        if (submission.review_status === '已通过') {
-          alert('该活动已审核通过，不能重新提交');
-          router.replace('/submit');
-          return;
-        }
+  useEffect(() => {
+    if (leaders.length && !leaderIds.some((id) => leaders.some((leader) => leader.id === id))) setLeaderIds([leaders[0].id]);
+  }, [leaderIds, leaders]);
 
-        setResubmissionId(submission.id);
-        setForm({
-          full_name: submission.full_name,
-          start_time: new Date(submission.start_time).toISOString().slice(0, 16),
-          end_time: new Date(submission.end_time).toISOString().slice(0, 16),
-          category: submission.category,
-          level: submission.level,
-          leader_name: submission.leader_name,
-          leader_phone: submission.leader_phone,
-        });
-      })
-      .catch(() => alert('读取原活动提交记录失败'));
-  }, [router, submissionId]);
+  const handleHostScopeChange = (value: string) => {
+    const nextHost = hostScopes.find((scope) => `${scope.type}:${scope.name}` === value) || null;
+    setHostScope(nextHost);
+    setCohostScopes([]);
+    setLeaderIds(user ? [user.id] : []);
+  };
 
-  const uploadFile = async (file: File): Promise<string> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('bucket', 'app-files');
-    const res = await apiFetch('/api/upload', { method: 'POST', body: formData });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || '上传失败');
-    return data.url;
+  const uploadFile = async (file: File): Promise<{ url: string; fileName: string }> => {
+    const body = new FormData(); body.append('file', file); body.append('bucket', 'app-files');
+    const response = await apiFetch('/api/upload', { method: 'POST', body }); const data = await response.json();
+    if (!data.success) throw new Error(data.error || '文件上传失败'); return { url: String(data.url), fileName: String(data.file_name || file.name) };
   };
 
   const handleSubmit = async () => {
-    if (!form.full_name || !form.start_time || !form.end_time || !form.category || !form.level || !form.leader_name || !form.leader_phone) {
-      alert('请填写所有必填项');
-      return;
-    }
-    if (!planFile) {
-      alert('请上传活动策划书');
-      return;
-    }
-    if (!recordFile) {
-      alert('请上传活动备案表');
-      return;
-    }
-
+    if (!form.full_name || !form.start_time || !form.end_time || !form.category || !form.level || !hostScope || !leaderIds.length) { alert('请填写活动信息、主办单位并选择负责人'); return; }
+    if (!planFile && !existingPlanUrl) { alert('请上传活动策划书'); return; }
+    if (!recordFile && !existingRecordUrl) { alert('请上传活动备案表'); return; }
     setSubmitting(true);
     try {
-      const plan_file_url = await uploadFile(planFile);
-      const record_file_url = await uploadFile(recordFile);
-
-      const res = await apiFetch('/api/activities/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          ...(resubmissionId ? { submission_id: resubmissionId } : {}),
-          plan_file_url,
-          record_file_url,
-          start_time: new Date(form.start_time).toISOString(),
-          end_time: new Date(form.end_time).toISOString(),
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSuccess(true);
-        setResubmissionId(null);
-        if (submissionId) router.replace('/submit');
-        setForm({ full_name: '', start_time: '', end_time: '', category: '', level: '', leader_name: '', leader_phone: '' });
-        setPlanFile(null);
-        setRecordFile(null);
-      } else {
-        alert(data.error || '提交失败');
-      }
-    } finally {
-      setSubmitting(false);
-    }
+      const planUpload = planFile ? await uploadFile(planFile) : null;
+      const recordUpload = recordFile ? await uploadFile(recordFile) : null;
+      const firstScope = hostScope;
+      const response = await apiFetch('/api/activities/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, scope_type: firstScope.type, scope_name: firstScope.name, scope_names: selectedScopes.map(({ type, name }) => ({ type, name })), leader_ids: leaderIds, ...(submissionId ? { submission_id: submissionId } : {}), plan_file_url: planUpload?.url || existingPlanUrl, plan_file_name: planUpload?.fileName || existingPlanName, record_file_url: recordUpload?.url || existingRecordUrl, record_file_name: recordUpload?.fileName || existingRecordName, start_time: new Date(form.start_time).toISOString(), end_time: new Date(form.end_time).toISOString() }) });
+      const data = await response.json(); if (!data.success) throw new Error(data.error || '提交失败');
+      setSuccess(true); setSubmissionId(null); setForm({ full_name: '', start_time: '', end_time: '', category: '', level: '' }); setCohostScopes([]); setLeaderIds(user ? [user.id] : []); setPlanFile(null); setRecordFile(null); setExistingPlanUrl(null); setExistingPlanName(null); setExistingRecordUrl(null); setExistingRecordName(null);
+      if (new URLSearchParams(window.location.search).has('submissionId')) router.replace('/submit');
+    } catch (error) { alert(error instanceof Error ? error.message : '提交失败'); } finally { setSubmitting(false); }
   };
 
-  // 登录检查 - 等待用户状态初始化完成后再判断
-  if (!initialized) {
-    return <AuthLoadingScreen />;
-  }
+  if (!initialized) return <AuthLoadingScreen />;
+  if (!user) return <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4"><div className="w-full max-w-sm rounded-lg border bg-white p-6 text-center"><LogIn className="mx-auto mb-3 h-8 w-8 text-teal-700" /><h2 className="text-lg font-semibold">需要登录</h2><p className="my-4 text-sm text-gray-500">请登录后提交活动信息</p><Link href="/login?redirect=/submit" className="inline-flex w-full justify-center rounded-md bg-teal-700 px-4 py-2 text-sm text-white">登录/注册</Link></div></div>;
+  if (user.role !== 'admin' && !user.canSubmitActivity) return <div className="flex min-h-screen items-center justify-center p-4"><div className="rounded-lg border bg-white p-6 text-center"><h2 className="font-semibold">暂无活动提交权限</h2><p className="my-4 text-sm text-gray-500">请联系管理员开通活动提交权限。</p><Link href="/" className="text-sm text-teal-700">返回首页</Link></div></div>;
 
-  if (!user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0] p-4">
-        <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#1e3a5f]/10">
-            <LogIn className="h-6 w-6 text-[#1e3a5f]" />
-          </div>
-          <h2 className="mb-2 text-lg font-semibold text-gray-900">需要登录</h2>
-          <p className="mb-6 text-sm text-gray-500">活动负责人需要登录后才能提交活动</p>
-          <Link
-            href="/login?redirect=/submit"
-            className="inline-flex w-full items-center justify-center rounded-md bg-[#1e3a5f] px-4 py-2 text-sm font-medium text-white hover:bg-[#1e3a5f]/90"
-          >
-            登录/注册
-          </Link>
-          <Link href="/" className="mt-3 block text-sm text-gray-500 hover:text-[#1e3a5f]">返回首页</Link>
-        </div>
+  return <DashboardLayout user={user}><div className="mx-auto max-w-3xl space-y-4">
+    {success && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">提交成功，已进入审核队列。<Link href="/submit/status" className="ml-1 underline">查看提交状态</Link></div>}
+    <div className="rounded-lg border bg-white p-5 shadow-sm"><h2 className="text-lg font-semibold">{submissionId ? '重新提交活动信息' : '提交活动信息'}</h2><p className="mt-1 text-sm text-gray-500">实际提交人：{user.name || user.username}（当前登录账号）</p>
+      <div className="mt-5 space-y-4">
+        <label className="block text-sm font-medium">活动全称 *<input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" placeholder="请输入活动全称" /></label>
+        <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium">开始时间 *<input type="datetime-local" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" /></label><label className="text-sm font-medium">结束时间 *<input type="datetime-local" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" /></label></div>
+        <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium">二课分类 *<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal"><option value="">请选择分类</option>{CATEGORIES.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-sm font-medium">活动级别 *<select value={form.level} onChange={(e) => setForm({ ...form, level: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal"><option value="">请选择级别</option>{LEVELS.map((item) => <option key={item}>{item}</option>)}</select></label></div>
+        <div className="grid gap-4 sm:grid-cols-3"><label className="text-sm font-medium">主办单位 *<select value={hostScope ? `${hostScope.type}:${hostScope.name}` : ''} onChange={(e) => handleHostScopeChange(e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 font-normal"><option value="">请选择自己的部门或班级</option>{hostScopes.map((scope) => <option key={`${scope.type}:${scope.name}`} value={`${scope.type}:${scope.name}`}>{scope.label}</option>)}</select></label><label className="text-sm font-medium">联办单位（可多选）<select multiple value={cohostScopes.map((scope) => `${scope.type}:${scope.name}`)} onChange={(e) => { const values = Array.from(e.target.selectedOptions, (option) => option.value); setCohostScopes(values.map((value) => cohostCandidates.find((scope) => `${scope.type}:${scope.name}` === value)).filter((scope): scope is ActivityScope => Boolean(scope))); }} className="mt-1 min-h-28 w-full rounded-md border px-3 py-2 font-normal" disabled={!hostScope}>{cohostCandidates.map((scope) => <option key={`${scope.type}:${scope.name}`} value={`${scope.type}:${scope.name}`}>{scope.label}</option>)}</select></label><label className="text-sm font-medium">活动负责人（可多选） *<select multiple value={leaderIds} onChange={(e) => setLeaderIds(Array.from(e.target.selectedOptions, (option) => option.value))} className="mt-1 min-h-28 w-full rounded-md border px-3 py-2 font-normal">{leaders.map((leader) => <option key={leader.id} value={leader.id}>{leader.username}（{leader.student_id}）</option>)}</select></label></div>
+        <div className="grid gap-4 sm:grid-cols-2"><FilePicker label="活动策划书 *" file={planFile} existingUrl={existingPlanUrl} existingName={existingPlanName} onChange={setPlanFile} /><FilePicker label="活动备案表 *" file={recordFile} existingUrl={existingRecordUrl} existingName={existingRecordName} onChange={setRecordFile} /></div>
       </div>
-    );
-  }
-
-  if (user.role !== 'admin' && user.canSubmitActivity !== true) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0] p-4">
-        <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
-          <h2 className="mb-2 text-lg font-semibold text-gray-900">暂无活动提交权限</h2>
-          <p className="mb-6 text-sm text-gray-500">请联系管理员开通活动发布权限。</p>
-          <Link href="/" className="inline-flex w-full items-center justify-center rounded-md bg-[#1e3a5f] px-4 py-2 text-sm font-medium text-white hover:bg-[#1e3a5f]/90">
-            返回首页
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <DashboardLayout
-      user={user}
-    >
-      <div className="mx-auto max-w-2xl">
-        {success && (
-          <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-            <p className="text-sm text-emerald-700">
-              提交成功！您的活动信息已进入审核队列，请前往
-              <Link href="/submit/status" className="mx-1 font-medium underline">查询状态</Link>
-              查看处理进度。
-            </p>
-          </div>
-        )}
-
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-1 text-lg font-semibold text-gray-900">{resubmissionId ? '重新提交活动信息' : '提交活动信息'}</h2>
-          <p className="mb-6 text-sm text-gray-500">请填写活动信息并上传相关文件，提交后将由管理员审核并录入活动总表</p>
-
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">活动全称 *</label>
-              <input
-                type="text"
-                value={form.full_name}
-                onChange={(e) => setForm(f => ({ ...f, full_name: e.target.value }))}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
-                placeholder="请输入活动全称"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">开始时间 *</label>
-                <input
-                  type="datetime-local"
-                  value={form.start_time}
-                  onChange={(e) => setForm(f => ({ ...f, start_time: e.target.value }))}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">结束时间 *</label>
-                <input
-                  type="datetime-local"
-                  value={form.end_time}
-                  onChange={(e) => setForm(f => ({ ...f, end_time: e.target.value }))}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">二课分类 *</label>
-                <select
-                  value={form.category}
-                  onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                >
-                  <option value="">请选择分类</option>
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">活动级别 *</label>
-                <select
-                  value={form.level}
-                  onChange={(e) => setForm(f => ({ ...f, level: e.target.value }))}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                >
-                  <option value="">请选择级别</option>
-                  {LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">负责人姓名 *</label>
-                <input
-                  type="text"
-                  value={form.leader_name}
-                  onChange={(e) => setForm(f => ({ ...f, leader_name: e.target.value }))}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
-                  placeholder="请输入负责人姓名"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">负责人电话 *</label>
-                <input
-                  type="text"
-                  value={form.leader_phone}
-                  onChange={(e) => setForm(f => ({ ...f, leader_phone: e.target.value }))}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1e3a5f] focus:outline-none focus:ring-1 focus:ring-[#1e3a5f]"
-                  placeholder="请输入负责人电话"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">活动策划书 *</label>
-                <label className={`flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm ${planFile ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-gray-300 text-gray-500 hover:border-[#1e3a5f] hover:text-[#1e3a5f]'}`}>
-                  <Upload className="h-4 w-4" />
-                  <span className="truncate">{planFile ? planFile.name : '选择文件'}</span>
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                    onChange={(e) => setPlanFile(e.target.files?.[0] || null)}
-                  />
-                </label>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">活动备案表 *</label>
-                <label className={`flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm ${recordFile ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-gray-300 text-gray-500 hover:border-[#1e3a5f] hover:text-[#1e3a5f]'}`}>
-                  <Upload className="h-4 w-4" />
-                  <span className="truncate">{recordFile ? recordFile.name : '选择文件'}</span>
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                    onChange={(e) => setRecordFile(e.target.files?.[0] || null)}
-                  />
-                </label>
-              </div>
-            </div>
-            {user.canSubmitScoring && (
-              <p className="text-xs text-gray-500">
-                以上为电子档。活动审核通过后，赋分表和备案表纸质版照片请通过
-                <Link href="/submit/scoring" className="font-medium text-[#1e3a5f] underline">赋分材料提交</Link>
-                入口上传
-              </p>
-            )}
-          </div>
-
-          <div className="mt-6 flex gap-3">
-            <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="flex items-center gap-2 rounded-md bg-[#1e3a5f] px-5 py-2 text-sm font-medium text-white hover:bg-[#1e3a5f]/90 disabled:opacity-50"
-            >
-              <Send className="h-4 w-4" />
-              {submitting ? '提交中...' : resubmissionId ? '重新提交活动' : '提交活动'}
-            </button>
-            {user.canViewSubmissionStatus && (
-              <Link
-                href="/submit/status"
-                className="flex items-center gap-2 rounded-md border border-gray-300 px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                <Eye className="h-4 w-4" />
-                查看提交状态
-              </Link>
-            )}
-          </div>
-        </div>
-      </div>
-    </DashboardLayout>
-  );
+      <div className="mt-6 flex flex-wrap gap-3"><button onClick={handleSubmit} disabled={submitting} className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-5 py-2 text-sm text-white disabled:opacity-50"><Send className="h-4 w-4" />{submitting ? '提交中...' : submissionId ? '重新提交活动' : '提交活动'}</button>{user.canViewSubmissionStatus && <Link href="/submit/status" className="inline-flex items-center gap-2 rounded-md border px-5 py-2 text-sm"><Eye className="h-4 w-4" />查看提交状态</Link>}</div>
+    </div>
+  </div></DashboardLayout>;
 }
+
+function FilePicker({ label, file, existingUrl, existingName, onChange }: { label: string; file: File | null; existingUrl: string | null; existingName: string | null; onChange: (file: File | null) => void }) { return <label className="block text-sm font-medium">{label}<span className={`mt-1 flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-3 text-sm font-normal ${file ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'text-gray-500'}`}><Upload className="h-4 w-4" /><span className="truncate">{file?.name || existingName || (existingUrl ? '已上传文件，选择新文件可替换' : '选择文件')}</span><input type="file" className="hidden" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(e) => onChange(e.target.files?.[0] || null)} /></span></label>; }

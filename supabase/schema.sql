@@ -14,12 +14,30 @@ CREATE TABLE IF NOT EXISTS users (
   can_submit_scoring BOOLEAN NOT NULL DEFAULT false,
   can_review_leave BOOLEAN NOT NULL DEFAULT false,
   can_view_evening_study BOOLEAN NOT NULL DEFAULT false,
+  can_start_group_leave BOOLEAN NOT NULL DEFAULT false,
+  department TEXT,
+  class_name TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_scoring BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_activity BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_submission_status BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS can_start_group_leave BOOLEAN NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS departments (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  name TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+UPDATE users SET role='student' WHERE role IN ('publisher','scorer','leave_reviewer');
+INSERT INTO departments (name)
+  SELECT DISTINCT TRIM(department) FROM users
+  WHERE department IS NOT NULL AND TRIM(department) <> ''
+  ON CONFLICT (name) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS activities (
   id TEXT PRIMARY KEY,
@@ -29,12 +47,23 @@ CREATE TABLE IF NOT EXISTS activities (
   category TEXT NOT NULL,
   level TEXT NOT NULL,
   plan_file_url TEXT,
+  plan_file_name TEXT,
   record_file_url TEXT,
+  record_file_name TEXT,
   leader_name TEXT NOT NULL,
   leader_phone TEXT NOT NULL,
+  scope_type TEXT DEFAULT 'department',
+  scope_name TEXT,
+  scope_names TEXT,
+  leader_ids TEXT,
+  activity_submitter_id TEXT,
+  activity_submitter_name TEXT,
+  activity_submitter_student_id TEXT,
+  scoring_material_submitter_id TEXT,
   status TEXT NOT NULL DEFAULT '正常活动',
   scoring_status TEXT NOT NULL DEFAULT '待赋分',
   scoring_table_url TEXT,
+  scoring_table_file_name TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -47,9 +76,19 @@ CREATE TABLE IF NOT EXISTS activity_submissions (
   category TEXT NOT NULL,
   level TEXT NOT NULL,
   plan_file_url TEXT,
+  plan_file_name TEXT,
   record_file_url TEXT,
+  record_file_name TEXT,
   leader_name TEXT NOT NULL,
   leader_phone TEXT NOT NULL,
+  scope_type TEXT DEFAULT 'department',
+  scope_name TEXT,
+  scope_names TEXT,
+  leader_ids TEXT,
+  activity_submitter_id TEXT,
+  activity_submitter_name TEXT,
+  activity_submitter_student_id TEXT,
+  scoring_material_submitter_id TEXT,
   review_status TEXT NOT NULL DEFAULT '待审核',
   review_note TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -63,11 +102,55 @@ CREATE TABLE IF NOT EXISTS leave_requests (
   student_name TEXT NOT NULL,
   leave_type TEXT NOT NULL,
   leave_image_url TEXT,
+  leave_image_name TEXT,
   activity_name TEXT,
+  activity_id TEXT,
+  applicant_user_id TEXT,
+  applicant_name TEXT,
+  applicant_student_id TEXT,
+  group_id TEXT,
+  start_time TIMESTAMP,
+  end_time TIMESTAMP,
   review_status TEXT NOT NULL DEFAULT '待审核',
   review_note TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS leave_groups (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  class_name TEXT NOT NULL,
+  applicant_user_id TEXT NOT NULL,
+  applicant_name TEXT,
+  applicant_student_id TEXT,
+  leave_type TEXT NOT NULL DEFAULT '活动公假',
+  activity_name TEXT,
+  activity_id TEXT,
+  start_time TIMESTAMP NOT NULL,
+  end_time TIMESTAMP NOT NULL,
+  review_status TEXT NOT NULL DEFAULT '待审核',
+  review_note TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS leave_group_members (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  group_id TEXT NOT NULL,
+  student_id TEXT NOT NULL,
+  student_name TEXT NOT NULL,
+  class_name TEXT NOT NULL,
+  leave_request_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS class_roster (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  class_name TEXT NOT NULL,
+  student_id TEXT NOT NULL,
+  student_name TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  UNIQUE(class_name, student_id)
 );
 
 CREATE TABLE IF NOT EXISTS evening_study_schedules (
@@ -107,3 +190,16 @@ CREATE TABLE IF NOT EXISTS notifications (
   related_id TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_submitter_name TEXT;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_submitter_student_id TEXT;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS scope_names TEXT;
+ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_submitter_name TEXT;
+ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_submitter_student_id TEXT;
+ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_names TEXT;
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_name TEXT;
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_student_id TEXT;
+ALTER TABLE leave_groups ADD COLUMN IF NOT EXISTS applicant_name TEXT;
+ALTER TABLE leave_groups ADD COLUMN IF NOT EXISTS applicant_student_id TEXT;
+ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS activity_id TEXT;
+ALTER TABLE leave_groups ADD COLUMN IF NOT EXISTS activity_id TEXT;

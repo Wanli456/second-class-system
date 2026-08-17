@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useUser } from '@/contexts/UserContext';
+import { NotificationBell } from '@/components/NotificationBell';
 
 interface User {
   id: string;
@@ -36,6 +37,7 @@ interface User {
   canSubmitScoring?: boolean;
   canReviewLeave?: boolean;
   canViewEveningStudy?: boolean;
+  canStartGroupLeave?: boolean;
 }
 
 interface DashboardLayoutProps {
@@ -186,7 +188,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
     if (!user) return '访客';
     switch (user.role) {
       case 'admin': return '管理员';
-      case 'leader': return '活动负责人';
+      case 'leader': return '部门负责人';
       case 'student': return '学生';
       default: return '学生';
     }
@@ -400,6 +402,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <NotificationBell userId={user?.id ?? null} />
             {user && (
               <div className="hidden sm:flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-1.5">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-700 ring-1 ring-teal-100">

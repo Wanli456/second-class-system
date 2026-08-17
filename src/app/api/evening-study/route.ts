@@ -112,25 +112,53 @@ export async function PUT(request: NextRequest) {
   try {
     const auth = await requirePermission(request, 'eveningStudy');
     if (auth.response) return auth.response;
-    const body = await request.json();
-    const { id, ...data } = body;
+    const body = await request.json() as unknown;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ success: false, error: "请求参数无效" }, { status: 400 });
+    }
+
+    const { id, ...data } = body as { id?: unknown } & Record<string, unknown>;
+    if (typeof id !== 'string' || !id.trim()) {
+      return NextResponse.json({ success: false, error: "缺少ID参数" }, { status: 400 });
+    }
+
+    const editableFields = new Set([
+      'date',
+      'weekday',
+      'class_name',
+      'classroom',
+      'checker_name',
+      'checker_phone',
+      'notes',
+    ]);
+    const dataKeys = Object.keys(data);
+    if (dataKeys.some((key) => !editableFields.has(key))) {
+      return NextResponse.json({ success: false, error: "包含不可更新的字段" }, { status: 400 });
+    }
+    if (!dataKeys.length) {
+      return NextResponse.json({ success: false, error: "没有可更新的内容" }, { status: 400 });
+    }
 
     const setClauses: string[] = [];
     const params: unknown[] = [];
     let paramIndex = 1;
 
-    for (const [key, value] of Object.entries(data)) {
+    for (const key of dataKeys) {
+      const value = data[key];
       setClauses.push(`${key} = $${paramIndex++}`);
       params.push(value);
     }
 
     setClauses.push(`updated_at = NOW()`);
-    params.push(id);
+    params.push(id.trim());
 
     const result = await queryOne(
       `UPDATE evening_study_schedules SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
       params
     );
+    if (!result) {
+      return NextResponse.json({ success: false, error: "晚自习记录不存在" }, { status: 404 });
+    }
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
     console.error("更新晚自习记录失败:", error);
