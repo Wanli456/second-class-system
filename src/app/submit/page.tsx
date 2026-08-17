@@ -16,6 +16,14 @@ interface Submission { id: string; full_name: string; start_time: string; end_ti
 
 function localDateTime(value: string) { const date = new Date(value); const offset = date.getTimezoneOffset() * 60000; return new Date(date.getTime() - offset).toISOString().slice(0, 16); }
 function parseIds(value?: string | null) { if (!value) return []; try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) ? parsed.map(String) : []; } catch { return value.split(',').map((item) => item.trim()).filter(Boolean); } }
+type ApiResponse<T> = { success?: boolean; data?: T; error?: string };
+
+async function fetchJson<T>(url: string): Promise<ApiResponse<T>> {
+  const response = await apiFetch(url);
+  const data = await response.json() as ApiResponse<T>;
+  if (!response.ok || data.success === false) throw new Error(data.error || `请求失败（${response.status}）`);
+  return data;
+}
 
 export default function SubmitPage() {
   const router = useRouter();
@@ -70,14 +78,14 @@ export default function SubmitPage() {
     setCohostScopes([]);
     setLeaderIds([user.id]);
     Promise.all([
-      apiFetch('/api/auth?directory=true').then((res) => res.json() as Promise<{ success?: boolean; data?: DirectoryUser[] }>),
-      apiFetch('/api/departments').then((res) => res.json() as Promise<{ success?: boolean; data?: string[] }>),
-      apiFetch('/api/class-roster?classes=true').then((res) => res.json() as Promise<{ success?: boolean; data?: string[] }>),
+      fetchJson<DirectoryUser[]>('/api/auth?directory=true'),
+      fetchJson<string[]>('/api/departments'),
+      fetchJson<string[]>('/api/class-roster?classes=true'),
     ]).then(([directoryData, departmentData, classData]) => {
       if (directoryData.success) setDirectory(directoryData.data || []);
       if (departmentData.success) setDepartments(departmentData.data || []);
       if (classData.success) setClasses(classData.data || []);
-    }).catch(() => alert('读取部门、班级或人员目录失败，请稍后重试'));
+    }).catch((error: unknown) => alert(error instanceof Error ? error.message : '读取部门、班级或人员目录失败，请稍后重试'));
   }, [user]);
 
   useEffect(() => {

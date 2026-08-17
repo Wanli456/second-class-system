@@ -295,16 +295,40 @@ if (useLocalTestDatabase && !runtimeGlobal.__secondClassLocalDatabase) {
   runtimeGlobal.__secondClassLocalDatabase = { db: localDb!, pool };
 }
 
-export async function ensureDatabaseSchema() {
-  await ensureDepartmentsTable();
-  if (useLocalTestDatabase) return;
+let schemaInitialization: Promise<void> | null = null;
 
-  await pool.query(`
+async function executeSchemaSql(sql: string): Promise<void> {
+  if (useLocalTestDatabase) {
+    localDb!.public.none(sql);
+    return;
+  }
+  await pool.query(sql);
+}
+
+async function tableExists(tableName: string): Promise<boolean> {
+  const result = await pool.query<{ table_name: string }>(
+    `SELECT table_name FROM information_schema.tables
+     WHERE table_schema='public' AND table_name=$1`,
+    [tableName],
+  );
+  return result.rows.length > 0;
+}
+
+async function migrateDatabaseSchema(): Promise<void> {
+  const uuidDefault = useLocalTestDatabase ? 'gen_random_uuid()' : 'gen_random_uuid()::text';
+
+  // Run the compatibility changes before copying users into departments. Older
+  // local processes can keep the same pg-mem instance during hot reloads.
+  await executeSchemaSql(`
     UPDATE users SET role='student' WHERE role IN ('publisher','scorer','leave_reviewer');
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_publish BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_score BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_activity BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_submission_status BOOLEAN NOT NULL DEFAULT false;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_start_group_leave BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_scoring BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_review_leave BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_evening_study BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_start_group_leave BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS scope_type TEXT DEFAULT 'department';
@@ -337,8 +361,12 @@ export async function ensureDatabaseSchema() {
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS end_time TIMESTAMP;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS leave_image_name TEXT;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS activity_id TEXT;
-    CREATE TABLE IF NOT EXISTS leave_groups (
-      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  `);
+
+  if (!(await tableExists('leave_groups'))) {
+    await executeSchemaSql(`
+      CREATE TABLE leave_groups (
+      id TEXT PRIMARY KEY DEFAULT ${uuidDefault},
       class_name TEXT NOT NULL,
       applicant_user_id TEXT NOT NULL,
       applicant_name TEXT,
@@ -352,37 +380,76 @@ export async function ensureDatabaseSchema() {
       review_note TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-    );
-    CREATE TABLE IF NOT EXISTS leave_group_members (
-      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      );
+    `);
+  }
+
+  await executeSchemaSql(`
+    ALTER TABLE leave_groups ADD COLUMN IF NOT EXISTS applicant_name TEXT;
+    ALTER TABLE leave_groups ADD COLUMN IF NOT EXISTS applicant_student_id TEXT;
+    ALTER TABLE leave_groups ADD COLUMN IF NOT EXISTS activity_id TEXT;
+  `);
+
+  if (!(await tableExists('leave_group_members'))) {
+    await executeSchemaSql(`
+      CREATE TABLE leave_group_members (
+      id TEXT PRIMARY KEY DEFAULT ${uuidDefault},
       group_id TEXT NOT NULL,
       student_id TEXT NOT NULL,
       student_name TEXT NOT NULL,
       class_name TEXT NOT NULL,
       leave_request_id TEXT
-    );
-    CREATE TABLE IF NOT EXISTS class_roster (
-      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      );
+    `);
+  }
+
+  await executeSchemaSql(`
+    ALTER TABLE leave_group_members ADD COLUMN IF NOT EXISTS leave_request_id TEXT;
+  `);
+
+  if (!(await tableExists('class_roster'))) {
+    await executeSchemaSql(`
+      CREATE TABLE class_roster (
+      id TEXT PRIMARY KEY DEFAULT ${uuidDefault},
       class_name TEXT NOT NULL,
       student_id TEXT NOT NULL,
       student_name TEXT NOT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
       UNIQUE(class_name, student_id)
-    );
-    ALTER TABLE leave_groups ADD COLUMN IF NOT EXISTS activity_id TEXT;
+      );
+    `);
+  }
+
+  await executeSchemaSql(`
+    ALTER TABLE class_roster ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
+    ALTER TABLE class_roster ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
+    CREATE UNIQUE INDEX IF NOT EXISTS class_roster_class_student_key ON class_roster (class_name, student_id);
   `);
+
+  await ensureDepartmentsTable();
+}
+
+export function ensureDatabaseSchema(): Promise<void> {
+  if (!schemaInitialization) {
+    schemaInitialization = migrateDatabaseSchema().catch((error: unknown) => {
+      schemaInitialization = null;
+      throw error;
+    });
+  }
+  return schemaInitialization;
 }
 
 // 部门功能独立迁移，保证热更新或旧本地进程也能补齐新增表。
 export async function ensureDepartmentsTable() {
   const departmentIdDefault = useLocalTestDatabase ? 'gen_random_uuid()' : 'gen_random_uuid()::text';
+  await executeSchemaSql('ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT');
   const table = await pool.query<{ table_name: string }>(
     `SELECT table_name FROM information_schema.tables
      WHERE table_schema='public' AND table_name='departments'`,
   );
   if (table.rows.length === 0) {
-    await pool.query(`
+    await executeSchemaSql(`
       CREATE TABLE departments (
         id TEXT PRIMARY KEY DEFAULT ${departmentIdDefault},
         name TEXT NOT NULL UNIQUE,
