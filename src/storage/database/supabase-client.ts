@@ -67,6 +67,8 @@ if (localDb && shouldInitializeLocalDb) {
       start_time TIMESTAMP NOT NULL,
       end_time TIMESTAMP NOT NULL,
       category TEXT NOT NULL,
+      category_primary TEXT,
+      category_secondary TEXT,
       level TEXT NOT NULL,
       plan_file_url TEXT,
       plan_file_name TEXT,
@@ -98,6 +100,8 @@ if (localDb && shouldInitializeLocalDb) {
       start_time TIMESTAMP NOT NULL,
       end_time TIMESTAMP NOT NULL,
       category TEXT NOT NULL,
+      category_primary TEXT,
+      category_secondary TEXT,
       level TEXT NOT NULL,
       plan_file_url TEXT,
       plan_file_name TEXT,
@@ -303,6 +307,8 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS scope_type TEXT DEFAULT 'department';
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS category_primary TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS category_secondary TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS scope_name TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS scope_names TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS leader_ids TEXT;
@@ -316,6 +322,8 @@ async function migrateDatabaseSchema(): Promise<void> {
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_photo_file_name TEXT;
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_table_file_name TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_type TEXT DEFAULT 'department';
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS category_primary TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS category_secondary TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_name TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_names TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS leader_ids TEXT;

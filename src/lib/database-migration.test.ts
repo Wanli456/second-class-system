@@ -18,13 +18,25 @@ async function run() {
      WHERE table_name = $1
        AND column_name = ANY($2)
      ORDER BY column_name`,
-    ['activities', ['record_file_url', 'record_photo_url', 'record_photo_file_name']],
+    ['activities', ['category_primary', 'category_secondary', 'record_file_url', 'record_photo_url', 'record_photo_file_name']],
   );
   assert.deepEqual(activityColumns.map((column) => column.column_name), [
+    'category_primary',
+    'category_secondary',
     'record_file_url',
     'record_photo_file_name',
     'record_photo_url',
   ]);
+
+  const submissionColumns = await query<{ column_name: string }>(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_name = $1
+       AND column_name = ANY($2)
+     ORDER BY column_name`,
+    ['activity_submissions', ['category_primary', 'category_secondary']],
+  );
+  assert.deepEqual(submissionColumns.map((column) => column.column_name), ['category_primary', 'category_secondary']);
   console.log('database migration tests passed');
 }
 

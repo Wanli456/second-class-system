@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LogIn, Send, Upload, Eye } from 'lucide-react';
-import { CATEGORIES, LEVELS } from '@/lib/types';
+import { CATEGORIES, CATEGORY_DETAILS, LEVELS, type Category } from '@/lib/types';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch } from '@/lib/client-api';
@@ -13,7 +13,7 @@ import { canSelectActivityLeader } from '@/lib/activity-leader-rules';
 
 interface DirectoryUser { id: string; username: string; student_id: string; role?: string | null; can_submit_activity?: boolean | null; can_submit_scoring?: boolean | null; department?: string | null; class_name?: string | null; }
 interface ActivityScope { type: 'department' | 'class'; name: string; label: string; }
-interface Submission { id: string; full_name: string; start_time: string; end_time: string; category: string; level: string; scope_names?: string | null; scope_type?: 'department' | 'class'; scope_name?: string | null; leader_ids?: string | null; plan_file_url: string | null; plan_file_name?: string | null; record_file_url: string | null; record_file_name?: string | null; review_status: string; }
+interface Submission { id: string; full_name: string; start_time: string; end_time: string; category: string; category_primary?: string | null; category_secondary?: string | null; level: string; scope_names?: string | null; scope_type?: 'department' | 'class'; scope_name?: string | null; leader_ids?: string | null; plan_file_url: string | null; plan_file_name?: string | null; record_file_url: string | null; record_file_name?: string | null; review_status: string; }
 
 function localDateTime(value: string) { const date = new Date(value); const offset = date.getTimezoneOffset() * 60000; return new Date(date.getTime() - offset).toISOString().slice(0, 16); }
 function parseIds(value?: string | null) { if (!value) return []; try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) ? parsed.map(String) : []; } catch { return value.split(',').map((item) => item.trim()).filter(Boolean); } }
@@ -32,7 +32,7 @@ export default function SubmitPage() {
   const [directory, setDirectory] = useState<DirectoryUser[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
   const [classes, setClasses] = useState<string[]>([]);
-  const [form, setForm] = useState({ full_name: '', start_time: '', end_time: '', category: '', level: '' });
+  const [form, setForm] = useState({ full_name: '', start_time: '', end_time: '', category: '', category_primary: '', category_secondary: '', level: '' });
   const [hostScope, setHostScope] = useState<ActivityScope | null>(null);
   const [cohostScopes, setCohostScopes] = useState<ActivityScope[]>([]);
   const [leaderIds, setLeaderIds] = useState<string[]>([]);
@@ -96,7 +96,7 @@ export default function SubmitPage() {
       const submission = data.success ? data.data?.[0] : null;
       if (!submission) { alert(data.error || '未找到原活动提交记录'); router.replace('/submit'); return; }
       if (submission.review_status === '已通过') { alert('该活动已审核通过，不能重新提交'); router.replace('/submit'); return; }
-      setForm({ full_name: submission.full_name, start_time: localDateTime(submission.start_time), end_time: localDateTime(submission.end_time), category: submission.category, level: submission.level });
+      setForm({ full_name: submission.full_name, start_time: localDateTime(submission.start_time), end_time: localDateTime(submission.end_time), category: submission.category, category_primary: submission.category_primary || '', category_secondary: submission.category_secondary || '', level: submission.level });
       let restoredScopes: ActivityScope[] = [];
       try {
         const parsed: unknown = submission.scope_names ? JSON.parse(submission.scope_names) : null;
@@ -126,7 +126,7 @@ export default function SubmitPage() {
   };
 
   const handleSubmit = async () => {
-    if (!form.full_name || !form.start_time || !form.end_time || !form.category || !form.level || !hostScope || !leaderIds.length) { alert('请填写活动信息、主办单位并选择负责人'); return; }
+    if (!form.full_name || !form.start_time || !form.end_time || !form.category || !form.category_primary || !form.category_secondary || !form.level || !hostScope || !leaderIds.length) { alert('请填写活动信息、完整二课分类、主办单位并选择负责人'); return; }
     if (!planFile && !existingPlanUrl) { alert('请上传活动策划书'); return; }
     if (!recordFile && !existingRecordUrl) { alert('请上传活动备案表'); return; }
     setSubmitting(true);
@@ -136,7 +136,7 @@ export default function SubmitPage() {
       const firstScope = hostScope;
       const response = await apiFetch('/api/activities/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, scope_type: firstScope.type, scope_name: firstScope.name, scope_names: selectedScopes.map(({ type, name }) => ({ type, name })), leader_ids: leaderIds, ...(submissionId ? { submission_id: submissionId } : {}), plan_file_url: planUpload?.url || existingPlanUrl, plan_file_name: planUpload?.fileName || existingPlanName, record_file_url: recordUpload?.url || existingRecordUrl, record_file_name: recordUpload?.fileName || existingRecordName, start_time: new Date(form.start_time).toISOString(), end_time: new Date(form.end_time).toISOString() }) });
       const data = await response.json(); if (!data.success) throw new Error(data.error || '提交失败');
-      setSuccess(true); setSubmissionId(null); setForm({ full_name: '', start_time: '', end_time: '', category: '', level: '' }); setCohostScopes([]); setLeaderIds(user ? [user.id] : []); setPlanFile(null); setRecordFile(null); setExistingPlanUrl(null); setExistingPlanName(null); setExistingRecordUrl(null); setExistingRecordName(null);
+      setSuccess(true); setSubmissionId(null); setForm({ full_name: '', start_time: '', end_time: '', category: '', category_primary: '', category_secondary: '', level: '' }); setCohostScopes([]); setLeaderIds(user ? [user.id] : []); setPlanFile(null); setRecordFile(null); setExistingPlanUrl(null); setExistingPlanName(null); setExistingRecordUrl(null); setExistingRecordName(null);
       if (new URLSearchParams(window.location.search).has('submissionId')) router.replace('/submit');
     } catch (error) { alert(error instanceof Error ? error.message : '提交失败'); } finally { setSubmitting(false); }
   };
@@ -151,7 +151,7 @@ export default function SubmitPage() {
       <div className="mt-5 space-y-4">
         <label className="block text-sm font-medium">活动全称 *<input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" placeholder="请输入活动全称" /></label>
         <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium">开始时间 *<input type="datetime-local" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" /></label><label className="text-sm font-medium">结束时间 *<input type="datetime-local" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" /></label></div>
-        <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium">二课分类 *<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal"><option value="">请选择分类</option>{CATEGORIES.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-sm font-medium">活动级别 *<select value={form.level} onChange={(e) => setForm({ ...form, level: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal"><option value="">请选择级别</option>{LEVELS.map((item) => <option key={item}>{item}</option>)}</select></label></div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><label className="text-sm font-medium">德智体美劳 *<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value, category_primary: '', category_secondary: '' })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal"><option value="">请选择分类</option>{CATEGORIES.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-sm font-medium">一级分类 *<select value={form.category_primary} onChange={(e) => setForm({ ...form, category_primary: e.target.value, category_secondary: '' })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" disabled={!form.category}><option value="">请选择一级分类</option>{(CATEGORY_DETAILS[form.category as Category] ? Object.keys(CATEGORY_DETAILS[form.category as Category]) : []).map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-sm font-medium">二级分类 *<select value={form.category_secondary} onChange={(e) => setForm({ ...form, category_secondary: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" disabled={!form.category_primary}><option value="">请选择二级分类</option>{(form.category && form.category_primary ? CATEGORY_DETAILS[form.category as Category]?.[form.category_primary] || [] : []).map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-sm font-medium">活动级别 *<select value={form.level} onChange={(e) => setForm({ ...form, level: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal"><option value="">请选择级别</option>{LEVELS.map((item) => <option key={item}>{item}</option>)}</select></label></div>
         <div className="grid gap-4 sm:grid-cols-3"><label className="text-sm font-medium">主办单位 *<select value={hostScope ? `${hostScope.type}:${hostScope.name}` : ''} onChange={(e) => handleHostScopeChange(e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 font-normal"><option value="">请选择自己的部门或班级</option>{hostScopes.map((scope) => <option key={`${scope.type}:${scope.name}`} value={`${scope.type}:${scope.name}`}>{scope.label}</option>)}</select></label><label className="text-sm font-medium">联办单位（可不选，可多选）<select aria-describedby="cohost-scope-hint" multiple value={cohostScopes.map((scope) => `${scope.type}:${scope.name}`)} onChange={(e) => { const values = Array.from(e.target.selectedOptions, (option) => option.value); setCohostScopes(values.map((value) => cohostCandidates.find((scope) => `${scope.type}:${scope.name}` === value)).filter((scope): scope is ActivityScope => Boolean(scope))); }} className="mt-1 min-h-28 w-full rounded-md border px-3 py-2 font-normal" disabled={!hostScope}>{cohostCandidates.map((scope) => <option key={`${scope.type}:${scope.name}`} value={`${scope.type}:${scope.name}`}>{scope.label}</option>)}</select><span id="cohost-scope-hint" className="mt-1 block text-xs font-normal text-gray-500">可不选；如选择，只能选择与主办单位同类型的部门或班级。</span></label><label className="text-sm font-medium">活动负责人（可多选） *<select multiple value={leaderIds} onChange={(e) => setLeaderIds(Array.from(e.target.selectedOptions, (option) => option.value))} className="mt-1 min-h-28 w-full rounded-md border px-3 py-2 font-normal">{leaders.map((leader) => <option key={leader.id} value={leader.id}>{leader.username}（{leader.student_id}）</option>)}</select></label></div>
         <div className="grid gap-4 sm:grid-cols-2"><FilePicker label="活动策划书 *" file={planFile} existingUrl={existingPlanUrl} existingName={existingPlanName} onChange={setPlanFile} /><FilePicker label="活动备案表 *" file={recordFile} existingUrl={existingRecordUrl} existingName={existingRecordName} onChange={setRecordFile} /></div>
       </div>

@@ -11,7 +11,8 @@ import {
 } from 'lucide-react';
 import {
   Activity, ActivitySubmission, LeaveRequest,
-  CATEGORIES, LEVELS, REVIEW_STATUSES, LEAVE_TYPES,
+  CATEGORIES, CATEGORY_DETAILS, LEVELS, REVIEW_STATUSES, LEAVE_TYPES,
+  formatCategoryPath, type Category,
   STATUS_COLORS,
 } from '@/lib/types';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -74,6 +75,8 @@ interface ScoringActivity {
   leader_name: string;
   leader_phone: string;
   category: string;
+  category_primary?: string | null;
+  category_secondary?: string | null;
   status: string;
   scope_names?: string | null;
   scope_type?: 'department' | 'class' | null;
@@ -906,7 +909,7 @@ function AdminPage() {
                             {new Date(a.start_time).toLocaleDateString()} ~ {new Date(a.end_time).toLocaleDateString()}
                           </td>
                           <td className="px-3 py-2.5">
-                            <span className="rounded px-1.5 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-700">{a.category}</span>
+                            <span className="rounded px-1.5 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-700">{formatCategoryPath(a.category, a.category_primary, a.category_secondary)}</span>
                           </td>
                           <td className="px-3 py-2.5 text-xs">{a.level}</td>
                           <td className="px-3 py-2.5 text-xs">{formatActivityScopes(a)}</td>
@@ -956,7 +959,7 @@ function AdminPage() {
                               <div className="mt-1 flex flex-wrap gap-3 text-xs text-gray-500">
                                 <span>负责人: {s.leader_name}</span>
                                 <span>电话: {s.leader_phone}</span>
-                                <span>分类: {s.category}</span>
+                                <span>分类: {formatCategoryPath(s.category, s.category_primary, s.category_secondary)}</span>
                                 <span>级别: {s.level}</span>
                                 <span>联办单位: {formatActivityScopes(s)}</span>
                                 <span>提交人: {s.activity_submitter_name || '-'}{s.activity_submitter_student_id ? `（${s.activity_submitter_student_id}）` : ''}</span>
@@ -1031,7 +1034,7 @@ function AdminPage() {
                         <div key={s.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3">
                           <div>
                             <span className="font-medium text-gray-900">{s.full_name}</span>
-                            <span className="ml-2 text-xs text-gray-500">{s.leader_name} | {s.category} | {s.level} | {formatActivityScopes(s)} | 提交人：{s.activity_submitter_name || '-'}</span>
+                            <span className="ml-2 text-xs text-gray-500">{s.leader_name} | {formatCategoryPath(s.category, s.category_primary, s.category_secondary)} | {s.level} | {formatActivityScopes(s)} | 提交人：{s.activity_submitter_name || '-'}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[s.review_status as ReviewStatus]}`}>
@@ -1128,6 +1131,7 @@ function AdminPage() {
                             <div><span className="text-gray-500">类型:</span> {l.leave_type}</div>
                             {l.activity_name && <div><span className="text-gray-500">活动:</span> {l.activity_name}</div>}
                           </div>
+                          <p className="mt-2 text-xs text-gray-600">请假时间：{formatDateTime(l.start_time)} 至 {formatDateTime(l.end_time)}</p>
 
                           {/* 请假条图片 */}
                           {l.leave_image_url && (
@@ -1184,6 +1188,7 @@ function AdminPage() {
                             <th className="px-3 py-2.5 text-left font-medium text-gray-600">班级</th>
                             <th className="px-3 py-2.5 text-left font-medium text-gray-600">提交人</th>
                             <th className="px-3 py-2.5 text-left font-medium text-gray-600">类型</th>
+                            <th className="px-3 py-2.5 text-left font-medium text-gray-600">请假时间</th>
                             <th className="px-3 py-2.5 text-left font-medium text-gray-600">活动</th>
                             <th className="px-3 py-2.5 text-left font-medium text-gray-600">请假条</th>
                             <th className="px-3 py-2.5 text-left font-medium text-gray-600">状态</th>
@@ -1198,6 +1203,7 @@ function AdminPage() {
                               <td className="px-3 py-2.5 text-xs">{l.class_name}</td>
                               <td className="px-3 py-2.5 text-xs">{l.applicant_name || '-'}{l.applicant_student_id ? `（${l.applicant_student_id}）` : ''}</td>
                               <td className="px-3 py-2.5 text-xs">{l.leave_type}</td>
+                              <td className="px-3 py-2.5 text-xs whitespace-nowrap">{formatDateTime(l.start_time)} 至 {formatDateTime(l.end_time)}</td>
                               <td className="px-3 py-2.5 text-xs">{l.activity_name || '-'}</td>
                               <td className="px-3 py-2.5">
                                 {l.leave_image_url ? (
@@ -1279,7 +1285,7 @@ function AdminPage() {
                             <td className="px-3 py-2.5 font-mono text-xs">{a.id}</td>
                             <td className="px-3 py-2.5 font-medium">{a.full_name}</td>
                             <td className="px-3 py-2.5">
-                              <span className="rounded px-1.5 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-700">{a.category}</span>
+                              <span className="rounded px-1.5 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-700">{formatCategoryPath(a.category, a.category_primary, a.category_secondary)}</span>
                             </td>
                             <td className="px-3 py-2.5 text-xs">{a.level}</td>
                             <td className="px-3 py-2.5 text-xs">{a.leader_name}</td>
@@ -2119,6 +2125,8 @@ function ActivityForm({ activity, onSubmit, onCancel }: {
     start_time: activity?.start_time ? activity.start_time.slice(0, 16) : '',
     end_time: activity?.end_time ? activity.end_time.slice(0, 16) : '',
     category: activity?.category || '',
+    category_primary: activity?.category_primary || '',
+    category_secondary: activity?.category_secondary || '',
     level: activity?.level || '',
     leader_name: activity?.leader_name || '',
     leader_phone: activity?.leader_phone || '',
@@ -2147,10 +2155,27 @@ function ActivityForm({ activity, onSubmit, onCancel }: {
             className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
         </div>
         <div>
-          <label className="mb-0.5 block text-xs font-medium text-gray-600">二课分类</label>
-          <select value={form.category} onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))}
+          <label className="mb-0.5 block text-xs font-medium text-gray-600">德智体美劳</label>
+          <select value={form.category} onChange={(e) => setForm(f => ({ ...f, category: e.target.value, category_primary: '', category_secondary: '' }))}
             className="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+            <option value="">请选择分类</option>
             {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-0.5 block text-xs font-medium text-gray-600">一级分类</label>
+          <select value={form.category_primary} onChange={(e) => setForm(f => ({ ...f, category_primary: e.target.value, category_secondary: '' }))}
+            className="w-full rounded border border-gray-300 px-2 py-1 text-sm" disabled={!form.category}>
+            <option value="">请选择一级分类</option>
+            {(CATEGORY_DETAILS[form.category as Category] ? Object.keys(CATEGORY_DETAILS[form.category as Category]) : []).map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-0.5 block text-xs font-medium text-gray-600">二级分类</label>
+          <select value={form.category_secondary} onChange={(e) => setForm(f => ({ ...f, category_secondary: e.target.value }))}
+            className="w-full rounded border border-gray-300 px-2 py-1 text-sm" disabled={!form.category_primary}>
+            <option value="">请选择二级分类</option>
+            {(form.category && form.category_primary ? CATEGORY_DETAILS[form.category as Category]?.[form.category_primary] || [] : []).map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </div>
         <div>
