@@ -10,6 +10,8 @@ import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { formatActivityScopes } from '@/lib/business-rules';
 import { formatCategoryPath } from '@/lib/types';
+import { FilePreviewLink } from '@/components/FilePreviewDialog';
+import { CategoryBadge } from '@/components/CategoryBadge';
 
 interface Activity {
   id: string;
@@ -30,6 +32,14 @@ interface Activity {
   scope_names?: string | null;
   scope_type?: 'department' | 'class' | null;
   scope_name?: string | null;
+  start_time?: string;
+  end_time?: string;
+  registration_start_time?: string | null;
+  registration_end_time?: string | null;
+  activity_submitter_name?: string | null;
+  activity_submitter_student_id?: string | null;
+  scoring_material_submitter_name?: string | null;
+  scoring_material_submitter_student_id?: string | null;
 }
 
 export default function SubmitScoringPage() {
@@ -265,7 +275,19 @@ export default function SubmitScoringPage() {
               {selectedActivity && (
                 <div className="mb-4 rounded-lg border border-gray-100 bg-gray-50 p-3">
                   <div className="grid gap-2 text-sm">
-                    <div className="flex justify-between">
+                     <div className="flex justify-between gap-4">
+                       <span className="shrink-0 text-gray-500">分类</span>
+                       <CategoryBadge category={selectedActivity.category} primary={selectedActivity.category_primary} secondary={selectedActivity.category_secondary} />
+                     </div>
+                     <div className="flex justify-between gap-4">
+                       <span className="shrink-0 text-gray-500">活动时间</span>
+                       <span className="text-right font-medium">{selectedActivity.start_time && selectedActivity.end_time ? `${new Date(selectedActivity.start_time).toLocaleString('zh-CN')} 至 ${new Date(selectedActivity.end_time).toLocaleString('zh-CN')}` : '未填写'}</span>
+                     </div>
+                     <div className="flex justify-between gap-4">
+                       <span className="shrink-0 text-gray-500">活动报名时间</span>
+                       <span className="text-right font-medium">{selectedActivity.registration_start_time && selectedActivity.registration_end_time ? `${new Date(selectedActivity.registration_start_time).toLocaleString('zh-CN')} 至 ${new Date(selectedActivity.registration_end_time).toLocaleString('zh-CN')}` : '未填写（历史记录）'}</span>
+                     </div>
+                     <div className="flex justify-between">
                       <span className="text-gray-500">活动级别</span>
                       <span className="font-medium">{selectedActivity.level}</span>
                     </div>
@@ -282,17 +304,13 @@ export default function SubmitScoringPage() {
                     {selectedActivity.record_file_url && (
                       <div className="flex justify-between">
                         <span className="text-gray-500">备案表文档</span>
-                        <a href={selectedActivity.record_file_url} target="_blank" className="max-w-[65%] truncate text-right text-teal-600 underline" title={selectedActivity.record_file_name || '已上传'}>
-                          {selectedActivity.record_file_name || '已上传'}
-                        </a>
+                        <FilePreviewLink url={selectedActivity.record_file_url} fileName={selectedActivity.record_file_name} label="已上传" className="max-w-[65%] truncate text-right text-teal-600" />
                       </div>
                     )}
-                    {selectedActivity.record_photo_url && (
+                    {selectedActivity.level === '校级' && (
                       <div className="flex justify-between">
                         <span className="text-gray-500">备案表照片</span>
-                        <a href={selectedActivity.record_photo_url} target="_blank" className="max-w-[65%] truncate text-right text-teal-600 underline" title={selectedActivity.record_photo_file_name || '已上传'}>
-                          {selectedActivity.record_photo_file_name || '已上传'}
-                        </a>
+                        {selectedActivity.record_photo_url ? <FilePreviewLink url={selectedActivity.record_photo_url} fileName={selectedActivity.record_photo_file_name} label="已上传，可替换" className="max-w-[65%] truncate text-right text-teal-600" /> : <span className="font-medium text-amber-600">待上传（必需）</span>}
                       </div>
                     )}
                   </div>
@@ -330,10 +348,10 @@ export default function SubmitScoringPage() {
                 </div>
               </div>
 
-              {selectedActivity?.level === '校级' && !selectedActivity?.record_photo_url && (
+              {selectedActivity?.level === '校级' && (
                 <div className="mb-4">
                   <label className="mb-1 block text-sm font-medium text-gray-700">
-                    活动备案表照片 *
+                    活动备案表照片 *（校级活动必交）
                   </label>
                   <div className="rounded-lg border-2 border-dashed border-gray-200 p-4 text-center">
                     <Upload className="mx-auto mb-2 h-8 w-8 text-gray-300" />
@@ -350,7 +368,8 @@ export default function SubmitScoringPage() {
                     >
                       点击上传备案表照片
                     </label>
-                    <p className="mt-1 text-xs text-gray-400">支持 JPG、PNG 格式</p>
+                    <p className="mt-1 text-xs text-gray-400">支持 JPG、PNG 格式{selectedActivity.record_photo_url ? '；重新选择可替换原照片' : ''}</p>
+                    {selectedActivity.record_photo_url && !recordPhotoFile && <p className="mt-2 text-xs text-emerald-600">当前已有备案表照片，若无需替换可直接提交</p>}
                     {recordPhotoFile && (
                       <p className="mt-2 text-xs text-emerald-600">已选择：{recordPhotoFile.name}</p>
                     )}
@@ -398,7 +417,7 @@ export default function SubmitScoringPage() {
                       <div>
                         <p className="text-sm font-medium text-gray-900">{a.full_name}</p>
                         <p className="mt-1 text-xs text-gray-500">
-                          {a.id} | {formatCategoryPath(a.category, a.category_primary, a.category_secondary)} | {a.level}
+                          {a.id} | <CategoryBadge category={a.category} primary={a.category_primary} secondary={a.category_secondary} /> | {a.level}
                         </p>
                         <p className="mt-1 text-xs text-gray-500">{formatActivityScopes(a)}</p>
                       </div>

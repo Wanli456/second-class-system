@@ -66,6 +66,8 @@ if (localDb && shouldInitializeLocalDb) {
       full_name TEXT NOT NULL,
       start_time TIMESTAMP NOT NULL,
       end_time TIMESTAMP NOT NULL,
+      registration_start_time TIMESTAMP,
+      registration_end_time TIMESTAMP,
       category TEXT NOT NULL,
       category_primary TEXT,
       category_secondary TEXT,
@@ -86,6 +88,8 @@ if (localDb && shouldInitializeLocalDb) {
       activity_submitter_name TEXT,
       activity_submitter_student_id TEXT,
       scoring_material_submitter_id TEXT,
+      scoring_material_submitter_name TEXT,
+      scoring_material_submitter_student_id TEXT,
       status TEXT NOT NULL DEFAULT '正常活动',
       scoring_status TEXT NOT NULL DEFAULT '待赋分',
       scoring_table_url TEXT,
@@ -99,6 +103,8 @@ if (localDb && shouldInitializeLocalDb) {
       full_name TEXT NOT NULL,
       start_time TIMESTAMP NOT NULL,
       end_time TIMESTAMP NOT NULL,
+      registration_start_time TIMESTAMP,
+      registration_end_time TIMESTAMP,
       category TEXT NOT NULL,
       category_primary TEXT,
       category_secondary TEXT,
@@ -118,6 +124,8 @@ if (localDb && shouldInitializeLocalDb) {
       activity_submitter_student_id TEXT,
       activity_id TEXT,
       scoring_material_submitter_id TEXT,
+      scoring_material_submitter_name TEXT,
+      scoring_material_submitter_student_id TEXT,
       review_status TEXT NOT NULL DEFAULT '待审核',
       review_note TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -316,11 +324,15 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_submitter_name TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_submitter_student_id TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_material_submitter_id TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_material_submitter_name TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_material_submitter_student_id TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS plan_file_name TEXT;
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_file_name TEXT;
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_photo_url TEXT;
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_photo_file_name TEXT;
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_table_file_name TEXT;
+     ALTER TABLE activities ADD COLUMN IF NOT EXISTS registration_start_time TIMESTAMP;
+     ALTER TABLE activities ADD COLUMN IF NOT EXISTS registration_end_time TIMESTAMP;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_type TEXT DEFAULT 'department';
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS category_primary TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS category_secondary TEXT;
@@ -331,10 +343,14 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_submitter_name TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_submitter_student_id TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scoring_material_submitter_id TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scoring_material_submitter_name TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scoring_material_submitter_student_id TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS plan_file_name TEXT;
      ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS record_file_name TEXT;
      ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_id TEXT;
      ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scoring_table_file_name TEXT;
+     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS registration_start_time TIMESTAMP;
+     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS registration_end_time TIMESTAMP;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_user_id TEXT;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_name TEXT;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_student_id TEXT;
@@ -344,6 +360,21 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS leave_image_name TEXT;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS activity_id TEXT;
   `);
+
+  const scoringActivitySnapshots = await query<{ id: string; scoring_material_submitter_id: string }>(
+    'SELECT id, scoring_material_submitter_id FROM activities WHERE scoring_material_submitter_id IS NOT NULL AND scoring_material_submitter_name IS NULL',
+  );
+  for (const activity of scoringActivitySnapshots) {
+    const submitter = await queryOne<{ username: string; student_id: string }>('SELECT username, student_id FROM users WHERE id=$1', [activity.scoring_material_submitter_id]);
+    if (submitter) await query('UPDATE activities SET scoring_material_submitter_name=$1, scoring_material_submitter_student_id=$2 WHERE id=$3', [submitter.username, submitter.student_id, activity.id]);
+  }
+  const scoringSubmissionSnapshots = await query<{ id: string; scoring_material_submitter_id: string }>(
+    'SELECT id, scoring_material_submitter_id FROM activity_submissions WHERE scoring_material_submitter_id IS NOT NULL AND scoring_material_submitter_name IS NULL',
+  );
+  for (const submission of scoringSubmissionSnapshots) {
+    const submitter = await queryOne<{ username: string; student_id: string }>('SELECT username, student_id FROM users WHERE id=$1', [submission.scoring_material_submitter_id]);
+    if (submitter) await query('UPDATE activity_submissions SET scoring_material_submitter_name=$1, scoring_material_submitter_student_id=$2 WHERE id=$3', [submitter.username, submitter.student_id, submission.id]);
+  }
 
   // Link legacy approved submissions to their single matching activity so the
   // status page can rely on the hidden activity ID without guessing at render time.

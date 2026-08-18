@@ -5,16 +5,19 @@ import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { Search, RefreshCw, Pencil } from 'lucide-react';
-import { CATEGORIES, LEVELS, REVIEW_STATUSES, STATUS_COLORS, CATEGORY_COLORS, formatCategoryPath } from '@/lib/types';
+import { CATEGORIES, LEVELS, REVIEW_STATUSES, STATUS_COLORS, CATEGORY_COLORS, formatCategoryPathWithMissing } from '@/lib/types';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { formatActivityScopes } from '@/lib/business-rules';
+import { FilePreviewLink } from '@/components/FilePreviewDialog';
 
 interface Submission {
   id: string;
   full_name: string;
   start_time: string;
   end_time: string;
+  registration_start_time?: string | null;
+  registration_end_time?: string | null;
   category: string;
   category_primary?: string | null;
   category_secondary?: string | null;
@@ -173,13 +176,12 @@ export default function SubmitStatusPage() {
                         <div className="flex items-center gap-2">
                           <h4 className="font-medium text-gray-900">{s.full_name}</h4>
                           <span className={`rounded border px-1.5 py-0.5 text-xs ${CATEGORY_COLORS[s.category]}`}>
-                            {formatCategoryPath(s.category, s.category_primary, s.category_secondary)}
+                            {formatCategoryPathWithMissing(s.category, s.category_primary, s.category_secondary)}
                           </span>
                           <span className="text-xs text-gray-500">{s.level}</span>
                         </div>
-                        <p className="mt-1 text-xs text-gray-500">
-                          {new Date(s.start_time).toLocaleString('zh-CN')} ~ {new Date(s.end_time).toLocaleString('zh-CN')}
-                        </p>
+                         <p className="mt-1 text-xs text-gray-500">活动时间：{new Date(s.start_time).toLocaleString('zh-CN')} ~ {new Date(s.end_time).toLocaleString('zh-CN')}</p>
+                         <p className="mt-0.5 text-xs text-sky-700">活动报名时间：{s.registration_start_time && s.registration_end_time ? `${new Date(s.registration_start_time).toLocaleString('zh-CN')} ~ ${new Date(s.registration_end_time).toLocaleString('zh-CN')}` : '未填写（历史记录）'}</p>
                         <p className="mt-0.5 text-xs text-gray-500">负责人：{s.leader_name} · {s.leader_phone}</p>
                         <p className="mt-0.5 text-xs text-gray-500">联办单位：{formatActivityScopes(s)}</p>
                       </div>
@@ -194,8 +196,8 @@ export default function SubmitStatusPage() {
                     )}
                     {(s.plan_file_url || s.record_file_url) && (
                       <div className="mt-3 flex flex-wrap gap-3 border-t border-gray-100 pt-3 text-xs text-gray-600">
-                        {s.plan_file_url && <a href={s.plan_file_url} target="_blank" rel="noreferrer" className="text-teal-700 underline" title={s.plan_file_name || '策划书'}>{s.plan_file_name || '策划书（已上传）'}</a>}
-                        {s.record_file_url && <a href={s.record_file_url} target="_blank" rel="noreferrer" className="text-teal-700 underline" title={s.record_file_name || '备案表'}>{s.record_file_name || '备案表（已上传）'}</a>}
+                         {s.plan_file_url && <FilePreviewLink url={s.plan_file_url} fileName={s.plan_file_name} label="策划书" className="text-teal-700" />}
+                         {s.record_file_url && <FilePreviewLink url={s.record_file_url} fileName={s.record_file_name} label="备案表" className="text-teal-700" />}
                       </div>
                     )}
                     {s.source === 'submission' && s.review_status !== '已通过' && (

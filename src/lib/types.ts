@@ -3,6 +3,8 @@ export interface Activity {
   full_name: string;
   start_time: string;
   end_time: string;
+  registration_start_time?: string | null;
+  registration_end_time?: string | null;
   category: '德' | '智' | '体' | '美' | '劳';
   category_primary?: string | null;
   category_secondary?: string | null;
@@ -20,6 +22,8 @@ export interface Activity {
   scope_name?: string | null;
   activity_submitter_name?: string | null;
   activity_submitter_student_id?: string | null;
+  scoring_material_submitter_name?: string | null;
+  scoring_material_submitter_student_id?: string | null;
   status: '正常活动' | '活动取消';
   scoring_status: '待赋分' | '已赋分';
   scoring_table_url: string | null;
@@ -33,6 +37,8 @@ export interface ActivitySubmission {
   full_name: string;
   start_time: string;
   end_time: string;
+  registration_start_time?: string | null;
+  registration_end_time?: string | null;
   category: '德' | '智' | '体' | '美' | '劳';
   category_primary?: string | null;
   category_secondary?: string | null;
@@ -49,6 +55,8 @@ export interface ActivitySubmission {
   scope_name?: string | null;
   activity_submitter_name?: string | null;
   activity_submitter_student_id?: string | null;
+  scoring_material_submitter_name?: string | null;
+  scoring_material_submitter_student_id?: string | null;
   review_status: '待审核' | '已通过' | '已驳回';
   review_note: string | null;
   created_at: string;
@@ -105,6 +113,10 @@ export const CATEGORY_DETAILS: Record<Category, Record<string, readonly string[]
 
 export function formatCategoryPath(category: string, primary?: string | null, secondary?: string | null): string {
   return [category, primary, secondary].filter(Boolean).join(' / ');
+}
+
+export function formatCategoryPathWithMissing(category: string, primary?: string | null, secondary?: string | null): string {
+  return [category, primary || '一级分类未记录', secondary || '二级分类未记录'].join(' / ');
 }
 
 export function isValidCategoryPath(category: string, primary?: string | null, secondary?: string | null): boolean {

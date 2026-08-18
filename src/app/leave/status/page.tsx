@@ -8,6 +8,7 @@ import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch } from '@/lib/client-api';
 import { STATUS_COLORS } from '@/lib/types';
 import { useUser } from '@/contexts/UserContext';
+import { FilePreviewLink } from '@/components/FilePreviewDialog';
 
 interface LeaveRecord { id: string; student_id: string; student_name: string; class_name: string; leave_type: string; activity_name: string | null; activity_id?: string | null; start_time: string; end_time: string; leave_image_url: string | null; leave_image_name?: string | null; review_status: string; review_note: string | null; group_id?: string | null; applicant_user_id?: string | null; created_at: string; }
 
@@ -68,7 +69,7 @@ export default function LeaveStatusPage() {
       );
       return <div id={`leave-record-${isTarget ? targetRequestId : key}`} key={key} className={`rounded-lg border bg-white p-4 shadow-sm ${isTarget ? 'border-teal-500 ring-2 ring-teal-100' : ''}`}><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><span className="rounded border px-2 py-1 text-xs">{isGroup ? '集体请假' : first.leave_type}</span>{first.activity_name && <span className="text-sm text-gray-600">活动：{first.activity_name}</span>}</div><p className="mt-2 text-sm text-gray-500">请假时间：{formatTime(first.start_time)} 至 {formatTime(first.end_time)}</p><p className="text-xs text-gray-400">提交时间：{formatTime(first.created_at)}</p></div><span className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-xs font-medium ${STATUS_COLORS[status]}`}><StatusIcon status={status} />{status}</span></div>
         {isGroup && <div className="mt-3 rounded-md bg-gray-50 p-3"><p className="mb-2 text-xs font-medium text-gray-600">{first.class_name}，共 {records.length} 名学生</p><div className="flex flex-wrap gap-2">{records.map((item) => <span key={item.id} className="rounded border bg-white px-2 py-1 text-xs text-gray-600">{item.student_name}（{item.student_id}）</span>)}</div></div>}
-        {first.leave_image_url && <a href={first.leave_image_url} target="_blank" rel="noreferrer" className="mt-3 block text-xs text-teal-700 underline" title={first.leave_image_name || '请假条'}>{first.leave_image_name || '请假条（已上传）'}</a>}
+        {first.leave_image_url && <div className="mt-3"><FilePreviewLink url={first.leave_image_url} fileName={first.leave_image_name} label="请假条" className="text-xs text-teal-700" /></div>}
         {first.review_note && <p className="mt-3 rounded bg-gray-50 px-3 py-2 text-xs text-gray-600">审核备注：{first.review_note}</p>}
         {canResubmit && <div className="mt-3 border-t pt-3"><Link href={`/leave?requestId=${encodeURIComponent(first.id)}`} className="inline-flex items-center gap-1 text-sm font-medium text-teal-700"><Pencil className="h-3.5 w-3.5" />重新提交</Link></div>}
       </div>;

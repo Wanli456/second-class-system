@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Fragment, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
@@ -12,7 +12,7 @@ import {
 import {
   Activity, ActivitySubmission, LeaveRequest,
   CATEGORIES, CATEGORY_DETAILS, LEVELS, REVIEW_STATUSES, LEAVE_TYPES,
-  formatCategoryPath, type Category,
+  type Category,
   STATUS_COLORS,
 } from '@/lib/types';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -20,6 +20,8 @@ import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch, refreshCurrentUser } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { canOpenAdminTab, formatActivityScopes } from '@/lib/business-rules';
+import { FilePreviewLink } from '@/components/FilePreviewDialog';
+import { CategoryBadge } from '@/components/CategoryBadge';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -77,10 +79,18 @@ interface ScoringActivity {
   category: string;
   category_primary?: string | null;
   category_secondary?: string | null;
+  start_time?: string;
+  end_time?: string;
+  registration_start_time?: string | null;
+  registration_end_time?: string | null;
   status: string;
   scope_names?: string | null;
   scope_type?: 'department' | 'class' | null;
   scope_name?: string | null;
+  activity_submitter_name?: string | null;
+  activity_submitter_student_id?: string | null;
+  scoring_material_submitter_name?: string | null;
+  scoring_material_submitter_student_id?: string | null;
 }
 
 interface UserData {
@@ -169,8 +179,10 @@ function AdminPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
   const [expandedSubmission, setExpandedSubmission] = useState<string | null>(null);
   const [expandedScoring, setExpandedScoring] = useState<string | null>(null);
+  const [expandedLeaveRequest, setExpandedLeaveRequest] = useState<string | null>(null);
   const [scoringFile, setScoringFile] = useState<File | null>(null);
   const [scoringInProgress, setScoringInProgress] = useState(false);
   const [expandedLeaveGroup, setExpandedLeaveGroup] = useState<string | null>(null);
@@ -883,61 +895,64 @@ function AdminPage() {
                   />
                 )}
 
-                <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-                  <table className="w-full text-sm">
-                    <thead className="border-b border-gray-200 bg-gray-50">
-                      <tr>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">活动ID</th>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">活动全称</th>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">时间</th>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">分类</th>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">级别</th>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">联办单位</th>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">负责人</th>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">提交人</th>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">状态</th>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">赋分</th>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {filteredActivities.map(a => (
-                        <tr key={a.id} className="hover:bg-gray-50">
-                          <td className="px-3 py-2.5 font-mono text-xs">{a.id}</td>
-                          <td className="px-3 py-2.5 font-medium">{a.full_name}</td>
-                          <td className="px-3 py-2.5 text-xs text-gray-500">
-                            {new Date(a.start_time).toLocaleDateString()} ~ {new Date(a.end_time).toLocaleDateString()}
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <span className="rounded px-1.5 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-700">{formatCategoryPath(a.category, a.category_primary, a.category_secondary)}</span>
-                          </td>
-                          <td className="px-3 py-2.5 text-xs">{a.level}</td>
-                          <td className="px-3 py-2.5 text-xs">{formatActivityScopes(a)}</td>
-                          <td className="px-3 py-2.5 text-xs">{a.leader_name}</td>
-                          <td className="px-3 py-2.5 text-xs">{a.activity_submitter_name || '-'}{a.activity_submitter_student_id ? `（${a.activity_submitter_student_id}）` : ''}</td>
-                          <td className="px-3 py-2.5">
-                            <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[a.status] || 'bg-gray-100 text-gray-700'}`}>
-                              {a.status}
+                <div className="space-y-2">
+                  {filteredActivities.map(a => {
+                    const isExpanded = expandedActivity === a.id;
+                    return (
+                      <div key={a.id} className="rounded-lg border border-gray-200 bg-white shadow-sm">
+                        <div className="flex items-center gap-3 p-3">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedActivity(isExpanded ? null : a.id)}
+                            className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left hover:bg-gray-50"
+                            aria-expanded={isExpanded}
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate font-medium text-gray-900">{a.full_name}</span>
+                              <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
+                                <span className="font-mono">{a.id}</span>
+                                <CategoryBadge category={a.category} primary={a.category_primary} secondary={a.category_secondary} topLevelOnly />
+                                <span>{a.level}</span>
+                                <span>{a.leader_name}</span>
+                              </span>
                             </span>
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[a.scoring_status] || 'bg-gray-100 text-gray-700'}`}>
-                              {a.scoring_status || '待赋分'}
+                            <span className="flex shrink-0 items-center gap-2">
+                              <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[a.status] || 'bg-gray-100 text-gray-700'}`}>{a.status}</span>
+                              <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[a.scoring_status] || 'bg-gray-100 text-gray-700'}`}>{a.scoring_status || '待赋分'}</span>
+                              {isExpanded ? <ChevronUp className="size-4 text-gray-400" /> : <ChevronDown className="size-4 text-gray-400" />}
                             </span>
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <div className="flex gap-1">
-                              <button onClick={() => setEditActivity(a)} className="rounded p-1 text-gray-400 hover:bg-blue-50 hover:text-blue-600"><Pencil className="h-3.5 w-3.5" /></button>
-                              <button onClick={() => handleDeleteActivity(a.id)} className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                          </button>
+                          <div className="flex shrink-0 gap-1">
+                            <button type="button" onClick={() => setEditActivity(a)} aria-label={`编辑${a.full_name}`} className="rounded p-1.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600"><Pencil className="size-4" /></button>
+                            <button type="button" onClick={() => handleDeleteActivity(a.id)} aria-label={`删除${a.full_name}`} className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="size-4" /></button>
+                          </div>
+                        </div>
+                        {isExpanded && (
+                          <div className="border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-3">
+                            <div className="grid gap-2 text-xs text-gray-600 sm:grid-cols-2 lg:grid-cols-3">
+                              <span>活动时间：{formatDateTime(a.start_time)} 至 {formatDateTime(a.end_time)}</span>
+                              <span className="text-sky-700">活动报名时间：{a.registration_start_time && a.registration_end_time ? `${formatDateTime(a.registration_start_time)} 至 ${formatDateTime(a.registration_end_time)}` : '未填写（历史记录）'}</span>
+                              <span className="flex items-center gap-2">分类：<CategoryBadge category={a.category} primary={a.category_primary} secondary={a.category_secondary} /></span>
+                              <span>活动级别：{a.level}</span>
+                              <span>主办/联办单位：{formatActivityScopes(a)}</span>
+                              <span>负责人：{a.leader_name}（{a.leader_phone}）</span>
+                              <span>实际活动信息提交人：{a.activity_submitter_name || '-'}{a.activity_submitter_student_id ? `（${a.activity_submitter_student_id}）` : ''}</span>
+                              <span>实际赋分材料提交人：{a.scoring_material_submitter_name || '-'}{a.scoring_material_submitter_student_id ? `（${a.scoring_material_submitter_student_id}）` : ''}</span>
+                              <span>活动状态：{a.status}</span>
+                              <span>赋分状态：{a.scoring_status || '待赋分'}</span>
                             </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {filteredActivities.length === 0 && (
-                        <tr><td colSpan={11} className="px-3 py-8 text-center text-gray-400">暂无活动数据</td></tr>
-                      )}
-                    </tbody>
-                  </table>
+                            <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-200 pt-3">
+                              {a.plan_file_url ? <FilePreviewLink url={a.plan_file_url} fileName={a.plan_file_name} label="策划书" className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50" /> : <span className="text-xs text-gray-400">未上传策划书</span>}
+                              {a.record_file_url ? <FilePreviewLink url={a.record_file_url} fileName={a.record_file_name} label="备案表" className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50" /> : <span className="text-xs text-gray-400">未上传备案表</span>}
+                              {a.scoring_table_url ? <FilePreviewLink url={a.scoring_table_url} fileName={a.scoring_table_file_name} label="赋分表" className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50" /> : <span className="text-xs text-gray-400">未上传赋分表</span>}
+                              {a.level === '校级' && (a.record_photo_url ? <FilePreviewLink url={a.record_photo_url} fileName={a.record_photo_file_name} label="备案表照片" className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50" /> : <span className="text-xs text-gray-400">未上传备案表照片</span>)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {filteredActivities.length === 0 && <div className="rounded-lg border border-gray-200 bg-white px-3 py-8 text-center text-gray-400">暂无活动数据</div>}
                 </div>
               </div>
             )}
@@ -950,78 +965,43 @@ function AdminPage() {
                 {pendingSubmissions.length > 0 && (
                   <div className="mb-6">
                     <h3 className="mb-3 text-sm font-medium text-gray-600">待审核 ({pendingSubmissions.length})</h3>
-                    <div className="space-y-3">
-                      {pendingSubmissions.map(s => (
-                        <div key={s.id} className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <h4 className="font-medium text-gray-900">{s.full_name}</h4>
-                              <div className="mt-1 flex flex-wrap gap-3 text-xs text-gray-500">
-                                <span>负责人: {s.leader_name}</span>
-                                <span>电话: {s.leader_phone}</span>
-                                <span>分类: {formatCategoryPath(s.category, s.category_primary, s.category_secondary)}</span>
-                                <span>级别: {s.level}</span>
-                                <span>联办单位: {formatActivityScopes(s)}</span>
-                                <span>提交人: {s.activity_submitter_name || '-'}{s.activity_submitter_student_id ? `（${s.activity_submitter_student_id}）` : ''}</span>
-                                <span>提交时间: {new Date(s.created_at).toLocaleDateString()}</span>
-                              </div>
-                              <div className="mt-1 text-xs text-gray-500">
-                                {new Date(s.start_time).toLocaleString()} ~ {new Date(s.end_time).toLocaleString()}
-                              </div>
-
-                              {/* 展开查看文件 */}
-                              <button
-                                onClick={() => setExpandedSubmission(expandedSubmission === s.id ? null : s.id)}
-                                className="mt-2 flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline"
-                              >
-                                <FileText className="h-3 w-3" />
-                                {expandedSubmission === s.id ? '收起文件' : '查看策划书/备案表'}
-                                {expandedSubmission === s.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                              </button>
-
-                              {expandedSubmission === s.id && (
-                                <div className="mt-2 flex flex-wrap gap-3">
-                                  {s.plan_file_url ? (
-                                    <a href={s.plan_file_url} target="_blank" className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50">
-                                      <FileText className="h-3 w-3" /> {s.plan_file_name || '策划书（已上传）'}
-                                    </a>
-                                  ) : (
-                                    <span className="text-xs text-gray-400">未上传策划书</span>
-                                  )}
-                                  {s.record_file_url ? (
-                                    <a href={s.record_file_url} target="_blank" className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50">
-                                      <FileText className="h-3 w-3" /> {s.record_file_name || '备案表（已上传）'}
-                                    </a>
-                                  ) : (
-                                    <span className="text-xs text-gray-400">未上传备案表</span>
-                                  )}
+                    <div className="space-y-2">
+                      {pendingSubmissions.map(s => {
+                        const isExpanded = expandedSubmission === s.id;
+                        return (
+                          <div key={s.id} className="rounded-lg border border-amber-200 bg-amber-50/50">
+                            <button type="button" onClick={() => setExpandedSubmission(isExpanded ? null : s.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-amber-50">
+                              <span className="min-w-0">
+                                <span className="block truncate font-medium text-gray-900">{s.full_name}</span>
+                                <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500"><span>{s.leader_name}</span><span>{s.level}</span><CategoryBadge category={s.category} primary={s.category_primary} secondary={s.category_secondary} topLevelOnly /><span>提交于 {formatDateTime(s.created_at)}</span></span>
+                              </span>
+                              <span className="flex shrink-0 items-center gap-2 text-xs text-amber-700"><span>待审核</span>{isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}</span>
+                            </button>
+                            {isExpanded && (
+                              <div className="border-t border-amber-200 px-3 pb-3 pt-3">
+                                <div className="grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
+                                  <span>活动时间：{formatDateTime(s.start_time)} 至 {formatDateTime(s.end_time)}</span>
+                                  <span className="text-sky-700">活动报名时间：{s.registration_start_time && s.registration_end_time ? `${formatDateTime(s.registration_start_time)} 至 ${formatDateTime(s.registration_end_time)}` : '未填写（历史记录）'}</span>
+                                  <span className="flex items-center gap-2"><span>分类</span><CategoryBadge category={s.category} primary={s.category_primary} secondary={s.category_secondary} /></span>
+                                  <span>活动级别：{s.level}</span>
+                                  <span>负责人：{s.leader_name}（{s.leader_phone}）</span>
+                                  <span>主办/联办单位：{formatActivityScopes(s)}</span>
+                                  <span>实际活动信息提交人：{s.activity_submitter_name || '-'}{s.activity_submitter_student_id ? `（${s.activity_submitter_student_id}）` : ''}</span>
                                 </div>
-                              )}
-                            </div>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {s.plan_file_url ? <FilePreviewLink url={s.plan_file_url} fileName={s.plan_file_name} label="策划书" className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50" /> : <span className="text-xs text-gray-400">未上传策划书</span>}
+                                  {s.record_file_url ? <FilePreviewLink url={s.record_file_url} fileName={s.record_file_name} label="备案表" className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50" /> : <span className="text-xs text-gray-400">未上传备案表</span>}
+                                </div>
+                                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-amber-200 pt-3">
+                                  <input type="text" placeholder="审核备注（可选）" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} className="min-w-48 flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-[#1e3a5f] focus:outline-none" />
+                                  <button onClick={() => handleReviewSubmission(s.id, '已通过')} className="flex items-center gap-1 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"><Check className="size-3" />通过</button>
+                                  <button onClick={() => handleReviewSubmission(s.id, '已驳回')} className="flex items-center gap-1 rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"><X className="size-3" />驳回</button>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          <div className="mt-3 flex flex-wrap items-center gap-2">
-                            <input
-                              type="text"
-                              placeholder="审核备注（可选）"
-                              value={reviewNote}
-                              onChange={(e) => setReviewNote(e.target.value)}
-                              className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-[#1e3a5f] focus:outline-none"
-                            />
-                            <button
-                              onClick={() => handleReviewSubmission(s.id, '已通过')}
-                              className="flex items-center gap-1 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
-                            >
-                              <Check className="h-3 w-3" /> 通过
-                            </button>
-                            <button
-                              onClick={() => handleReviewSubmission(s.id, '已驳回')}
-                              className="flex items-center gap-1 rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"
-                            >
-                              <X className="h-3 w-3" /> 驳回
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1030,40 +1010,35 @@ function AdminPage() {
                   <div>
                     <h3 className="mb-3 text-sm font-medium text-gray-600">已处理</h3>
                     <div className="space-y-2">
-                      {submissions.filter(s => s.review_status !== '待审核').map(s => (
-                        <div key={s.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3">
-                          <div>
-                            <span className="font-medium text-gray-900">{s.full_name}</span>
-                            <span className="ml-2 text-xs text-gray-500">{s.leader_name} | {formatCategoryPath(s.category, s.category_primary, s.category_secondary)} | {s.level} | {formatActivityScopes(s)} | 提交人：{s.activity_submitter_name || '-'}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[s.review_status as ReviewStatus]}`}>
-                              {s.review_status}
-                            </span>
-                            <button
-                              onClick={() => setExpandedSubmission(expandedSubmission === s.id ? null : s.id)}
-                              className="rounded p-1 text-gray-400 hover:bg-gray-100"
-                            >
-                              <Eye className="h-3.5 w-3.5" />
+                      {submissions.filter(s => s.review_status !== '待审核').map(s => {
+                        const isExpanded = expandedSubmission === s.id;
+                        return (
+                          <div key={s.id} className="rounded-lg border border-gray-200 bg-white">
+                            <button type="button" onClick={() => setExpandedSubmission(isExpanded ? null : s.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-gray-50" aria-expanded={isExpanded}>
+                              <span className="min-w-0"><span className="block truncate font-medium text-gray-900">{s.full_name}</span><span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500"><span>{s.leader_name}</span><CategoryBadge category={s.category} primary={s.category_primary} secondary={s.category_secondary} topLevelOnly /><span>{s.level}</span><span>{formatActivityScopes(s)}</span><span>实际活动信息提交人：{s.activity_submitter_name || '-'}</span></span></span>
+                              <span className="flex shrink-0 items-center gap-2"><span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[s.review_status as ReviewStatus]}`}>{s.review_status}</span>{isExpanded ? <ChevronUp className="size-4 text-gray-400" /> : <ChevronDown className="size-4 text-gray-400" />}</span>
                             </button>
+                            {isExpanded && (
+                              <div className="border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-3">
+                                <div className="grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
+                                  <span>活动时间：{formatDateTime(s.start_time)} 至 {formatDateTime(s.end_time)}</span>
+                                  <span className="text-sky-700">活动报名时间：{s.registration_start_time && s.registration_end_time ? `${formatDateTime(s.registration_start_time)} 至 ${formatDateTime(s.registration_end_time)}` : '未填写（历史记录）'}</span>
+                                  <span className="flex items-center gap-2">分类：<CategoryBadge category={s.category} primary={s.category_primary} secondary={s.category_secondary} /></span>
+                                  <span>活动级别：{s.level}</span>
+                                  <span>负责人：{s.leader_name}（{s.leader_phone}）</span>
+                                  <span>主办/联办单位：{formatActivityScopes(s)}</span>
+                                  <span>实际活动信息提交人：{s.activity_submitter_name || '-'}{s.activity_submitter_student_id ? `（${s.activity_submitter_student_id}）` : ''}</span>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-3 border-t border-gray-200 pt-3">
+                                  {s.plan_file_url ? <FilePreviewLink url={s.plan_file_url} fileName={s.plan_file_name} label="策划书" className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50" /> : <span className="text-xs text-gray-400">未上传策划书</span>}
+                                  {s.record_file_url ? <FilePreviewLink url={s.record_file_url} fileName={s.record_file_name} label="备案表" className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50" /> : <span className="text-xs text-gray-400">未上传备案表</span>}
+                                  {s.review_note && <span className="text-xs text-gray-500">备注：{s.review_note}</span>}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          {expandedSubmission === s.id && (
-                            <div className="mt-2 flex flex-wrap gap-3 border-t pt-2">
-                              {s.plan_file_url ? (
-                                <a href={s.plan_file_url} target="_blank" download className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50">
-                                  <FileText className="h-3 w-3" /> {s.plan_file_name || '策划书（已上传）'}
-                                </a>
-                              ) : <span className="text-xs text-gray-400">未上传策划书</span>}
-                              {s.record_file_url ? (
-                                <a href={s.record_file_url} target="_blank" download className="flex items-center gap-1 rounded border border-gray-200 px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50">
-                                  <FileText className="h-3 w-3" /> {s.record_file_name || '备案表（已上传）'}
-                                </a>
-                              ) : <span className="text-xs text-gray-400">未上传备案表</span>}
-                              {s.review_note && <span className="text-xs text-gray-500">备注: {s.review_note}</span>}
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1083,36 +1058,34 @@ function AdminPage() {
                   <div className="mb-6">
                     <h3 className="mb-3 text-sm font-medium text-gray-600">待审核集体请假 ({pendingLeaveGroups.length})</h3>
                     <div className="space-y-3">
-                      {pendingLeaveGroups.map(group => (
-                        <div key={group.id} className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                              <span><span className="text-gray-500">班级:</span> {group.class_name}</span>
-                              <span><span className="text-gray-500">成员:</span> {group.member_count} 人</span>
-                              <span><span className="text-gray-500">发起人:</span> {group.applicant_name || '-'}{group.applicant_student_id ? `（${group.applicant_student_id}）` : ''}</span>
-                              <span><span className="text-gray-500">类型:</span> {group.leave_type}</span>
-                              {group.activity_name && <span><span className="text-gray-500">活动:</span> {group.activity_name}</span>}
-                            </div>
-                            <button onClick={() => void loadLeaveGroupMembers(group.id)} className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">
-                              <Eye className="h-3.5 w-3.5" />{expandedLeaveGroup === group.id ? '收起成员' : '查看成员'}
+                      {pendingLeaveGroups.map(group => {
+                        const isExpanded = expandedLeaveGroup === group.id;
+                        return (
+                          <div key={group.id} className="rounded-lg border border-amber-200 bg-amber-50/50">
+                            <button type="button" onClick={() => void loadLeaveGroupMembers(group.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-amber-50" aria-expanded={isExpanded}>
+                              <span className="min-w-0">
+                                <span className="block truncate font-medium text-gray-900">{group.class_name}集体请假</span>
+                                <span className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-gray-500"><span>{group.member_count} 人</span><span>发起人：{group.applicant_name || '-'}{group.applicant_student_id ? `（${group.applicant_student_id}）` : ''}</span><span>{group.leave_type}</span>{group.activity_name && <span>活动：{group.activity_name}</span>}</span>
+                              </span>
+                              <span className="flex shrink-0 items-center gap-2 text-xs text-amber-700"><span>待审核</span>{isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}</span>
                             </button>
-                          </div>
-                          <p className="mt-2 text-xs text-gray-500">请假时间：{formatDateTime(group.start_time)} 至 {formatDateTime(group.end_time)}</p>
-                          {expandedLeaveGroup === group.id && (
-                            <div className="mt-3 rounded-md border border-amber-100 bg-white p-3">
-                              <div className="flex flex-wrap gap-2">
-                                {(leaveGroupMembers[group.id] || []).map(member => <span key={member.id} className="rounded border px-2 py-1 text-xs text-gray-600">{member.student_name}（{member.student_id}）</span>)}
+                            {isExpanded && (
+                              <div className="border-t border-amber-200 px-3 pb-3 pt-3">
+                                <p className="text-xs text-gray-600">请假时间：{formatDateTime(group.start_time)} 至 {formatDateTime(group.end_time)}</p>
+                                <div className="mt-3 rounded-md border border-amber-100 bg-white p-3">
+                                  <div className="flex flex-wrap gap-2">{(leaveGroupMembers[group.id] || []).map(member => <span key={member.id} className="rounded border px-2 py-1 text-xs text-gray-600">{member.student_name}（{member.student_id}）</span>)}</div>
+                                  {leaveGroupMembers[group.id]?.[0]?.leave_image_url && <div className="mt-3"><FilePreviewLink url={leaveGroupMembers[group.id][0].leave_image_url} fileName={leaveGroupMembers[group.id][0].leave_image_name} label="查看请假条" className="text-xs text-[#1e3a5f]" /></div>}
+                                </div>
+                                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-amber-200 pt-3">
+                                  <input type="text" placeholder="审核备注（可选）" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} className="min-w-48 flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-[#1e3a5f] focus:outline-none" />
+                                  <button onClick={() => handleReviewLeave(group.id, '已通过', true)} className="flex items-center gap-1 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"><Check className="h-3 w-3" />整组通过</button>
+                                  <button onClick={() => handleReviewLeave(group.id, '已驳回', true)} className="flex items-center gap-1 rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"><X className="h-3 w-3" />整组驳回</button>
+                                </div>
                               </div>
-                              {leaveGroupMembers[group.id]?.[0]?.leave_image_url && <a href={leaveGroupMembers[group.id][0].leave_image_url!} target="_blank" rel="noreferrer" className="mt-3 inline-flex text-xs text-[#1e3a5f] hover:underline">{leaveGroupMembers[group.id][0].leave_image_name || '查看请假条'}</a>}
-                            </div>
-                          )}
-                          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-amber-200 pt-3">
-                            <input type="text" placeholder="审核备注（可选）" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} className="min-w-48 flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-[#1e3a5f] focus:outline-none" />
-                            <button onClick={() => handleReviewLeave(group.id, '已通过', true)} className="flex items-center gap-1 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"><Check className="h-3 w-3" />整组通过</button>
-                            <button onClick={() => handleReviewLeave(group.id, '已驳回', true)} className="flex items-center gap-1 rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"><X className="h-3 w-3" />整组驳回</button>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1121,57 +1094,31 @@ function AdminPage() {
                   <div className="mb-6">
                     <h3 className="mb-3 text-sm font-medium text-gray-600">待审核个人请假 ({pendingLeaves.length})</h3>
                     <div className="space-y-3">
-                      {pendingLeaves.map(l => (
-                        <div key={l.id} className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
-                          <div className="flex flex-wrap gap-4 text-sm">
-                            <div><span className="text-gray-500">学号:</span> {l.student_id}</div>
-                            <div><span className="text-gray-500">姓名:</span> {l.student_name}</div>
-                            <div><span className="text-gray-500">班级:</span> {l.class_name}</div>
-                            <div><span className="text-gray-500">提交人:</span> {l.applicant_name || '-'}{l.applicant_student_id ? `（${l.applicant_student_id}）` : ''}</div>
-                            <div><span className="text-gray-500">类型:</span> {l.leave_type}</div>
-                            {l.activity_name && <div><span className="text-gray-500">活动:</span> {l.activity_name}</div>}
-                          </div>
-                          <p className="mt-2 text-xs text-gray-600">请假时间：{formatDateTime(l.start_time)} 至 {formatDateTime(l.end_time)}</p>
-
-                          {/* 请假条图片 */}
-                          {l.leave_image_url && (
-                            <div className="mt-3">
-                              <span className="text-xs text-gray-500">请假条截图：{l.leave_image_name || '已上传'}</span>
-                              <div className="mt-1">
-                                <a href={l.leave_image_url} target="_blank" className="inline-block">
-                                  <img
-                                    src={l.leave_image_url}
-                                    alt="请假条"
-                                    className="max-h-40 rounded border border-gray-200 hover:border-[#1e3a5f]"
-                                  />
-                                </a>
+                      {pendingLeaves.map(l => {
+                        const isExpanded = expandedLeaveRequest === l.id;
+                        return (
+                          <div key={l.id} className="rounded-lg border border-amber-200 bg-amber-50/50">
+                            <button type="button" onClick={() => setExpandedLeaveRequest(isExpanded ? null : l.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-amber-50" aria-expanded={isExpanded}>
+                              <span className="min-w-0">
+                                <span className="block truncate font-medium text-gray-900">{l.student_name}（{l.student_id}）</span>
+                                <span className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-gray-500"><span>{l.class_name}</span><span>{l.leave_type}</span><span>提交人：{l.applicant_name || '-'}{l.applicant_student_id ? `（${l.applicant_student_id}）` : ''}</span>{l.activity_name && <span>活动：{l.activity_name}</span>}</span>
+                              </span>
+                              <span className="flex shrink-0 items-center gap-2 text-xs text-amber-700"><span>待审核</span>{isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}</span>
+                            </button>
+                            {isExpanded && (
+                              <div className="border-t border-amber-200 px-3 pb-3 pt-3">
+                                <p className="text-xs text-gray-600">请假时间：{formatDateTime(l.start_time)} 至 {formatDateTime(l.end_time)}</p>
+                                {l.leave_image_url && <div className="mt-3"><span className="text-xs text-gray-500">请假条截图：{l.leave_image_name || '已上传'}</span><div className="mt-1"><FilePreviewLink url={l.leave_image_url} fileName={l.leave_image_name} label="查看请假条" className="text-xs text-[#1e3a5f]" /></div></div>}
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
+                                  <input type="text" placeholder="审核备注（可选）" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} className="min-w-48 flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-[#1e3a5f] focus:outline-none" />
+                                  <button onClick={() => handleReviewLeave(l.id, '已通过')} className="flex items-center gap-1 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"><Check className="h-3 w-3" />通过</button>
+                                  <button onClick={() => handleReviewLeave(l.id, '已驳回')} className="flex items-center gap-1 rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"><X className="h-3 w-3" />驳回</button>
+                                </div>
                               </div>
-                            </div>
-                          )}
-
-                          <div className="mt-3 flex flex-wrap items-center gap-2">
-                            <input
-                              type="text"
-                              placeholder="审核备注（可选）"
-                              value={reviewNote}
-                              onChange={(e) => setReviewNote(e.target.value)}
-                              className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-[#1e3a5f] focus:outline-none"
-                            />
-                            <button
-                              onClick={() => handleReviewLeave(l.id, '已通过')}
-                              className="flex items-center gap-1 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
-                            >
-                              <Check className="h-3 w-3" /> 通过
-                            </button>
-                            <button
-                              onClick={() => handleReviewLeave(l.id, '已驳回')}
-                              className="flex items-center gap-1 rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"
-                            >
-                              <X className="h-3 w-3" /> 驳回
-                            </button>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1179,49 +1126,27 @@ function AdminPage() {
                 {leaves.filter(l => l.review_status !== '待审核').length > 0 && (
                   <div>
                     <h3 className="mb-3 text-sm font-medium text-gray-600">已处理</h3>
-                    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-                      <table className="w-full text-sm">
-                        <thead className="border-b border-gray-200 bg-gray-50">
-                          <tr>
-                            <th className="px-3 py-2.5 text-left font-medium text-gray-600">学号</th>
-                            <th className="px-3 py-2.5 text-left font-medium text-gray-600">姓名</th>
-                            <th className="px-3 py-2.5 text-left font-medium text-gray-600">班级</th>
-                            <th className="px-3 py-2.5 text-left font-medium text-gray-600">提交人</th>
-                            <th className="px-3 py-2.5 text-left font-medium text-gray-600">类型</th>
-                            <th className="px-3 py-2.5 text-left font-medium text-gray-600">请假时间</th>
-                            <th className="px-3 py-2.5 text-left font-medium text-gray-600">活动</th>
-                            <th className="px-3 py-2.5 text-left font-medium text-gray-600">请假条</th>
-                            <th className="px-3 py-2.5 text-left font-medium text-gray-600">状态</th>
-                            <th className="px-3 py-2.5 text-left font-medium text-gray-600">备注</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {leaves.filter(l => l.review_status !== '待审核').map(l => (
-                            <tr key={l.id} className="hover:bg-gray-50">
-                              <td className="px-3 py-2.5">{l.student_id}</td>
-                              <td className="px-3 py-2.5">{l.student_name}</td>
-                              <td className="px-3 py-2.5 text-xs">{l.class_name}</td>
-                              <td className="px-3 py-2.5 text-xs">{l.applicant_name || '-'}{l.applicant_student_id ? `（${l.applicant_student_id}）` : ''}</td>
-                              <td className="px-3 py-2.5 text-xs">{l.leave_type}</td>
-                              <td className="px-3 py-2.5 text-xs whitespace-nowrap">{formatDateTime(l.start_time)} 至 {formatDateTime(l.end_time)}</td>
-                              <td className="px-3 py-2.5 text-xs">{l.activity_name || '-'}</td>
-                              <td className="px-3 py-2.5">
-                                {l.leave_image_url ? (
-                                  <a href={l.leave_image_url} target="_blank" className="text-[#1e3a5f] hover:underline">
-                                    <ImageIcon className="h-4 w-4" />
-                                  </a>
-                                ) : '-'}
-                              </td>
-                              <td className="px-3 py-2.5">
-                                <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[l.review_status as LeaveStatus]}`}>
-                                  {l.review_status}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2.5 text-xs text-gray-500">{l.review_note || '-'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                    <div className="space-y-2">
+                      {leaves.filter(l => l.review_status !== '待审核').map(l => {
+                        const isExpanded = expandedLeaveRequest === l.id;
+                        return (
+                          <div key={l.id} className="rounded-lg border border-gray-200 bg-white">
+                            <button type="button" onClick={() => setExpandedLeaveRequest(isExpanded ? null : l.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-gray-50" aria-expanded={isExpanded}>
+                              <span className="min-w-0">
+                                <span className="block truncate font-medium text-gray-900">{l.student_name}（{l.student_id}）</span>
+                                <span className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-gray-500"><span>{l.class_name}</span><span>{l.leave_type}</span><span>活动：{l.activity_name || '-'}</span><span>提交人：{l.applicant_name || '-'}</span></span>
+                              </span>
+                              <span className="flex shrink-0 items-center gap-2"><span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[l.review_status as LeaveStatus]}`}>{l.review_status}</span>{isExpanded ? <ChevronUp className="size-4 text-gray-400" /> : <ChevronDown className="size-4 text-gray-400" />}</span>
+                            </button>
+                            {isExpanded && (
+                              <div className="border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-3 text-xs text-gray-600">
+                                <div className="grid gap-2 sm:grid-cols-2"><span>申请人：{l.applicant_name || '-'}{l.applicant_student_id ? `（${l.applicant_student_id}）` : ''}</span><span>班级：{l.class_name}</span><span>请假时间：{formatDateTime(l.start_time)} 至 {formatDateTime(l.end_time)}</span><span>活动：{l.activity_name || '-'}</span><span>审核备注：{l.review_note || '-'}</span></div>
+                                {l.leave_image_url && <div className="mt-3"><FilePreviewLink url={l.leave_image_url} fileName={l.leave_image_name} label="查看请假条" className="text-[#1e3a5f]" /></div>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1230,15 +1155,18 @@ function AdminPage() {
                   <div className="mt-6">
                     <h3 className="mb-3 text-sm font-medium text-gray-600">已处理集体请假</h3>
                     <div className="space-y-2">
-                      {leaveGroups.filter(group => group.review_status !== '待审核').map(group => (
-                        <div key={group.id} className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div><span className="font-medium">{group.class_name}集体请假</span><span className="ml-2 text-xs text-gray-500">{group.member_count} 人 | 发起人：{group.applicant_name || '-'} | {group.leave_type}{group.activity_name ? ` | ${group.activity_name}` : ''}</span></div>
-                            <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[group.review_status]}`}>{group.review_status}</span>
+                      {leaveGroups.filter(group => group.review_status !== '待审核').map(group => {
+                        const isExpanded = expandedLeaveGroup === group.id;
+                        return (
+                          <div key={group.id} className="rounded-lg border border-gray-200 bg-white">
+                            <button type="button" onClick={() => void loadLeaveGroupMembers(group.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-gray-50" aria-expanded={isExpanded}>
+                              <span className="min-w-0"><span className="block truncate font-medium text-gray-900">{group.class_name}集体请假</span><span className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-gray-500"><span>{group.member_count} 人</span><span>发起人：{group.applicant_name || '-'}</span><span>{group.leave_type}</span>{group.activity_name && <span>活动：{group.activity_name}</span>}</span></span>
+                              <span className="flex shrink-0 items-center gap-2"><span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[group.review_status]}`}>{group.review_status}</span>{isExpanded ? <ChevronUp className="size-4 text-gray-400" /> : <ChevronDown className="size-4 text-gray-400" />}</span>
+                            </button>
+                            {isExpanded && <div className="border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-3 text-xs text-gray-600"><p>请假时间：{formatDateTime(group.start_time)} 至 {formatDateTime(group.end_time)}</p><p className="mt-1">审核备注：{group.review_note || '-'}</p><div className="mt-3 flex flex-wrap gap-2">{(leaveGroupMembers[group.id] || []).map(member => <span key={member.id} className="rounded border bg-white px-2 py-1">{member.student_name}（{member.student_id}）</span>)}</div>{leaveGroupMembers[group.id]?.[0]?.leave_image_url && <div className="mt-3"><FilePreviewLink url={leaveGroupMembers[group.id][0].leave_image_url} fileName={leaveGroupMembers[group.id][0].leave_image_name} label="查看请假条" className="text-[#1e3a5f]" /></div>}</div>}
                           </div>
-                          <p className="mt-1 text-xs text-gray-500">请假时间：{formatDateTime(group.start_time)} 至 {formatDateTime(group.end_time)}{group.review_note ? ` | 审核备注：${group.review_note}` : ''}</p>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1265,124 +1193,41 @@ function AdminPage() {
                   </div>
                 </div>
 
-                <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-                  <table className="w-full text-sm">
-                    <thead className="border-b border-gray-200 bg-gray-50">
-                      <tr>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">活动ID</th>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">活动全称</th>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">分类</th>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">级别</th>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">负责人</th>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">赋分状态</th>
-                        <th className="px-3 py-2.5 text-left font-medium text-gray-600">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {scoringList.map(a => (
-                        <Fragment key={a.id}>
-                          <tr className="hover:bg-gray-50">
-                            <td className="px-3 py-2.5 font-mono text-xs">{a.id}</td>
-                            <td className="px-3 py-2.5 font-medium">{a.full_name}</td>
-                            <td className="px-3 py-2.5">
-                              <span className="rounded px-1.5 py-0.5 text-xs font-medium bg-indigo-50 text-indigo-700">{formatCategoryPath(a.category, a.category_primary, a.category_secondary)}</span>
-                            </td>
-                            <td className="px-3 py-2.5 text-xs">{a.level}</td>
-                            <td className="px-3 py-2.5 text-xs">{a.leader_name}</td>
-                            <td className="px-3 py-2.5">
-                              <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[a.scoring_status] || 'bg-gray-100 text-gray-700'}`}>
-                                {a.scoring_status}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2.5">
-                              {a.scoring_status === '待赋分' ? (
-                                <button
-                                  onClick={() => setExpandedScoring(expandedScoring === a.id ? null : a.id)}
-                                  className="flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-xs font-medium text-white hover:bg-amber-700"
-                                >
-                                  <Eye className="h-3 w-3" /> 查看材料
-                                </button>
-                              ) : (
-                                <div className="flex gap-2">
-                                  {a.scoring_table_url && (
-                                    <a href={a.scoring_table_url} target="_blank" download className="flex items-center gap-1 text-xs text-[#1e3a5f] hover:underline">
-                                      <FileText className="h-3 w-3" /> {a.scoring_table_file_name || '赋分表（已上传）'}
-                                    </a>
-                                  )}
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                          {expandedScoring === a.id && a.scoring_status === '待赋分' && (
-                            <tr className="bg-amber-50/50">
-                              <td colSpan={7} className="px-3 py-3">
-                                <div className="space-y-3">
-                                  <p className="text-xs font-medium text-gray-700">赋分材料（请查看并下载确认）：</p>
-                                  <div className="flex flex-wrap gap-3 text-xs">
-                                    {/* 赋分表 */}
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-gray-500">赋分表:</span>
-                                      {a.scoring_table_url ? (
-                                        <div className="flex items-center gap-2">
-                                          <a href={a.scoring_table_url} target="_blank" className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[#1e3a5f] hover:bg-blue-50">
-                                            <FileText className="h-3 w-3" /> {a.scoring_table_file_name || '查看赋分表'}
-                                          </a>
-                                          <a href={a.scoring_table_url} download className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-emerald-600 hover:bg-emerald-50">
-                                            <Download className="h-3 w-3" /> 下载
-                                          </a>
-                                        </div>
-                                      ) : (
-                                        <span className="text-red-500">负责人尚未上传赋分表</span>
-                                      )}
-                                    </div>
-                                    {/* 备案表（校级需要） */}
-                                    {a.level === '校级' && (
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-gray-500">备案表照片:</span>
-                                        {a.record_photo_url ? (
-                                          <div className="flex items-center gap-2">
-                                          <a href={a.record_photo_url} target="_blank" className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[#1e3a5f] hover:bg-blue-50">
-                                            <ImageIcon className="h-3 w-3" /> {a.record_photo_file_name || '查看备案表照片'}
-                                          </a>
-                                            <a href={a.record_photo_url} download className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-emerald-600 hover:bg-emerald-50">
-                                              <Download className="h-3 w-3" /> 下载
-                                            </a>
-                                          </div>
-                                        ) : (
-                                          <span className="text-red-500">未上传备案表照片（无法赋分）</span>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2 border-t border-gray-200 pt-3">
-                                    <button
-                                      onClick={() => handleScoring(a.id, a.level)}
-                                       disabled={scoringInProgress || !a.scoring_table_url || (a.level === '校级' && !a.record_photo_url)}
-                                      className="rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                                    >
-                                      {scoringInProgress ? '处理中...' : '确认赋分'}
-                                    </button>
-                                    <button
-                                      onClick={() => setExpandedScoring(null)}
-                                      className="text-xs text-gray-500 hover:text-gray-700"
-                                    >
-                                      取消
-                                    </button>
-                                    {(!a.scoring_table_url || (a.level === '校级' && !a.record_photo_url)) && (
-                                      <span className="text-xs text-amber-600">请等待负责人上传完整材料</span>
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </Fragment>
-                      ))}
-                      {scoringList.length === 0 && (
-                        <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400">暂无可赋分活动</td></tr>
-                      )}
-                    </tbody>
-                  </table>
+                <div className="space-y-2">
+                  {scoringList.map(a => {
+                    const isExpanded = expandedScoring === a.id;
+                    const canConfirm = Boolean(a.scoring_table_url) && (a.level !== '校级' || Boolean(a.record_photo_url));
+                    return (
+                      <div key={a.id} className={`rounded-lg border ${a.scoring_status === '待赋分' ? 'border-amber-200 bg-amber-50/50' : 'border-gray-200 bg-white'}`}>
+                        <button type="button" onClick={() => setExpandedScoring(isExpanded ? null : a.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-gray-50" aria-expanded={isExpanded}>
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium text-gray-900">{a.full_name}</span>
+                            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500"><span className="font-mono">{a.id}</span><CategoryBadge category={a.category} primary={a.category_primary} secondary={a.category_secondary} topLevelOnly /><span>{a.level}</span><span>负责人：{a.leader_name}</span><span>赋分材料提交人：{a.scoring_material_submitter_name || '-'}</span></span>
+                          </span>
+                          <span className="flex shrink-0 items-center gap-2"><span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[a.scoring_status] || 'bg-gray-100 text-gray-700'}`}>{a.scoring_status}</span>{isExpanded ? <ChevronUp className="size-4 text-gray-400" /> : <ChevronDown className="size-4 text-gray-400" />}</span>
+                        </button>
+                        {isExpanded && (
+                          <div className="border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-3">
+                            <div className="grid gap-2 text-xs text-gray-600 sm:grid-cols-2 lg:grid-cols-3">
+                              <span>活动时间：{formatDateTime(a.start_time)} 至 {formatDateTime(a.end_time)}</span>
+                              <span className="text-sky-700">活动报名时间：{a.registration_start_time && a.registration_end_time ? `${formatDateTime(a.registration_start_time)} 至 ${formatDateTime(a.registration_end_time)}` : '未填写（历史记录）'}</span>
+                              <span className="flex items-center gap-2">分类：<CategoryBadge category={a.category} primary={a.category_primary} secondary={a.category_secondary} /></span>
+                              <span>主办/联办单位：{formatActivityScopes(a)}</span>
+                              <span>负责人：{a.leader_name}（{a.leader_phone}）</span>
+                              <span>实际活动信息提交人：{a.activity_submitter_name || '-'}{a.activity_submitter_student_id ? `（${a.activity_submitter_student_id}）` : ''}</span>
+                              <span>实际赋分材料提交人：{a.scoring_material_submitter_name || '-'}{a.scoring_material_submitter_student_id ? `（${a.scoring_material_submitter_student_id}）` : ''}</span>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-3 border-t border-gray-200 pt-3 text-xs">
+                              <div className="flex items-center gap-2"><span className="text-gray-500">赋分表:</span>{a.scoring_table_url ? <div className="flex items-center gap-2"><FilePreviewLink url={a.scoring_table_url} fileName={a.scoring_table_file_name} label="查看赋分表" className="rounded border border-gray-200 bg-white px-2 py-1 text-[#1e3a5f] hover:bg-blue-50" /><a href={a.scoring_table_url} download className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-emerald-600 hover:bg-emerald-50"><Download className="h-3 w-3" />下载</a></div> : <span className="text-red-500">负责人尚未上传赋分表</span>}</div>
+                              {a.level === '校级' && <div className="flex items-center gap-2"><span className="text-gray-500">备案表照片:</span>{a.record_photo_url ? <div className="flex items-center gap-2"><FilePreviewLink url={a.record_photo_url} fileName={a.record_photo_file_name} label="查看备案表照片" className="rounded border border-gray-200 bg-white px-2 py-1 text-[#1e3a5f] hover:bg-blue-50" /><a href={a.record_photo_url} download className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-emerald-600 hover:bg-emerald-50"><Download className="h-3 w-3" />下载</a></div> : <span className="text-red-500">未上传备案表照片（无法赋分）</span>}</div>}
+                            </div>
+                            {a.scoring_status === '待赋分' && <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3"><button type="button" onClick={() => handleScoring(a.id, a.level)} disabled={scoringInProgress || !canConfirm} className="rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">{scoringInProgress ? '处理中...' : '确认赋分'}</button>{!canConfirm && <span className="text-xs text-amber-600">请等待负责人上传完整材料</span>}</div>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {scoringList.length === 0 && <div className="rounded-lg border border-gray-200 bg-white px-3 py-8 text-center text-gray-400">暂无可赋分活动</div>}
                 </div>
               </div>
             )}
@@ -2124,6 +1969,8 @@ function ActivityForm({ activity, onSubmit, onCancel }: {
     full_name: activity?.full_name || '',
     start_time: activity?.start_time ? activity.start_time.slice(0, 16) : '',
     end_time: activity?.end_time ? activity.end_time.slice(0, 16) : '',
+    registration_start_time: activity?.registration_start_time ? activity.registration_start_time.slice(0, 16) : '',
+    registration_end_time: activity?.registration_end_time ? activity.registration_end_time.slice(0, 16) : '',
     category: activity?.category || '',
     category_primary: activity?.category_primary || '',
     category_secondary: activity?.category_secondary || '',
@@ -2145,13 +1992,23 @@ function ActivityForm({ activity, onSubmit, onCancel }: {
             className="w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-[#1e3a5f] focus:outline-none" />
         </div>
         <div>
-          <label className="mb-0.5 block text-xs font-medium text-gray-600">开始时间</label>
+          <label className="mb-0.5 block text-xs font-medium text-gray-600">活动开始时间</label>
           <input type="datetime-local" value={form.start_time} onChange={(e) => setForm(f => ({ ...f, start_time: e.target.value }))}
             className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
         </div>
         <div>
-          <label className="mb-0.5 block text-xs font-medium text-gray-600">结束时间</label>
+          <label className="mb-0.5 block text-xs font-medium text-gray-600">活动结束时间</label>
           <input type="datetime-local" value={form.end_time} onChange={(e) => setForm(f => ({ ...f, end_time: e.target.value }))}
+            className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
+        </div>
+        <div>
+          <label className="mb-0.5 block text-xs font-medium text-gray-600">活动报名开始时间</label>
+          <input type="datetime-local" value={form.registration_start_time} onChange={(e) => setForm(f => ({ ...f, registration_start_time: e.target.value }))}
+            className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
+        </div>
+        <div>
+          <label className="mb-0.5 block text-xs font-medium text-gray-600">活动报名结束时间</label>
+          <input type="datetime-local" value={form.registration_end_time} onChange={(e) => setForm(f => ({ ...f, registration_end_time: e.target.value }))}
             className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
         </div>
         <div>
@@ -2205,7 +2062,7 @@ function ActivityForm({ activity, onSubmit, onCancel }: {
         </div>
       </div>
       <div className="mt-3 flex gap-2">
-        <button onClick={() => onSubmit({ ...form, start_time: new Date(form.start_time).toISOString(), end_time: new Date(form.end_time).toISOString() })}
+        <button onClick={() => onSubmit({ ...form, start_time: new Date(form.start_time).toISOString(), end_time: new Date(form.end_time).toISOString(), registration_start_time: form.registration_start_time ? new Date(form.registration_start_time).toISOString() : null, registration_end_time: form.registration_end_time ? new Date(form.registration_end_time).toISOString() : null })}
           className="rounded bg-[#1e3a5f] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1e3a5f]/90">保存</button>
         <button onClick={onCancel} className="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">取消</button>
       </div>

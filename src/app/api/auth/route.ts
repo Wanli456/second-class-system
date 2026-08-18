@@ -161,6 +161,20 @@ export async function DELETE(request: NextRequest) {
       [target.username, target.student_id, id],
     );
     await query(
+      `UPDATE activities
+       SET scoring_material_submitter_name=COALESCE(scoring_material_submitter_name,$1),
+           scoring_material_submitter_student_id=COALESCE(scoring_material_submitter_student_id,$2)
+       WHERE scoring_material_submitter_id=$3`,
+      [target.username, target.student_id, id],
+    );
+    await query(
+      `UPDATE activity_submissions
+       SET scoring_material_submitter_name=COALESCE(scoring_material_submitter_name,$1),
+           scoring_material_submitter_student_id=COALESCE(scoring_material_submitter_student_id,$2)
+       WHERE scoring_material_submitter_id=$3`,
+      [target.username, target.student_id, id],
+    );
+    await query(
       `UPDATE activity_submissions
        SET activity_submitter_name=COALESCE(activity_submitter_name,$1),
            activity_submitter_student_id=COALESCE(activity_submitter_student_id,$2)

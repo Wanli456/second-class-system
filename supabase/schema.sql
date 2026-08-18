@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS activities (
   full_name TEXT NOT NULL,
   start_time TIMESTAMP NOT NULL,
   end_time TIMESTAMP NOT NULL,
+  registration_start_time TIMESTAMP,
+  registration_end_time TIMESTAMP,
   category TEXT NOT NULL,
   category_primary TEXT,
   category_secondary TEXT,
@@ -64,6 +66,8 @@ CREATE TABLE IF NOT EXISTS activities (
   activity_submitter_name TEXT,
   activity_submitter_student_id TEXT,
   scoring_material_submitter_id TEXT,
+  scoring_material_submitter_name TEXT,
+  scoring_material_submitter_student_id TEXT,
   status TEXT NOT NULL DEFAULT '正常活动',
   scoring_status TEXT NOT NULL DEFAULT '待赋分',
   scoring_table_url TEXT,
@@ -77,6 +81,8 @@ CREATE TABLE IF NOT EXISTS activity_submissions (
   full_name TEXT NOT NULL,
   start_time TIMESTAMP NOT NULL,
   end_time TIMESTAMP NOT NULL,
+  registration_start_time TIMESTAMP,
+  registration_end_time TIMESTAMP,
   category TEXT NOT NULL,
   category_primary TEXT,
   category_secondary TEXT,
@@ -96,6 +102,8 @@ CREATE TABLE IF NOT EXISTS activity_submissions (
   activity_submitter_student_id TEXT,
   activity_id TEXT,
   scoring_material_submitter_id TEXT,
+  scoring_material_submitter_name TEXT,
+  scoring_material_submitter_student_id TEXT,
   review_status TEXT NOT NULL DEFAULT '待审核',
   review_note TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -145,6 +153,10 @@ ALTER TABLE activities ADD COLUMN IF NOT EXISTS category_primary TEXT;
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS category_secondary TEXT;
 ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS category_primary TEXT;
 ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS category_secondary TEXT;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS registration_start_time TIMESTAMP;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS registration_end_time TIMESTAMP;
+ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS registration_start_time TIMESTAMP;
+ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS registration_end_time TIMESTAMP;
 
 CREATE TABLE IF NOT EXISTS leave_group_members (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -205,11 +217,29 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_submitter_name TEXT;
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_submitter_student_id TEXT;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_material_submitter_name TEXT;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_material_submitter_student_id TEXT;
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_photo_url TEXT;
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_photo_file_name TEXT;
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS scope_names TEXT;
 ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_submitter_name TEXT;
 ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_submitter_student_id TEXT;
+ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scoring_material_submitter_name TEXT;
+ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scoring_material_submitter_student_id TEXT;
+
+UPDATE activities a
+SET scoring_material_submitter_name = u.username,
+    scoring_material_submitter_student_id = u.student_id
+FROM users u
+WHERE a.scoring_material_submitter_id = u.id
+  AND a.scoring_material_submitter_name IS NULL;
+
+UPDATE activity_submissions s
+SET scoring_material_submitter_name = u.username,
+    scoring_material_submitter_student_id = u.student_id
+FROM users u
+WHERE s.scoring_material_submitter_id = u.id
+  AND s.scoring_material_submitter_name IS NULL;
 ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_id TEXT;
 ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_names TEXT;
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_name TEXT;
