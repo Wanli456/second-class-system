@@ -42,8 +42,8 @@ export async function PUT(request: NextRequest) {
     let activityId: string | null = null;
     if (review_status === '已通过') {
       activityId = newActivityId();
-      await query(`INSERT INTO activities (id,full_name,start_time,end_time,category,category_primary,category_secondary,level,plan_file_url,plan_file_name,record_file_url,record_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,leader_ids,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,status,scoring_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,'正常活动','待赋分')`, [
-        activityId, submission.full_name, submission.start_time, submission.end_time, submission.category, submission.category_primary || null, submission.category_secondary || null, submission.level,
+      await query(`INSERT INTO activities (id,full_name,start_time,end_time,registration_start_time,registration_end_time,category,category_primary,category_secondary,level,plan_file_url,plan_file_name,record_file_url,record_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,leader_ids,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,status,scoring_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,'正常活动','待赋分')`, [
+        activityId, submission.full_name, submission.start_time, submission.end_time, submission.registration_start_time || null, submission.registration_end_time || null, submission.category, submission.category_primary || null, submission.category_secondary || null, submission.level,
         submission.plan_file_url, submission.plan_file_name || null, submission.record_file_url, submission.record_file_name || null, submission.leader_name, submission.leader_phone,
         submission.scope_type || 'department', submission.scope_name, submission.scope_names || null, submission.leader_ids || '[]', submission.activity_submitter_id || null, submission.activity_submitter_name || null, submission.activity_submitter_student_id || null,
       ]);

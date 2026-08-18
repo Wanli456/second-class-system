@@ -14,6 +14,8 @@ export const activities = pgTable(
     full_name: varchar("full_name", { length: 255 }).notNull(),
     start_time: timestamp("start_time", { withTimezone: true }).notNull(),
     end_time: timestamp("end_time", { withTimezone: true }).notNull(),
+    registration_start_time: timestamp("registration_start_time", { withTimezone: true }),
+    registration_end_time: timestamp("registration_end_time", { withTimezone: true }),
     category: varchar("category", { length: 10 }).notNull(), // 德智体美劳
     category_primary: varchar("category_primary", { length: 50 }),
     category_secondary: varchar("category_secondary", { length: 100 }),
@@ -34,6 +36,8 @@ export const activities = pgTable(
     activity_submitter_name: varchar("activity_submitter_name", { length: 50 }),
     activity_submitter_student_id: varchar("activity_submitter_student_id", { length: 20 }),
     scoring_material_submitter_id: varchar("scoring_material_submitter_id", { length: 36 }),
+    scoring_material_submitter_name: varchar("scoring_material_submitter_name", { length: 50 }),
+    scoring_material_submitter_student_id: varchar("scoring_material_submitter_student_id", { length: 20 }),
     status: varchar("status", { length: 20 }).notNull().default("正常活动"), // 正常活动/活动取消
     scoring_status: varchar("scoring_status", { length: 20 }).notNull().default("待赋分"), // 待赋分/已赋分
     scoring_table_url: text("scoring_table_url"), // 活动赋分表
@@ -58,6 +62,8 @@ export const activity_submissions = pgTable(
     full_name: varchar("full_name", { length: 255 }).notNull(),
     start_time: timestamp("start_time", { withTimezone: true }).notNull(),
     end_time: timestamp("end_time", { withTimezone: true }).notNull(),
+    registration_start_time: timestamp("registration_start_time", { withTimezone: true }),
+    registration_end_time: timestamp("registration_end_time", { withTimezone: true }),
     category: varchar("category", { length: 10 }).notNull(),
     category_primary: varchar("category_primary", { length: 50 }),
     category_secondary: varchar("category_secondary", { length: 100 }),
@@ -76,6 +82,8 @@ export const activity_submissions = pgTable(
     activity_submitter_name: varchar("activity_submitter_name", { length: 50 }),
     activity_submitter_student_id: varchar("activity_submitter_student_id", { length: 20 }),
     scoring_material_submitter_id: varchar("scoring_material_submitter_id", { length: 36 }),
+    scoring_material_submitter_name: varchar("scoring_material_submitter_name", { length: 50 }),
+    scoring_material_submitter_student_id: varchar("scoring_material_submitter_student_id", { length: 20 }),
     review_status: varchar("review_status", { length: 20 }).notNull().default("待审核"), // 待审核/已通过/已驳回
     review_note: text("review_note"),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

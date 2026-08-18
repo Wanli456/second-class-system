@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       if (id) { params.push(id); clauses.push(`id=$${params.length}`); }
       if (keyword) { params.push(`%${keyword}%`); clauses.push(`full_name ILIKE $${params.length}`); }
       const data = await query(
-        `SELECT id,full_name,level,category,category_primary,category_secondary,leader_name,leader_phone,scoring_status,scoring_table_url,scoring_table_file_name,record_file_url,record_file_name,record_photo_url,record_photo_file_name,scope_names,scope_type,scope_name FROM activities WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC`,
+        `SELECT id,full_name,start_time,end_time,registration_start_time,registration_end_time,level,category,category_primary,category_secondary,leader_name,leader_phone,scoring_status,scoring_table_url,scoring_table_file_name,record_file_url,record_file_name,record_photo_url,record_photo_file_name,scope_names,scope_type,scope_name,activity_submitter_name,activity_submitter_student_id,scoring_material_submitter_name,scoring_material_submitter_student_id FROM activities WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC`,
         params,
       );
       const visible = auth.user!.role === 'admin'
@@ -73,13 +73,13 @@ export async function POST(request: NextRequest) {
     const auth = await requirePermission(request, 'admin');
     if (auth.response) return auth.response;
     const body = await request.json();
-    const { full_name, start_time, end_time, category, category_primary, category_secondary, level, plan_file_url, plan_file_name, record_file_url, record_file_name, leader_name, leader_phone, status = '正常活动' } = body;
+    const { full_name, start_time, end_time, registration_start_time, registration_end_time, category, category_primary, category_secondary, level, plan_file_url, plan_file_name, record_file_url, record_file_name, leader_name, leader_phone, status = '正常活动' } = body;
     const scopes = normalizeScopes(body.scope_names, body.scope_type, body.scope_name || auth.user!.department || auth.user!.class_name);
     const validation = validateScopes(scopes);
-    if (!full_name || !start_time || !end_time || !category || !category_primary || !category_secondary || !isValidCategoryPath(category, category_primary, category_secondary) || !level || !leader_name || !leader_phone || !validation.valid) return NextResponse.json({ success: false, error: validation.error || '请选择有效的德智体美劳一级和二级分类，并填写其他必填信息' }, { status: 400 });
+    if (!full_name || !start_time || !end_time || !registration_start_time || !registration_end_time || !category || !category_primary || !category_secondary || !isValidCategoryPath(category, category_primary, category_secondary) || !level || !leader_name || !leader_phone || !validation.valid) return NextResponse.json({ success: false, error: validation.error || '请填写活动报名时间、活动举办时间、完整二课分类和其他必填信息' }, { status: 400 });
     const firstScope = scopes[0];
     const id = newActivityId();
-    const data = await queryOne(`INSERT INTO activities (id,full_name,start_time,end_time,category,category_primary,category_secondary,level,plan_file_url,plan_file_name,record_file_url,record_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,leader_ids,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,status,scoring_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,'待赋分') RETURNING *`, [id, full_name, start_time, end_time, category, category_primary || null, category_secondary || null, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader_name, leader_phone, firstScope.type, firstScope.name, serializeScopes(scopes), JSON.stringify(body.leader_ids || []), auth.user!.id, auth.user!.username, auth.user!.student_id, status]);
+    const data = await queryOne(`INSERT INTO activities (id,full_name,start_time,end_time,registration_start_time,registration_end_time,category,category_primary,category_secondary,level,plan_file_url,plan_file_name,record_file_url,record_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,leader_ids,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,status,scoring_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'待赋分') RETURNING *`, [id, full_name, start_time, end_time, registration_start_time, registration_end_time, category, category_primary || null, category_secondary || null, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader_name, leader_phone, firstScope.type, firstScope.name, serializeScopes(scopes), JSON.stringify(body.leader_ids || []), auth.user!.id, auth.user!.username, auth.user!.student_id, status]);
     return NextResponse.json({ success: true, data });
   } catch (err) {
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '创建失败' }, { status: 500 });
@@ -102,9 +102,12 @@ export async function PUT(request: NextRequest) {
     if (isScoringMaterialSubmission) {
       if (activity.scoring_status === '已赋分') return NextResponse.json({ success: false, error: '该活动已完成赋分，不能重新提交材料' }, { status: 400 });
       if (!hasAnyScopePermission(auth.user!, 'submitScoring', getActivityScopes(activity))) return NextResponse.json({ success: false, error: '你没有该活动所属部门或班级的赋分材料权限' }, { status: 403 });
+      if (activity.level === '校级' && !updates.record_photo_url && !activity.record_photo_url) return NextResponse.json({ success: false, error: '校级活动提交赋分材料时必须上传备案表照片' }, { status: 400 });
       updates.scoring_material_submitter_id = auth.user!.id;
+      updates.scoring_material_submitter_name = auth.user!.username;
+      updates.scoring_material_submitter_student_id = auth.user!.student_id;
     }
-    const allowedFields = ['full_name','start_time','end_time','category','category_primary','category_secondary','level','plan_file_url','plan_file_name','record_file_url','record_file_name','record_photo_url','record_photo_file_name','leader_name','leader_phone','scope_type','scope_name','scope_names','leader_ids','status','scoring_table_url','scoring_table_file_name','scoring_material_submitter_id'];
+    const allowedFields = ['full_name','start_time','end_time','registration_start_time','registration_end_time','category','category_primary','category_secondary','level','plan_file_url','plan_file_name','record_file_url','record_file_name','record_photo_url','record_photo_file_name','leader_name','leader_phone','scope_type','scope_name','scope_names','leader_ids','status','scoring_table_url','scoring_table_file_name','scoring_material_submitter_id','scoring_material_submitter_name','scoring_material_submitter_student_id'];
     const safeKeys = Object.keys(updates).filter((key) => allowedFields.includes(key));
     if (!safeKeys.length) return NextResponse.json({ success: false, error: '没有可更新的内容' }, { status: 400 });
     const params: unknown[] = [];
