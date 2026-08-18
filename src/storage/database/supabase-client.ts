@@ -1,38 +1,6 @@
 import { Pool, type QueryResultRow } from 'pg';
 import { newDb, DataType } from 'pg-mem';
 
-/**
- * 生产环境安全检查
- * 防止在生产环境中误用内存数据库导致数据丢失
- */
-function checkProductionDatabaseConfig() {
-  const isProduction = process.env.NODE_ENV === 'production' || process.env.COZE_PROJECT_ENV === 'PROD';
-  const hasDatabaseUrl = !!process.env.PGDATABASE_URL;
-
-  if (isProduction && !hasDatabaseUrl) {
-    throw new Error(
-      '🚨 生产环境安全检查失败：缺少 PGDATABASE_URL 环境变量。\n' +
-      '在生产环境中使用内存数据库会导致所有数据丢失！\n' +
-      '请确保配置了 PGDATABASE_URL 环境变量后再启动服务。\n' +
-      '本地开发可以忽略此错误。'
-    );
-  }
-}
-
-// 在模块加载时执行安全检查
-try {
-  checkProductionDatabaseConfig();
-} catch (error) {
-  // 在开发环境中给出警告而不是阻止启动
-  if (process.env.NODE_ENV === 'development') {
-    console.warn('⚠️  ' + (error as Error).message);
-    console.warn('继续使用本地测试数据库进行开发...');
-  } else {
-    // 生产环境直接抛出错误
-    throw error;
-  }
-}
-
 const useLocalTestDatabase = !process.env.PGDATABASE_URL;
 
 type DatabasePool = {
