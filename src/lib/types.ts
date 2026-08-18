@@ -4,6 +4,8 @@ export interface Activity {
   start_time: string;
   end_time: string;
   category: '德' | '智' | '体' | '美' | '劳';
+  category_primary?: string | null;
+  category_secondary?: string | null;
   level: '院系级' | '校级';
   plan_file_url: string | null;
   plan_file_name?: string | null;
@@ -32,6 +34,8 @@ export interface ActivitySubmission {
   start_time: string;
   end_time: string;
   category: '德' | '智' | '体' | '美' | '劳';
+  category_primary?: string | null;
+  category_secondary?: string | null;
   level: '院系级' | '校级';
   plan_file_url: string | null;
   plan_file_name?: string | null;
@@ -74,6 +78,39 @@ export interface LeaveRequest {
 }
 
 export const CATEGORIES = ['德', '智', '体', '美', '劳'] as const;
+export type Category = typeof CATEGORIES[number];
+
+export const CATEGORY_DETAILS: Record<Category, Record<string, readonly string[]>> = {
+  德: {
+    思想政治: ['团组织生活', '政治追求', '“青”字号思政活动', '主题学习', '理论应用', '先进荣誉', '宣传思想'],
+    公民道德: ['诚实守信', '道德担当', '道德实践', '校园文明', '公民道德扣分项'],
+    社会责任: ['任职经历', '任职荣誉', '履职培训', '团队志愿服务', '志愿服务获奖', '公益服务', '无偿献血', '西部计划志愿者项目', '志愿服务违规行为', '军训教育'],
+  },
+  智: {
+    科学精神: ['图书借阅', '学习兴趣', '线上阅读'],
+    工匠精神: ['实习实训', '论文发表', '学术研究', '技能提升', '专业技能竞赛'],
+    创新精神: ['SYB培训', '引航计划', '创新创业', '入驻创新创业俱乐部', '创新创业比赛'],
+  },
+  体: {
+    身心健康: ['心理健康', '身体素养', '体育赛事裁判', '体育赛事活动获奖', '校园体育活动', '疾病预防'],
+  },
+  美: {
+    艺术审美: ['人文修养', '文化艺术参赛', '文化艺术表演', '文化艺术主持', '文化艺术竞赛获奖', '校园文化艺术活动', '文化艺术活动违规'],
+  },
+  劳: {
+    劳动精神: ['团队实践', '兼职活动', '勤工助学', '个人实践', '社会调研', '劳动锻炼', '宿舍劳动'],
+    自我管理: ['个人发展规划'],
+  },
+};
+
+export function formatCategoryPath(category: string, primary?: string | null, secondary?: string | null): string {
+  return [category, primary, secondary].filter(Boolean).join(' / ');
+}
+
+export function isValidCategoryPath(category: string, primary?: string | null, secondary?: string | null): boolean {
+  if (!CATEGORIES.includes(category as Category) || !primary || !secondary) return false;
+  return Boolean(CATEGORY_DETAILS[category as Category]?.[primary]?.includes(secondary));
+}
 export const LEVELS = ['院系级', '校级'] as const;
 export const ACTIVITY_STATUSES = ['正常活动', '活动取消'] as const;
 export const LEAVE_TYPES = ['事假', '病假', '活动公假'] as const;

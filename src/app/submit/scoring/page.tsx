@@ -9,12 +9,15 @@ import { LEVELS, SCORING_STATUSES } from '@/lib/types';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { formatActivityScopes } from '@/lib/business-rules';
+import { formatCategoryPath } from '@/lib/types';
 
 interface Activity {
   id: string;
   full_name: string;
   level: string;
   category: string;
+  category_primary?: string | null;
+  category_secondary?: string | null;
   leader_name: string;
   leader_phone: string;
   scoring_status: string;
@@ -395,7 +398,7 @@ export default function SubmitScoringPage() {
                       <div>
                         <p className="text-sm font-medium text-gray-900">{a.full_name}</p>
                         <p className="mt-1 text-xs text-gray-500">
-                          {a.id} | {a.category} | {a.level}
+                          {a.id} | {formatCategoryPath(a.category, a.category_primary, a.category_secondary)} | {a.level}
                         </p>
                         <p className="mt-1 text-xs text-gray-500">{formatActivityScopes(a)}</p>
                       </div>

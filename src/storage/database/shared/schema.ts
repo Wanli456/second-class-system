@@ -15,6 +15,8 @@ export const activities = pgTable(
     start_time: timestamp("start_time", { withTimezone: true }).notNull(),
     end_time: timestamp("end_time", { withTimezone: true }).notNull(),
     category: varchar("category", { length: 10 }).notNull(), // 德智体美劳
+    category_primary: varchar("category_primary", { length: 50 }),
+    category_secondary: varchar("category_secondary", { length: 100 }),
     level: varchar("level", { length: 20 }).notNull(), // 院系级/校级
     plan_file_url: text("plan_file_url"),
     plan_file_name: text("plan_file_name"),
@@ -57,6 +59,8 @@ export const activity_submissions = pgTable(
     start_time: timestamp("start_time", { withTimezone: true }).notNull(),
     end_time: timestamp("end_time", { withTimezone: true }).notNull(),
     category: varchar("category", { length: 10 }).notNull(),
+    category_primary: varchar("category_primary", { length: 50 }),
+    category_secondary: varchar("category_secondary", { length: 100 }),
     level: varchar("level", { length: 20 }).notNull(),
     plan_file_url: text("plan_file_url"),
     plan_file_name: text("plan_file_name"),

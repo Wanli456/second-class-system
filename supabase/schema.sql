@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS activities (
   start_time TIMESTAMP NOT NULL,
   end_time TIMESTAMP NOT NULL,
   category TEXT NOT NULL,
+  category_primary TEXT,
+  category_secondary TEXT,
   level TEXT NOT NULL,
   plan_file_url TEXT,
   plan_file_name TEXT,
@@ -76,6 +78,8 @@ CREATE TABLE IF NOT EXISTS activity_submissions (
   start_time TIMESTAMP NOT NULL,
   end_time TIMESTAMP NOT NULL,
   category TEXT NOT NULL,
+  category_primary TEXT,
+  category_secondary TEXT,
   level TEXT NOT NULL,
   plan_file_url TEXT,
   plan_file_name TEXT,
@@ -136,6 +140,11 @@ CREATE TABLE IF NOT EXISTS leave_groups (
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS category_primary TEXT;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS category_secondary TEXT;
+ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS category_primary TEXT;
+ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS category_secondary TEXT;
 
 CREATE TABLE IF NOT EXISTS leave_group_members (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,

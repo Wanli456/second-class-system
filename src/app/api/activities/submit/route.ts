@@ -4,6 +4,7 @@ import { requirePermission } from '@/lib/auth';
 import { canSelectActivityLeader } from '@/lib/activity-leader-rules';
 import { getActivityScopes, hasAnyScopePermission, normalizeIds, normalizeScopes, serializeIds, serializeScopes, validateHostingScope } from '@/lib/business-rules';
 import { mergeActivityStatusRecords, type ActivityStatusRecord } from '@/lib/activity-status';
+import { isValidCategoryPath } from '@/lib/types';
 
 class ActivityLeaderValidationError extends Error {}
 
@@ -83,10 +84,10 @@ export async function POST(request: NextRequest) {
     if (auth.response) return auth.response;
     const user = auth.user!;
     const body = await request.json();
-    const { submission_id, full_name, start_time, end_time, category, level, plan_file_url, plan_file_name, record_file_url, record_file_name, leader_name = '', leader_phone = '' } = body;
+    const { submission_id, full_name, start_time, end_time, category, category_primary, category_secondary, level, plan_file_url, plan_file_name, record_file_url, record_file_name, leader_name = '', leader_phone = '' } = body;
     const fallbackScope = scopeFromUser(user);
     const scopes = normalizeScopes(body.scope_names, body.scope_type || fallbackScope.scopeType, body.scope_name || fallbackScope.scopeName);
-    if (!full_name || !start_time || !end_time || !category || !level) return NextResponse.json({ success: false, error: '缺少活动信息、时间或级别' }, { status: 400 });
+    if (!full_name || !start_time || !end_time || !category || !category_primary || !category_secondary || !isValidCategoryPath(category, category_primary, category_secondary) || !level) return NextResponse.json({ success: false, error: '请选择有效的德智体美劳一级和二级分类，并填写活动信息、时间和级别' }, { status: 400 });
 
     if (submission_id) {
       const existing = await queryOne('SELECT id, review_status, activity_submitter_id, scope_names, scope_type, scope_name FROM activity_submissions WHERE id=$1', [submission_id]);
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
       // 驳回重提沿用原联办范围；联办成员不必恰好属于原主办单位。
       const leader = await resolveLeaders(normalizeIds(body.leader_ids), leader_name, leader_phone, originalScopes, user);
       const firstScope = originalScopes[0];
-      const data = await queryOne(`UPDATE activity_submissions SET full_name=$1,start_time=$2,end_time=$3,category=$4,level=$5,plan_file_url=$6,plan_file_name=$7,record_file_url=$8,record_file_name=$9,leader_name=$10,leader_phone=$11,scope_type=$12,scope_name=$13,scope_names=$14,leader_ids=$15,activity_submitter_id=$16,activity_submitter_name=$17,activity_submitter_student_id=$18,review_status='待审核',review_note=NULL,updated_at=NOW() WHERE id=$19 RETURNING *`, [full_name, start_time, end_time, category, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader.name, leader.phone, firstScope.type, firstScope.name, serializeScopes(originalScopes), serializeIds(leader.ids), user.id, user.username, user.student_id, submission_id]);
+      const data = await queryOne(`UPDATE activity_submissions SET full_name=$1,start_time=$2,end_time=$3,category=$4,category_primary=$5,category_secondary=$6,level=$7,plan_file_url=$8,plan_file_name=$9,record_file_url=$10,record_file_name=$11,leader_name=$12,leader_phone=$13,scope_type=$14,scope_name=$15,scope_names=$16,leader_ids=$17,activity_submitter_id=$18,activity_submitter_name=$19,activity_submitter_student_id=$20,review_status='待审核',review_note=NULL,updated_at=NOW() WHERE id=$21 RETURNING *`, [full_name, start_time, end_time, category, category_primary || null, category_secondary || null, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader.name, leader.phone, firstScope.type, firstScope.name, serializeScopes(originalScopes), serializeIds(leader.ids), user.id, user.username, user.student_id, submission_id]);
       return NextResponse.json({ success: true, data });
     }
 
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
     if (!hasAnyScopePermission(user, 'submitActivity', scopes)) return NextResponse.json({ success: false, error: '你没有该部门或班级的活动提交权限' }, { status: 403 });
     const leader = await resolveLeaders(normalizeIds(body.leader_ids), leader_name, leader_phone, scopes, user);
     const firstScope = scopes[0];
-    const data = await queryOne(`INSERT INTO activity_submissions (full_name,start_time,end_time,category,level,plan_file_url,plan_file_name,record_file_url,record_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,leader_ids,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,review_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'待审核') RETURNING *`, [full_name, start_time, end_time, category, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader.name, leader.phone, firstScope.type, firstScope.name, serializeScopes(scopes), serializeIds(leader.ids), user.id, user.username, user.student_id]);
+    const data = await queryOne(`INSERT INTO activity_submissions (full_name,start_time,end_time,category,category_primary,category_secondary,level,plan_file_url,plan_file_name,record_file_url,record_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,leader_ids,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,review_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,'待审核') RETURNING *`, [full_name, start_time, end_time, category, category_primary || null, category_secondary || null, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader.name, leader.phone, firstScope.type, firstScope.name, serializeScopes(scopes), serializeIds(leader.ids), user.id, user.username, user.student_id]);
     return NextResponse.json({ success: true, data });
   } catch (err) {
     if (err instanceof ActivityLeaderValidationError) {

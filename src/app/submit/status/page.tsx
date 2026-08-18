@@ -5,7 +5,7 @@ import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { Search, RefreshCw, Pencil } from 'lucide-react';
-import { CATEGORIES, LEVELS, REVIEW_STATUSES, STATUS_COLORS, CATEGORY_COLORS } from '@/lib/types';
+import { CATEGORIES, LEVELS, REVIEW_STATUSES, STATUS_COLORS, CATEGORY_COLORS, formatCategoryPath } from '@/lib/types';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { formatActivityScopes } from '@/lib/business-rules';
@@ -16,6 +16,8 @@ interface Submission {
   start_time: string;
   end_time: string;
   category: string;
+  category_primary?: string | null;
+  category_secondary?: string | null;
   level: string;
   leader_name: string;
   leader_phone: string;
@@ -171,7 +173,7 @@ export default function SubmitStatusPage() {
                         <div className="flex items-center gap-2">
                           <h4 className="font-medium text-gray-900">{s.full_name}</h4>
                           <span className={`rounded border px-1.5 py-0.5 text-xs ${CATEGORY_COLORS[s.category]}`}>
-                            {s.category}
+                            {formatCategoryPath(s.category, s.category_primary, s.category_secondary)}
                           </span>
                           <span className="text-xs text-gray-500">{s.level}</span>
                         </div>
