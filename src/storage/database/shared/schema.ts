@@ -20,6 +20,8 @@ export const activities = pgTable(
     plan_file_name: text("plan_file_name"),
     record_file_url: text("record_file_url"),
     record_file_name: text("record_file_name"),
+    record_photo_url: text("record_photo_url"),
+    record_photo_file_name: text("record_photo_file_name"),
     leader_name: varchar("leader_name", { length: 50 }).notNull(),
     leader_phone: varchar("leader_phone", { length: 20 }).notNull(),
     scope_type: varchar("scope_type", { length: 20 }).default("department"),

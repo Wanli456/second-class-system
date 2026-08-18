@@ -47,6 +47,7 @@ export async function PUT(request: NextRequest) {
         submission.plan_file_url, submission.plan_file_name || null, submission.record_file_url, submission.record_file_name || null, submission.leader_name, submission.leader_phone,
         submission.scope_type || 'department', submission.scope_name, submission.scope_names || null, submission.leader_ids || '[]', submission.activity_submitter_id || null, submission.activity_submitter_name || null, submission.activity_submitter_student_id || null,
       ]);
+      await query('UPDATE activity_submissions SET activity_id=$1 WHERE id=$2', [activityId, id]);
     }
     const updated = await queryOne(`UPDATE activity_submissions SET review_status=$1,review_note=$2,updated_at=NOW() WHERE id=$3 AND review_status='待审核' RETURNING *`, [review_status, review_note || null, id]);
     if (!updated) return NextResponse.json({ success: false, error: '审核状态已被其他操作更新，请刷新后重试' }, { status: 409 });

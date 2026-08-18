@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS activities (
   plan_file_name TEXT,
   record_file_url TEXT,
   record_file_name TEXT,
+  record_photo_url TEXT,
+  record_photo_file_name TEXT,
   leader_name TEXT NOT NULL,
   leader_phone TEXT NOT NULL,
   scope_type TEXT DEFAULT 'department',
@@ -88,6 +90,7 @@ CREATE TABLE IF NOT EXISTS activity_submissions (
   activity_submitter_id TEXT,
   activity_submitter_name TEXT,
   activity_submitter_student_id TEXT,
+  activity_id TEXT,
   scoring_material_submitter_id TEXT,
   review_status TEXT NOT NULL DEFAULT '待审核',
   review_note TEXT,
@@ -193,9 +196,12 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_submitter_name TEXT;
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_submitter_student_id TEXT;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_photo_url TEXT;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_photo_file_name TEXT;
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS scope_names TEXT;
 ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_submitter_name TEXT;
 ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_submitter_student_id TEXT;
+ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_id TEXT;
 ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_names TEXT;
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_name TEXT;
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_student_id TEXT;
