@@ -22,6 +22,8 @@ interface Activity {
   scoring_table_file_name: string | null;
   record_file_url: string | null;
   record_file_name: string | null;
+  record_photo_url: string | null;
+  record_photo_file_name: string | null;
   scope_names?: string | null;
   scope_type?: 'department' | 'class' | null;
   scope_name?: string | null;
@@ -35,7 +37,7 @@ export default function SubmitScoringPage() {
   const [loading, setLoading] = useState(false);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [scoringFile, setScoringFile] = useState<File | null>(null);
-  const [recordFile, setRecordFile] = useState<File | null>(null);
+  const [recordPhotoFile, setRecordPhotoFile] = useState<File | null>(null);
   const [selectedActivityId, setSelectedActivityId] = useState<string>('');
   const [targetActivityId, setTargetActivityId] = useState<string | null>(null);
   const [submittedActivityId, setSubmittedActivityId] = useState<string | null>(null);
@@ -115,7 +117,7 @@ export default function SubmitScoringPage() {
     }
 
     // 校级活动需要备案表
-    if (activity.level === '校级' && !recordFile && !activity.record_file_url) {
+    if (activity.level === '校级' && !recordPhotoFile && !activity.record_photo_url) {
       alert('校级活动需要上传备案表照片');
       return;
     }
@@ -124,12 +126,12 @@ export default function SubmitScoringPage() {
     try {
       const scoringUpload = await uploadFile(scoringFile);
       const scoring_table_url = scoringUpload.url;
-      let record_file_url = activity.record_file_url;
-      let record_file_name = activity.record_file_name;
-      if (recordFile) {
-        const recordUpload = await uploadFile(recordFile);
-        record_file_url = recordUpload.url;
-        record_file_name = recordUpload.fileName;
+      let record_photo_url = activity.record_photo_url;
+      let record_photo_file_name = activity.record_photo_file_name;
+      if (recordPhotoFile) {
+        const recordUpload = await uploadFile(recordPhotoFile);
+        record_photo_url = recordUpload.url;
+        record_photo_file_name = recordUpload.fileName;
       }
 
       const res = await apiFetch('/api/activities', {
@@ -139,8 +141,8 @@ export default function SubmitScoringPage() {
           id: selectedActivityId,
           scoring_table_url,
           scoring_table_file_name: scoringUpload.fileName,
-          record_file_url,
-          record_file_name,
+          record_photo_url,
+          record_photo_file_name,
         }),
       });
       const data = await res.json();
@@ -148,7 +150,7 @@ export default function SubmitScoringPage() {
         alert('赋分材料提交成功！');
         setSubmittedActivityId(selectedActivityId);
         setScoringFile(null);
-        setRecordFile(null);
+        setRecordPhotoFile(null);
         setSelectedActivityId('');
         setShowResubmit(false);
         // Refresh activities
@@ -276,14 +278,22 @@ export default function SubmitScoringPage() {
                     </div>
                     {selectedActivity.record_file_url && (
                       <div className="flex justify-between">
-                        <span className="text-gray-500">备案表</span>
+                        <span className="text-gray-500">备案表文档</span>
                         <a href={selectedActivity.record_file_url} target="_blank" className="max-w-[65%] truncate text-right text-teal-600 underline" title={selectedActivity.record_file_name || '已上传'}>
                           {selectedActivity.record_file_name || '已上传'}
                         </a>
                       </div>
                     )}
+                    {selectedActivity.record_photo_url && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">备案表照片</span>
+                        <a href={selectedActivity.record_photo_url} target="_blank" className="max-w-[65%] truncate text-right text-teal-600 underline" title={selectedActivity.record_photo_file_name || '已上传'}>
+                          {selectedActivity.record_photo_file_name || '已上传'}
+                        </a>
+                      </div>
+                    )}
                   </div>
-                  {selectedActivity.level === '校级' && !selectedActivity.record_file_url && (
+                  {selectedActivity.level === '校级' && !selectedActivity.record_photo_url && (
                     <p className="mt-2 text-xs text-amber-600">
                       * 校级活动需要上传备案表照片
                     </p>
@@ -317,7 +327,7 @@ export default function SubmitScoringPage() {
                 </div>
               </div>
 
-              {selectedActivity?.level === '校级' && !selectedActivity?.record_file_url && (
+              {selectedActivity?.level === '校级' && !selectedActivity?.record_photo_url && (
                 <div className="mb-4">
                   <label className="mb-1 block text-sm font-medium text-gray-700">
                     活动备案表照片 *
@@ -326,20 +336,20 @@ export default function SubmitScoringPage() {
                     <Upload className="mx-auto mb-2 h-8 w-8 text-gray-300" />
                     <input
                       type="file"
-                      id="record-file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      onChange={(e) => setRecordFile(e.target.files?.[0] || null)}
+                      id="record-photo-file"
+                      accept=".jpg,.jpeg,.png"
+                      onChange={(e) => setRecordPhotoFile(e.target.files?.[0] || null)}
                       className="hidden"
                     />
                     <label
-                      htmlFor="record-file"
+                      htmlFor="record-photo-file"
                       className="cursor-pointer text-sm text-teal-600 hover:underline"
                     >
-                      点击上传备案表
+                      点击上传备案表照片
                     </label>
-                    <p className="mt-1 text-xs text-gray-400">支持 PDF、JPG、PNG 格式</p>
-                    {recordFile && (
-                      <p className="mt-2 text-xs text-emerald-600">已选择：{recordFile.name}</p>
+                    <p className="mt-1 text-xs text-gray-400">支持 JPG、PNG 格式</p>
+                    {recordPhotoFile && (
+                      <p className="mt-2 text-xs text-emerald-600">已选择：{recordPhotoFile.name}</p>
                     )}
                   </div>
                 </div>

@@ -104,6 +104,8 @@ if (localDb && shouldInitializeLocalDb) {
       plan_file_name TEXT,
       record_file_url TEXT,
       record_file_name TEXT,
+      record_photo_url TEXT,
+      record_photo_file_name TEXT,
       leader_name TEXT NOT NULL,
       leader_phone TEXT NOT NULL,
       scope_type TEXT DEFAULT 'department',
@@ -142,6 +144,7 @@ if (localDb && shouldInitializeLocalDb) {
       activity_submitter_id TEXT,
       activity_submitter_name TEXT,
       activity_submitter_student_id TEXT,
+      activity_id TEXT,
       scoring_material_submitter_id TEXT,
       review_status TEXT NOT NULL DEFAULT '待审核',
       review_note TEXT,
@@ -340,8 +343,10 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_submitter_student_id TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_material_submitter_id TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS plan_file_name TEXT;
-    ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_file_name TEXT;
-    ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_table_file_name TEXT;
+     ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_file_name TEXT;
+     ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_photo_url TEXT;
+     ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_photo_file_name TEXT;
+     ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_table_file_name TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_type TEXT DEFAULT 'department';
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_name TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_names TEXT;
@@ -351,8 +356,9 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_submitter_student_id TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scoring_material_submitter_id TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS plan_file_name TEXT;
-    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS record_file_name TEXT;
-    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scoring_table_file_name TEXT;
+     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS record_file_name TEXT;
+     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_id TEXT;
+     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scoring_table_file_name TEXT;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_user_id TEXT;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_name TEXT;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_student_id TEXT;
@@ -362,6 +368,34 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS leave_image_name TEXT;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS activity_id TEXT;
   `);
+
+  // Link legacy approved submissions to their single matching activity so the
+  // status page can rely on the hidden activity ID without guessing at render time.
+  const legacySubmissions = await query<{
+    id: string;
+    full_name: string;
+    start_time: string;
+    end_time: string;
+    category: string;
+    level: string;
+    leader_name: string;
+    leader_phone: string;
+    scope_type: string | null;
+    scope_name: string | null;
+    scope_names: string | null;
+  }>('SELECT id,full_name,start_time,end_time,category,level,leader_name,leader_phone,scope_type,scope_name,scope_names FROM activity_submissions WHERE review_status=$1 AND activity_id IS NULL', ['已通过']);
+  for (const submission of legacySubmissions) {
+    const candidates = await query<{ id: string }>(
+      `SELECT id FROM activities
+       WHERE full_name=$1 AND start_time=$2 AND end_time=$3 AND category=$4 AND level=$5
+         AND leader_name=$6 AND leader_phone=$7
+         AND COALESCE(scope_type, '')=COALESCE($8, '')
+         AND COALESCE(scope_name, '')=COALESCE($9, '')
+         AND COALESCE(scope_names, '')=COALESCE($10, '')`,
+      [submission.full_name, submission.start_time, submission.end_time, submission.category, submission.level, submission.leader_name, submission.leader_phone, submission.scope_type, submission.scope_name, submission.scope_names],
+    );
+    if (candidates.length === 1) await query('UPDATE activity_submissions SET activity_id=$1 WHERE id=$2', [candidates[0].id, submission.id]);
+  }
 
   if (!(await tableExists('leave_groups'))) {
     await executeSchemaSql(`

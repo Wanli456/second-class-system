@@ -9,6 +9,8 @@ export interface Activity {
   plan_file_name?: string | null;
   record_file_url: string | null;
   record_file_name?: string | null;
+  record_photo_url?: string | null;
+  record_photo_file_name?: string | null;
   leader_name: string;
   leader_phone: string;
   scope_names?: string | null;
@@ -35,6 +37,7 @@ export interface ActivitySubmission {
   plan_file_name?: string | null;
   record_file_url: string | null;
   record_file_name?: string | null;
+  activity_id?: string | null;
   leader_name: string;
   leader_phone: string;
   scope_names?: string | null;

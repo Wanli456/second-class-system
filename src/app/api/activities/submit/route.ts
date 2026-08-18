@@ -3,6 +3,7 @@ import { query, queryOne } from '@/storage/database/supabase-client';
 import { requirePermission } from '@/lib/auth';
 import { canSelectActivityLeader } from '@/lib/activity-leader-rules';
 import { getActivityScopes, hasAnyScopePermission, normalizeIds, normalizeScopes, serializeIds, serializeScopes, validateHostingScope } from '@/lib/business-rules';
+import { mergeActivityStatusRecords, type ActivityStatusRecord } from '@/lib/activity-status';
 
 class ActivityLeaderValidationError extends Error {}
 
@@ -61,17 +62,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, data: submission ? [{ ...submission, source: 'submission' }] : [] });
     }
     const isAdmin = user.role === 'admin';
-    const submissions = await query('SELECT * FROM activity_submissions ORDER BY created_at DESC');
-    const activities = await query('SELECT * FROM activities ORDER BY created_at DESC');
+    const submissions = await query<ActivityStatusRecord>('SELECT * FROM activity_submissions ORDER BY created_at DESC');
+    const activities = await query<ActivityStatusRecord>('SELECT * FROM activities ORDER BY created_at DESC');
     const visible = (item: Record<string, unknown>) => isAdmin
       || item.activity_submitter_id === user.id
       || item.scoring_material_submitter_id === user.id
       || normalizeIds(item.leader_ids).includes(user.id);
     const matches = (item: Record<string, unknown>) => !keyword || String(item.full_name).includes(keyword);
-    return NextResponse.json({ success: true, data: [
-      ...submissions.filter((item) => visible(item) && matches(item)).map((item) => ({ ...item, source: 'submission' })),
-      ...activities.filter((item) => visible(item) && matches(item)).map((item) => ({ ...item, source: 'activity', review_status: item.status === '活动取消' ? '活动取消' : '已通过' })),
-    ] });
+    const visibleSubmissions = submissions.filter((item) => visible(item) && matches(item));
+    const visibleActivities = activities.filter((item) => visible(item) && matches(item));
+    return NextResponse.json({ success: true, data: mergeActivityStatusRecords(visibleSubmissions, visibleActivities) });
   } catch (err) {
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '查询失败' }, { status: 500 });
   }

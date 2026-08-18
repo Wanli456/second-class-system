@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       if (id) { params.push(id); clauses.push(`id=$${params.length}`); }
       if (keyword) { params.push(`%${keyword}%`); clauses.push(`full_name ILIKE $${params.length}`); }
       const data = await query(
-        `SELECT id,full_name,level,category,leader_name,leader_phone,scoring_status,scoring_table_url,scoring_table_file_name,record_file_url,record_file_name,scope_names,scope_type,scope_name FROM activities WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC`,
+        `SELECT id,full_name,level,category,leader_name,leader_phone,scoring_status,scoring_table_url,scoring_table_file_name,record_file_url,record_file_name,record_photo_url,record_photo_file_name,scope_names,scope_type,scope_name FROM activities WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC`,
         params,
       );
       const visible = auth.user!.role === 'admin'
@@ -90,7 +90,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { id, ...updates } = body;
     if (!id) return NextResponse.json({ success: false, error: '缺少活动ID' }, { status: 400 });
-    const materialFields = ['scoring_table_url', 'scoring_table_file_name', 'record_file_url', 'record_file_name'];
+    const materialFields = ['scoring_table_url', 'scoring_table_file_name', 'record_photo_url', 'record_photo_file_name'];
     const updateKeys = Object.keys(updates);
     const isScoringMaterialSubmission = updateKeys.length > 0 && updateKeys.every((key) => materialFields.includes(key));
     const auth = await requirePermission(request, isScoringMaterialSubmission ? 'submitScoring' : 'admin');
@@ -103,7 +103,7 @@ export async function PUT(request: NextRequest) {
       if (!hasAnyScopePermission(auth.user!, 'submitScoring', getActivityScopes(activity))) return NextResponse.json({ success: false, error: '你没有该活动所属部门或班级的赋分材料权限' }, { status: 403 });
       updates.scoring_material_submitter_id = auth.user!.id;
     }
-    const allowedFields = ['full_name','start_time','end_time','category','level','plan_file_url','plan_file_name','record_file_url','record_file_name','leader_name','leader_phone','scope_type','scope_name','scope_names','leader_ids','status','scoring_table_url','scoring_table_file_name','scoring_material_submitter_id'];
+    const allowedFields = ['full_name','start_time','end_time','category','level','plan_file_url','plan_file_name','record_file_url','record_file_name','record_photo_url','record_photo_file_name','leader_name','leader_phone','scope_type','scope_name','scope_names','leader_ids','status','scoring_table_url','scoring_table_file_name','scoring_material_submitter_id'];
     const safeKeys = Object.keys(updates).filter((key) => allowedFields.includes(key));
     if (!safeKeys.length) return NextResponse.json({ success: false, error: '没有可更新的内容' }, { status: 400 });
     const params: unknown[] = [];

@@ -69,6 +69,8 @@ interface ScoringActivity {
   scoring_table_file_name: string | null;
   record_file_url: string | null;
   record_file_name: string | null;
+  record_photo_url: string | null;
+  record_photo_file_name: string | null;
   leader_name: string;
   leader_phone: string;
   category: string;
@@ -436,8 +438,8 @@ function AdminPage() {
     }
 
     // 校级活动需要备案表
-    if (level === '校级' && !activity.record_file_url) {
-      alert('校级活动需要活动备案表才能赋分，请等待负责人上传');
+    if (level === '校级' && !activity.record_photo_url) {
+      alert('校级活动需要备案表照片才能赋分，请等待负责人上传');
       return;
     }
 
@@ -1330,18 +1332,18 @@ function AdminPage() {
                                     {/* 备案表（校级需要） */}
                                     {a.level === '校级' && (
                                       <div className="flex items-center gap-2">
-                                        <span className="text-gray-500">备案表:</span>
-                                        {a.record_file_url ? (
+                                        <span className="text-gray-500">备案表照片:</span>
+                                        {a.record_photo_url ? (
                                           <div className="flex items-center gap-2">
-                                          <a href={a.record_file_url} target="_blank" className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[#1e3a5f] hover:bg-blue-50">
-                                            <FileText className="h-3 w-3" /> {a.record_file_name || '查看备案表'}
+                                          <a href={a.record_photo_url} target="_blank" className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[#1e3a5f] hover:bg-blue-50">
+                                            <ImageIcon className="h-3 w-3" /> {a.record_photo_file_name || '查看备案表照片'}
                                           </a>
-                                            <a href={a.record_file_url} download className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-emerald-600 hover:bg-emerald-50">
+                                            <a href={a.record_photo_url} download className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-emerald-600 hover:bg-emerald-50">
                                               <Download className="h-3 w-3" /> 下载
                                             </a>
                                           </div>
                                         ) : (
-                                          <span className="text-red-500">未上传备案表（无法赋分）</span>
+                                          <span className="text-red-500">未上传备案表照片（无法赋分）</span>
                                         )}
                                       </div>
                                     )}
@@ -1349,7 +1351,7 @@ function AdminPage() {
                                   <div className="flex items-center gap-2 border-t border-gray-200 pt-3">
                                     <button
                                       onClick={() => handleScoring(a.id, a.level)}
-                                      disabled={scoringInProgress || !a.scoring_table_url || (a.level === '校级' && !a.record_file_url)}
+                                       disabled={scoringInProgress || !a.scoring_table_url || (a.level === '校级' && !a.record_photo_url)}
                                       className="rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                                     >
                                       {scoringInProgress ? '处理中...' : '确认赋分'}
@@ -1360,7 +1362,7 @@ function AdminPage() {
                                     >
                                       取消
                                     </button>
-                                    {(!a.scoring_table_url || (a.level === '校级' && !a.record_file_url)) && (
+                                    {(!a.scoring_table_url || (a.level === '校级' && !a.record_photo_url)) && (
                                       <span className="text-xs text-amber-600">请等待负责人上传完整材料</span>
                                     )}
                                   </div>
