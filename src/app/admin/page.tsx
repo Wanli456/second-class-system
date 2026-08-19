@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import * as XLSX from 'xlsx';
 import {
   GraduationCap, Lock, LogOut, Table, FileCheck, UserCheck, Award, Users,
   Plus, Pencil, Trash2, Eye, Check, X, Upload, FileText, Image as ImageIcon,
@@ -23,6 +22,7 @@ import { useUser } from '@/contexts/UserContext';
 import { canOpenAdminTab, formatActivityScopes } from '@/lib/business-rules';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
 import { CategoryBadge } from '@/components/CategoryBadge';
+import { parseRosterWorkbook } from '@/lib/class-roster-import';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -150,6 +150,21 @@ interface RosterStudent {
 interface DepartmentRecord {
   id: string;
   name: string;
+}
+
+function normalizeRosterStudents(value: unknown): RosterStudent[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item): RosterStudent[] => {
+    if (!item || typeof item !== 'object') return [];
+    const record = item as Record<string, unknown>;
+    const id = String(record.id ?? '').trim();
+    const className = String(record.class_name ?? record.className ?? '').trim();
+    const studentId = String(record.student_id ?? record.studentId ?? '').trim();
+    const studentName = String(record.student_name ?? record.studentName ?? '').trim();
+    if (!id || !className || !studentId || !studentName) return [];
+    return [{ id, class_name: className, student_id: studentId, student_name: studentName }];
+  });
 }
 
 function AdminPage() {
@@ -2027,44 +2042,16 @@ function UserManagement({
     setLoadingRoster(true);
     setRosterError('');
     try {
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      if (!sheet) throw new Error('Excel 中没有可读取的工作表');
-      const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: false }) as unknown[][];
-      const normalizeHeader = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/[^\u4e00-\u9fffA-Za-z0-9]/g, '');
-      const headerAliases = {
-        className: ['班级', '班级名称', '所在班级', 'class', 'classname'],
-        studentId: ['学号', '学生学号', '学籍号', 'studentid', 'studentnumber', 'studentno', 'id'],
-        studentName: ['姓名', '学生姓名', 'studentname', 'student_name', 'name'],
-      };
-      const matchesHeader = (value: string, aliases: string[]) => aliases.some((alias) => {
-        const normalizedAlias = normalizeHeader(alias);
-        return value === normalizedAlias || (normalizedAlias.length > 1 && value.startsWith(normalizedAlias));
-      });
-      const findHeaderIndex = (row: unknown[], aliases: string[]) => row.findIndex((value) => matchesHeader(normalizeHeader(value), aliases));
-      const header = rows.slice(0, 20).reduce<{ rowIndex: number; classIndex: number; studentIdIndex: number; studentNameIndex: number } | null>((found, row, rowIndex) => {
-        if (found || !Array.isArray(row)) return found;
-        const classIndex = findHeaderIndex(row, headerAliases.className);
-        const studentIdIndex = findHeaderIndex(row, headerAliases.studentId);
-        const studentNameIndex = findHeaderIndex(row, headerAliases.studentName);
-        return classIndex >= 0 && studentIdIndex >= 0 && studentNameIndex >= 0
-          ? { rowIndex, classIndex, studentIdIndex, studentNameIndex }
-          : null;
-      }, null);
-      if (!header) throw new Error('未识别到“班级、学号、姓名”表头，请检查 Excel 首行或前几行是否包含这三列');
-      const fallbackClassName = rosterClassName.trim();
-      let lastClassName = fallbackClassName;
-      const students = rows.slice(header.rowIndex + 1).map((row) => {
-        if (!Array.isArray(row)) return null;
-        const currentClassName = String(row[header.classIndex] ?? '').trim();
-        if (currentClassName) lastClassName = currentClassName;
-        return {
-          class_name: currentClassName || lastClassName,
-          student_id: String(row[header.studentIdIndex] ?? '').trim(),
-          student_name: String(row[header.studentNameIndex] ?? '').trim(),
-        };
-      }).filter((student): student is { class_name: string; student_id: string; student_name: string } => Boolean(student?.class_name && student.student_id && student.student_name));
-      if (!students.length) throw new Error('未识别到有效学生数据，请确认每行都包含班级、学号和姓名');
+      const parsed = parseRosterWorkbook(await file.arrayBuffer());
+      const students = parsed.students.map(({ className, studentId, studentName }) => ({
+        class_name: className || rosterClassName.trim(),
+        student_id: studentId,
+        student_name: studentName,
+      }));
+      if (!students.length) {
+        const details = parsed.errors.slice(0, 3).join('；');
+        throw new Error(details ? `未识别到有效学生数据：${details}` : '未识别到有效学生数据，请确认 Excel 中包含学号和姓名列');
+      }
       const response = await apiFetch('/api/class-roster', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2072,11 +2059,13 @@ function UserManagement({
       });
       const data = await response.json();
       if (!data.success) throw new Error(data.error || '导入花名册失败');
-      const savedStudents = Array.isArray(data.data) ? data.data as RosterStudent[] : [];
+      const savedStudents = normalizeRosterStudents(data.data);
+      if (!savedStudents.length) throw new Error('服务器未返回已保存的花名册数据，请重试');
       const classNames = [...new Set(savedStudents.map((student) => student.class_name).filter(Boolean))];
       setRosterStudents(savedStudents);
       setRosterClassName(classNames.length === 1 ? classNames[0] : '');
-      setRosterError(`已导入 ${savedStudents.length || students.length} 名学生，识别到 ${classNames.length || 1} 个班级`);
+      const skippedRows = parsed.errors.length ? `，${parsed.errors.length} 行因数据不完整未导入` : '';
+      setRosterError(`已导入 ${savedStudents.length} 名学生，识别到 ${classNames.length || 1} 个班级${skippedRows}`);
     } catch (error) {
       setRosterError(error instanceof Error ? error.message : '导入花名册失败');
     } finally {
