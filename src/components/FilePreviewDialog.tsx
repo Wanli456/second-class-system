@@ -123,6 +123,17 @@ function WordPreview({ html }: { html: string }) {
   );
 }
 
+function columnLabel(index: number) {
+  let n = index + 1;
+  let label = '';
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    label = String.fromCharCode(65 + rem) + label;
+    n = Math.floor((n - 1) / 26);
+  }
+  return label;
+}
+
 function ExcelPreview({ sheets }: { sheets: ExcelSheet[] }) {
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
   const activeSheet = sheets[Math.min(activeSheetIndex, Math.max(sheets.length - 1, 0))];
@@ -134,6 +145,8 @@ function ExcelPreview({ sheets }: { sheets: ExcelSheet[] }) {
   if (!activeSheet) {
     return <DocumentError message="Excel 文件中没有可显示的工作表。" />;
   }
+
+  const maxColumns = activeSheet.rows.reduce((max, row) => Math.max(max, row.length), 0);
 
   return (
     <div className="min-h-[24rem] rounded border bg-white p-3 shadow-sm">
@@ -156,12 +169,31 @@ function ExcelPreview({ sheets }: { sheets: ExcelSheet[] }) {
       <div className="max-h-[calc(100dvh-13rem)] overflow-auto rounded border">
         {activeSheet.rows.length > 0 ? (
           <table className="w-full min-w-max border-collapse select-text text-left text-sm">
+            <thead>
+              <tr>
+                <th className="border-b border-r border-slate-200 bg-slate-100 px-3 py-2 text-center text-xs font-medium text-slate-500">#</th>
+                {Array.from({ length: maxColumns }, (_, columnIndex) => (
+                  <th key={`col-${columnIndex}`} className="border-b border-r border-slate-200 bg-slate-100 px-3 py-2 text-center text-xs font-medium text-slate-500">
+                    {columnLabel(columnIndex)}
+                  </th>
+                ))}
+              </tr>
+              <tr>
+                <th className="border-b border-r border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs font-medium text-slate-400">1</th>
+                {activeSheet.rows[0].map((cell, columnIndex) => (
+                  <th key={`head-${columnIndex}`} className="whitespace-nowrap border-b border-r border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-700">
+                    {cell ?? ''}
+                  </th>
+                ))}
+              </tr>
+            </thead>
             <tbody>
-              {activeSheet.rows.map((row, rowIndex) => (
+              {activeSheet.rows.slice(1).map((row, rowIndex) => (
                 <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                  {row.map((cell, columnIndex) => (
-                    <td key={`${rowIndex}-${columnIndex}`} className="whitespace-nowrap border-b border-r border-slate-200 px-3 py-2 align-top last:border-r-0">
-                      {cell}
+                  <th className="border-b border-r border-slate-200 bg-white px-3 py-2 text-right text-xs tabular-nums text-slate-400">{rowIndex + 2}</th>
+                  {Array.from({ length: maxColumns }, (_, columnIndex) => (
+                    <td key={columnIndex} className="whitespace-nowrap border-b border-r border-slate-200 px-3 py-2 align-top last:border-r-0">
+                      {row[columnIndex] ?? ''}
                     </td>
                   ))}
                 </tr>
