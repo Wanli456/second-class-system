@@ -811,7 +811,7 @@ function AdminPage() {
   // Login modal when not authenticated
   if (!authenticated) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f0]">
+      <div className="flex min-h-dvh items-center justify-center bg-slate-50">
         <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
           <div className="mb-6 text-center">
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-[#1e3a5f]/10">
@@ -2507,7 +2507,7 @@ function ActivityForm({ activity, onSubmit, onCancel }: {
 // Wrapper component with Suspense boundary for useSearchParams
 export default function AdminPageWrapper() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="text-gray-500">加载中...</div></div>}>
+    <Suspense fallback={<div className="flex min-h-dvh items-center justify-center bg-slate-50"><div className="text-gray-500">加载中...</div></div>}>
       <AdminPage />
     </Suspense>
   );
