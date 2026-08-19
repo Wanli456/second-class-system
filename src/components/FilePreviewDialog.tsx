@@ -226,7 +226,7 @@ export function FilePreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={`flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 ${kind === 'excel' ? 'max-w-[calc(100vw-2rem)]' : 'max-w-5xl'}`}>
+      <DialogContent className={`flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 ${kind === 'excel' ? 'sm:max-w-[calc(100vw-2rem)]' : 'sm:max-w-5xl'}`}>
         <DialogHeader className="border-b px-5 py-4 pr-12 sm:flex-row sm:items-center sm:justify-between">
           <DialogTitle className="flex min-w-0 items-center gap-2 text-base">
             {kind === 'image' ? <ImageIcon className="size-4 shrink-0" /> : <FileText className="size-4 shrink-0" />}
