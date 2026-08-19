@@ -91,7 +91,7 @@
 
 /* 确保页面内容在路由切换期间保持与应用一致的背景色 */
 html, body {
-  background-color: #f5f5f0;
+  background-color: #f8fafc;
 }
 
 /* Navigation feedback stays subtle and does not resize the page content. */

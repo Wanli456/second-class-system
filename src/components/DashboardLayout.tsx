@@ -347,7 +347,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
   );
 
   return (
-    <div className="flex h-dvh bg-slate-50">
+    <div className="fixed inset-0 flex h-dvh min-h-0 w-full overflow-hidden bg-slate-50">
       {/* Desktop Sidebar */}
       {!isMobile && (
         <aside
@@ -381,7 +381,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
       )}
 
       {/* Main Content */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* Top Bar */}
         <header className="flex h-[72px] items-center justify-between border-b border-slate-200 bg-white px-4 lg:px-8">
           <div className="flex items-center gap-4">
@@ -418,7 +418,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto bg-slate-50 p-4 lg:p-8">
+        <main className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 lg:p-8">
           {children}
         </main>
       </div>

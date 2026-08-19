@@ -16,7 +16,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-CN">
-      <body className="min-h-screen bg-[#f5f5f0] text-gray-900 antialiased">
+      <body className="bg-slate-50 text-gray-900 antialiased">
         <UserProvider>
           <RouteLoadingIndicator />
           {children}
