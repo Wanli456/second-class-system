@@ -181,7 +181,7 @@ function ExcelPreview({ sheets }: { sheets: ExcelSheet[] }) {
               <tr>
                 <th className="border-b border-r border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs font-medium text-slate-400">1</th>
                 {activeSheet.rows[0].map((cell, columnIndex) => (
-                  <th key={`head-${columnIndex}`} className="whitespace-nowrap border-b border-r border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-700">
+                  <th key={`head-${columnIndex}`} className="whitespace-pre-wrap border-b border-r border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-700">
                     {cell ?? ''}
                   </th>
                 ))}
@@ -192,7 +192,7 @@ function ExcelPreview({ sheets }: { sheets: ExcelSheet[] }) {
                 <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                   <th className="border-b border-r border-slate-200 bg-white px-3 py-2 text-right text-xs tabular-nums text-slate-400">{rowIndex + 2}</th>
                   {Array.from({ length: maxColumns }, (_, columnIndex) => (
-                    <td key={columnIndex} className="whitespace-nowrap border-b border-r border-slate-200 px-3 py-2 align-top last:border-r-0">
+                    <td key={columnIndex} className="whitespace-pre-wrap border-b border-r border-slate-200 px-3 py-2 align-top last:border-r-0">
                       {row[columnIndex] ?? ''}
                     </td>
                   ))}
