@@ -418,7 +418,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-4 lg:p-8">
+        <main className="flex-1 overflow-y-auto bg-slate-50 p-4 lg:p-8">
           {children}
         </main>
       </div>
