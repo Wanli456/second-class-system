@@ -69,6 +69,11 @@ const formatDateTime = (value?: string | null) => value
   ? new Date(value).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
   : '未填写';
 
+const matchesSearch = (query: string, values: readonly unknown[]) => {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  return !normalizedQuery || values.some(value => String(value ?? '').toLocaleLowerCase().includes(normalizedQuery));
+};
+
 interface ScoringActivity {
   id: string;
   full_name: string;
@@ -168,6 +173,9 @@ function AdminPage() {
   const [scoringList, setScoringList] = useState<ScoringActivity[]>([]);
   const [users, setUsers] = useState<UserData[]>([]);
   const [userSearch, setUserSearch] = useState('');
+  const [reviewSearch, setReviewSearch] = useState('');
+  const [scoringSearch, setScoringSearch] = useState('');
+  const [leaveSearch, setLeaveSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [tabLoadingStates, setTabLoadingStates] = useState<Record<AdminTab, boolean>>({
     activities: false,
@@ -685,6 +693,99 @@ function AdminPage() {
   const pendingLeaves = leaves.filter(l => l.review_status === '待审核');
   const pendingLeaveGroups = leaveGroups.filter(group => group.review_status === '待审核');
   const pendingLeaveCount = pendingLeaves.length + pendingLeaveGroups.length;
+  const filteredPendingSubmissions = pendingSubmissions.filter(s => matchesSearch(reviewSearch, [
+    s.id,
+    s.activity_id,
+    s.full_name,
+    s.leader_name,
+    s.leader_phone,
+    s.activity_submitter_name,
+    s.activity_submitter_student_id,
+    s.category,
+    s.category_primary,
+    s.category_secondary,
+    s.level,
+    s.scope_name,
+    s.scope_names,
+    s.review_status,
+  ]));
+  const filteredProcessedSubmissions = submissions.filter(s => s.review_status !== '待审核' && matchesSearch(reviewSearch, [
+    s.id,
+    s.activity_id,
+    s.full_name,
+    s.leader_name,
+    s.leader_phone,
+    s.activity_submitter_name,
+    s.activity_submitter_student_id,
+    s.category,
+    s.category_primary,
+    s.category_secondary,
+    s.level,
+    s.scope_name,
+    s.scope_names,
+    s.review_status,
+  ]));
+  const filteredPendingLeaveGroups = pendingLeaveGroups.filter(group => matchesSearch(leaveSearch, [
+    group.id,
+    group.class_name,
+    group.applicant_name,
+    group.applicant_student_id,
+    group.leave_type,
+    group.activity_id,
+    group.activity_name,
+    group.review_status,
+  ]));
+  const filteredPendingLeaves = pendingLeaves.filter(leave => matchesSearch(leaveSearch, [
+    leave.id,
+    leave.student_name,
+    leave.student_id,
+    leave.class_name,
+    leave.applicant_name,
+    leave.applicant_student_id,
+    leave.leave_type,
+    leave.activity_id,
+    leave.activity_name,
+    leave.review_status,
+  ]));
+  const filteredProcessedLeaves = leaves.filter(leave => leave.review_status !== '待审核' && matchesSearch(leaveSearch, [
+    leave.id,
+    leave.student_name,
+    leave.student_id,
+    leave.class_name,
+    leave.applicant_name,
+    leave.applicant_student_id,
+    leave.leave_type,
+    leave.activity_id,
+    leave.activity_name,
+    leave.review_status,
+  ]));
+  const filteredProcessedLeaveGroups = leaveGroups.filter(group => group.review_status !== '待审核' && matchesSearch(leaveSearch, [
+    group.id,
+    group.class_name,
+    group.applicant_name,
+    group.applicant_student_id,
+    group.leave_type,
+    group.activity_id,
+    group.activity_name,
+    group.review_status,
+  ]));
+  const filteredScoringList = scoringList.filter(activity => matchesSearch(scoringSearch, [
+    activity.id,
+    activity.full_name,
+    activity.leader_name,
+    activity.leader_phone,
+    activity.activity_submitter_name,
+    activity.activity_submitter_student_id,
+    activity.scoring_material_submitter_name,
+    activity.scoring_material_submitter_student_id,
+    activity.category,
+    activity.category_primary,
+    activity.category_secondary,
+    activity.level,
+    activity.scope_name,
+    activity.scope_names,
+    activity.scoring_status,
+  ]));
 
   if (!initialized || !authResolved) {
     return <AuthLoadingScreen />;
@@ -966,13 +1067,26 @@ function AdminPage() {
             {/* ===== 活动审核 ===== */}
             {activeTab === 'review' && canPublish && (
               <div>
-                <h2 className="mb-4 text-base font-semibold text-gray-800">活动审核</h2>
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h2 className="text-base font-semibold text-gray-800">活动审核</h2>
+                  <div className="relative w-full sm:max-w-md">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      type="search"
+                      aria-label="搜索活动审核记录"
+                      placeholder="搜索活动名称、活动 ID、负责人或提交人"
+                      value={reviewSearch}
+                      onChange={event => setReviewSearch(event.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                </div>
 
-                {pendingSubmissions.length > 0 && (
+                {filteredPendingSubmissions.length > 0 && (
                   <div className="mb-6">
-                    <h3 className="mb-3 text-sm font-medium text-gray-600">待审核 ({pendingSubmissions.length})</h3>
+                    <h3 className="mb-3 text-sm font-medium text-gray-600">待审核 ({filteredPendingSubmissions.length})</h3>
                     <div className="space-y-2">
-                      {pendingSubmissions.map(s => {
+                      {filteredPendingSubmissions.map(s => {
                         const isExpanded = expandedSubmission === s.id;
                         return (
                           <div key={s.id} className="rounded-lg border border-amber-200 bg-amber-50/50">
@@ -1012,11 +1126,11 @@ function AdminPage() {
                   </div>
                 )}
 
-                {submissions.filter(s => s.review_status !== '待审核').length > 0 && (
+                {filteredProcessedSubmissions.length > 0 && (
                   <div>
-                    <h3 className="mb-3 text-sm font-medium text-gray-600">已处理</h3>
+                    <h3 className="mb-3 text-sm font-medium text-gray-600">已处理 ({filteredProcessedSubmissions.length})</h3>
                     <div className="space-y-2">
-                      {submissions.filter(s => s.review_status !== '待审核').map(s => {
+                      {filteredProcessedSubmissions.map(s => {
                         const isExpanded = expandedSubmission === s.id;
                         return (
                           <div key={s.id} className="rounded-lg border border-gray-200 bg-white">
@@ -1049,22 +1163,37 @@ function AdminPage() {
                   </div>
                 )}
 
-                {submissions.length === 0 && (
+                {submissions.length === 0 ? (
                   <div className="py-16 text-center text-gray-400">暂无提交记录</div>
-                )}
+                ) : filteredPendingSubmissions.length === 0 && filteredProcessedSubmissions.length === 0 ? (
+                  <div className="rounded-lg border border-gray-200 bg-white px-3 py-8 text-center text-gray-500">没有匹配的活动审核记录</div>
+                ) : null}
               </div>
             )}
 
             {/* ===== 请假审核 ===== */}
             {activeTab === 'leave' && canReviewLeave && (
               <div>
-                <h2 className="mb-4 text-base font-semibold text-gray-800">请假审核</h2>
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h2 className="text-base font-semibold text-gray-800">请假审核</h2>
+                  <div className="relative w-full sm:max-w-md">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      type="search"
+                      aria-label="搜索请假审核记录"
+                      placeholder="搜索姓名、学号、班级或活动"
+                      value={leaveSearch}
+                      onChange={event => setLeaveSearch(event.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                </div>
 
-                {pendingLeaveGroups.length > 0 && (
+                {filteredPendingLeaveGroups.length > 0 && (
                   <div className="mb-6">
-                    <h3 className="mb-3 text-sm font-medium text-gray-600">待审核集体请假 ({pendingLeaveGroups.length})</h3>
+                    <h3 className="mb-3 text-sm font-medium text-gray-600">待审核集体请假 ({filteredPendingLeaveGroups.length})</h3>
                     <div className="space-y-3">
-                      {pendingLeaveGroups.map(group => {
+                      {filteredPendingLeaveGroups.map(group => {
                         const isExpanded = expandedLeaveGroup === group.id;
                         return (
                           <div key={group.id} className="rounded-lg border border-amber-200 bg-amber-50/50">
@@ -1096,11 +1225,11 @@ function AdminPage() {
                   </div>
                 )}
 
-                {pendingLeaves.length > 0 && (
+                {filteredPendingLeaves.length > 0 && (
                   <div className="mb-6">
-                    <h3 className="mb-3 text-sm font-medium text-gray-600">待审核个人请假 ({pendingLeaves.length})</h3>
+                    <h3 className="mb-3 text-sm font-medium text-gray-600">待审核个人请假 ({filteredPendingLeaves.length})</h3>
                     <div className="space-y-3">
-                      {pendingLeaves.map(l => {
+                      {filteredPendingLeaves.map(l => {
                         const isExpanded = expandedLeaveRequest === l.id;
                         return (
                           <div key={l.id} className="rounded-lg border border-amber-200 bg-amber-50/50">
@@ -1129,11 +1258,11 @@ function AdminPage() {
                   </div>
                 )}
 
-                {leaves.filter(l => l.review_status !== '待审核').length > 0 && (
+                {filteredProcessedLeaves.length > 0 && (
                   <div>
-                    <h3 className="mb-3 text-sm font-medium text-gray-600">已处理</h3>
+                    <h3 className="mb-3 text-sm font-medium text-gray-600">已处理 ({filteredProcessedLeaves.length})</h3>
                     <div className="space-y-2">
-                      {leaves.filter(l => l.review_status !== '待审核').map(l => {
+                      {filteredProcessedLeaves.map(l => {
                         const isExpanded = expandedLeaveRequest === l.id;
                         return (
                           <div key={l.id} className="rounded-lg border border-gray-200 bg-white">
@@ -1157,11 +1286,11 @@ function AdminPage() {
                   </div>
                 )}
 
-                {leaveGroups.filter(group => group.review_status !== '待审核').length > 0 && (
+                {filteredProcessedLeaveGroups.length > 0 && (
                   <div className="mt-6">
-                    <h3 className="mb-3 text-sm font-medium text-gray-600">已处理集体请假</h3>
+                    <h3 className="mb-3 text-sm font-medium text-gray-600">已处理集体请假 ({filteredProcessedLeaveGroups.length})</h3>
                     <div className="space-y-2">
-                      {leaveGroups.filter(group => group.review_status !== '待审核').map(group => {
+                      {filteredProcessedLeaveGroups.map(group => {
                         const isExpanded = expandedLeaveGroup === group.id;
                         return (
                           <div key={group.id} className="rounded-lg border border-gray-200 bg-white">
@@ -1177,16 +1306,31 @@ function AdminPage() {
                   </div>
                 )}
 
-                {leaves.length === 0 && leaveGroups.length === 0 && (
+                {leaves.length === 0 && leaveGroups.length === 0 ? (
                   <div className="py-16 text-center text-gray-400">暂无请假记录</div>
-                )}
+                ) : filteredPendingLeaveGroups.length === 0 && filteredPendingLeaves.length === 0 && filteredProcessedLeaves.length === 0 && filteredProcessedLeaveGroups.length === 0 ? (
+                  <div className="rounded-lg border border-gray-200 bg-white px-3 py-8 text-center text-gray-500">没有匹配的请假审核记录</div>
+                ) : null}
               </div>
             )}
 
             {/* ===== 活动赋分 ===== */}
             {activeTab === 'scoring' && canScore && (
               <div>
-                <h2 className="mb-4 text-base font-semibold text-gray-800">活动赋分</h2>
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h2 className="text-base font-semibold text-gray-800">活动赋分</h2>
+                  <div className="relative w-full sm:max-w-md">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      type="search"
+                      aria-label="搜索活动赋分记录"
+                      placeholder="搜索活动名称、活动 ID、负责人或提交人"
+                      value={scoringSearch}
+                      onChange={event => setScoringSearch(event.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                </div>
 
                 <div className="mb-4 flex flex-wrap gap-3 rounded-lg border border-gray-200 bg-white p-3">
                   <div className="flex items-center gap-2 text-xs text-gray-500">
@@ -1200,7 +1344,7 @@ function AdminPage() {
                 </div>
 
                 <div className="space-y-2">
-                  {scoringList.map(a => {
+                  {filteredScoringList.map(a => {
                     const isExpanded = expandedScoring === a.id;
                     const canConfirm = Boolean(a.scoring_table_url) && (a.level !== '校级' || Boolean(a.record_photo_url));
                     return (
@@ -1233,7 +1377,7 @@ function AdminPage() {
                       </div>
                     );
                   })}
-                  {scoringList.length === 0 && <div className="rounded-lg border border-gray-200 bg-white px-3 py-8 text-center text-gray-400">暂无可赋分活动</div>}
+                  {scoringList.length === 0 ? <div className="rounded-lg border border-gray-200 bg-white px-3 py-8 text-center text-gray-400">暂无可赋分活动</div> : filteredScoringList.length === 0 ? <div className="rounded-lg border border-gray-200 bg-white px-3 py-8 text-center text-gray-500">没有匹配的活动赋分记录</div> : null}
                 </div>
               </div>
             )}
