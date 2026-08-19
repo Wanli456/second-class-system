@@ -88,21 +88,31 @@ type MammothElement = {
   type?: string;
   children?: MammothElement[];
   alignment?: string | null;
+  indent?: { firstLine?: string | number | null } | null;
   styleId?: string | null;
   styleName?: string | null;
 };
 
+function wordParagraphStyleName(element: MammothElement): string | null {
+  const alignment = element.alignment === 'center'
+    ? 'center'
+    : element.alignment === 'right'
+      ? 'right'
+      : element.alignment === 'justify'
+        ? 'justify'
+        : null;
+  const hasFirstLineIndent = Boolean(element.indent && element.indent.firstLine);
+  if (!alignment && !hasFirstLineIndent) return null;
+  if (alignment && hasFirstLineIndent) return `wp-${alignment}-indent`;
+  if (alignment) return `wp-${alignment}`;
+  return 'wp-indent';
+}
+
 function transformWordAlignment(element: MammothElement): MammothElement {
   const children = element.children ? element.children.map(transformWordAlignment) : element.children;
   const next = children === element.children ? element : { ...element, children };
-  if (next.type === 'paragraph' && next.alignment) {
-    const className = next.alignment === 'center'
-      ? 'align-center'
-      : next.alignment === 'right'
-        ? 'align-right'
-        : next.alignment === 'justify'
-          ? 'align-justify'
-          : null;
+  if (next.type === 'paragraph') {
+    const className = wordParagraphStyleName(next);
     if (className) {
       return { ...next, styleId: className, styleName: className };
     }
@@ -122,9 +132,13 @@ async function parseWordDocument(buffer: ArrayBuffer): Promise<string> {
     { arrayBuffer: buffer },
     {
       styleMap: [
-        "p[style-name='align-center'] => p.align-center:fresh",
-        "p[style-name='align-right'] => p.align-right:fresh",
-        "p[style-name='align-justify'] => p.align-justify:fresh",
+        "p[style-name='wp-center'] => p.align-center:fresh",
+        "p[style-name='wp-right'] => p.align-right:fresh",
+        "p[style-name='wp-justify'] => p.align-justify:fresh",
+        "p[style-name='wp-indent'] => p.indent-first-line:fresh",
+        "p[style-name='wp-center-indent'] => p.align-center.indent-first-line:fresh",
+        "p[style-name='wp-right-indent'] => p.align-right.indent-first-line:fresh",
+        "p[style-name='wp-justify-indent'] => p.align-justify.indent-first-line:fresh",
       ],
       transformDocument: transformWordAlignment,
     },
@@ -153,7 +167,7 @@ function DocumentError({ message }: { message: string }) {
 function WordPreview({ html }: { html: string }) {
   return (
     <article
-      className="mx-auto min-h-[24rem] w-full max-w-[794px] select-text rounded border bg-white p-6 shadow-sm [&_a]:text-blue-700 [&_a]:underline [&_img]:max-h-[32rem] [&_img]:max-w-full [&_img]:object-contain [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-300 [&_td]:p-2 [&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-50 [&_th]:p-2 [&_.align-center]:text-center [&_.align-right]:text-right [&_.align-justify]:text-justify"
+      className="mx-auto min-h-[24rem] w-full max-w-[794px] select-text rounded bg-white p-6 leading-[1.5] [&_a]:text-blue-700 [&_a]:underline [&_img]:max-h-[32rem] [&_img]:max-w-full [&_img]:object-contain [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-300 [&_td]:p-2 [&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-50 [&_th]:p-2 [&_.align-center]:text-center [&_.align-right]:text-right [&_.align-justify]:text-justify [&_.indent-first-line]:[text-indent:2em]"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
@@ -307,7 +321,7 @@ export function FilePreviewDialog({
           )}
           <DialogDescription className="sr-only">{label}的网页内预览</DialogDescription>
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-4">
+        <div className={`min-h-0 flex-1 overflow-auto p-4 ${kind === 'word' ? 'bg-white' : 'bg-slate-100'}`}>
           {kind === 'image' && url && (
             <div className="flex min-h-[50dvh] items-center justify-center">
               <img src={url} alt={label} className="max-h-[calc(100dvh-10rem)] max-w-full select-text object-contain" />
