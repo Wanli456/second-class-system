@@ -155,7 +155,7 @@ function ExcelPreview({ sheets }: { sheets: ExcelSheet[] }) {
       )}
       <div className="max-h-[calc(100dvh-13rem)] overflow-auto rounded border">
         {activeSheet.rows.length > 0 ? (
-          <table className="min-w-full border-collapse select-text text-left text-sm">
+          <table className="w-full min-w-max border-collapse select-text text-left text-sm">
             <tbody>
               {activeSheet.rows.map((row, rowIndex) => (
                 <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
@@ -226,7 +226,7 @@ export function FilePreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-5xl flex-col overflow-hidden p-0">
+      <DialogContent className={`flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 ${kind === 'excel' ? 'max-w-[calc(100vw-2rem)]' : 'max-w-5xl'}`}>
         <DialogHeader className="border-b px-5 py-4 pr-12 sm:flex-row sm:items-center sm:justify-between">
           <DialogTitle className="flex min-w-0 items-center gap-2 text-base">
             {kind === 'image' ? <ImageIcon className="size-4 shrink-0" /> : <FileText className="size-4 shrink-0" />}
