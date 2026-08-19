@@ -12,8 +12,8 @@ export interface RosterImportResult {
 }
 
 const HEADER_ALIASES = {
-  className: ['班级', '班级名称', '所属班级', 'class', 'classname', 'class_name'],
-  studentId: ['学号', '学生学号', 'studentid', 'student_id', 'studentno', 'studentnumber'],
+  className: ['班级', '班级名称', '所在班级', '所属班级', 'class', 'classname', 'class_name'],
+  studentId: ['学号', '学生学号', '学籍号', 'studentid', 'student_id', 'studentno', 'studentnumber', 'id'],
   studentName: ['姓名', '学生姓名', 'name', 'studentname', 'student_name'],
 } as const;
 
@@ -22,16 +22,19 @@ function normalizeCell(value: unknown) {
 }
 
 function normalizeHeader(value: unknown) {
-  return normalizeCell(value).toLowerCase().replace(/[\s_\-]/g, '');
+  return normalizeCell(value).toLowerCase().replace(/[^\u4e00-\u9fffA-Za-z0-9]/g, '');
 }
 
 function findHeaderIndex(row: unknown[], aliases: readonly string[]) {
-  const normalized = new Set(aliases.map((alias) => normalizeHeader(alias)));
-  return row.findIndex((cell) => normalized.has(normalizeHeader(cell)));
+  const normalizedAliases = aliases.map((alias) => normalizeHeader(alias));
+  return row.findIndex((cell) => {
+    const header = normalizeHeader(cell);
+    return normalizedAliases.some((alias) => header === alias || (alias.length > 1 && header.startsWith(alias)));
+  });
 }
 
 function findHeaderRow(rows: unknown[][]) {
-  for (let index = 0; index < Math.min(rows.length, 10); index += 1) {
+  for (let index = 0; index < Math.min(rows.length, 20); index += 1) {
     const row = rows[index] || [];
     const hasStudentId = findHeaderIndex(row, HEADER_ALIASES.studentId) >= 0;
     const hasStudentName = findHeaderIndex(row, HEADER_ALIASES.studentName) >= 0;
@@ -58,9 +61,12 @@ function parseSheet(sheet: XLSX.WorkSheet, sheetName: string, students: RosterIm
     const classIndex = findHeaderIndex(headers, HEADER_ALIASES.className);
     const studentIdIndex = findHeaderIndex(headers, HEADER_ALIASES.studentId);
     const studentNameIndex = findHeaderIndex(headers, HEADER_ALIASES.studentName);
+    let lastClassName = fallbackClassName;
     rows.slice(headerRowIndex + 1).forEach((row, index) => {
       if (!row.some((cell) => normalizeCell(cell))) return;
-      addStudent(students, errors, headerRowIndex + index + 2, normalizeCell(row[classIndex]) || fallbackClassName, normalizeCell(row[studentIdIndex]), normalizeCell(row[studentNameIndex]));
+      const currentClassName = classIndex >= 0 ? normalizeCell(row[classIndex]) : '';
+      if (currentClassName) lastClassName = currentClassName;
+      addStudent(students, errors, headerRowIndex + index + 2, lastClassName, normalizeCell(row[studentIdIndex]), normalizeCell(row[studentNameIndex]));
     });
     return;
   }
