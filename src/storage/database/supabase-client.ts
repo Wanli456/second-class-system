@@ -1,5 +1,6 @@
 import { Pool, type QueryResultRow } from 'pg';
 import { newDb, DataType } from 'pg-mem';
+import { LOCAL_TEST_DATA_SQL } from './local-test-data';
 
 const useLocalTestDatabase = !process.env.PGDATABASE_URL;
 
@@ -255,6 +256,8 @@ if (localDb && shouldInitializeLocalDb) {
 
     INSERT INTO departments (name) VALUES ('学生会') ON CONFLICT (name) DO NOTHING;
   `);
+
+  localDb.public.none(LOCAL_TEST_DATA_SQL);
 
   console.log('🟢 本地开发模式：使用内存测试数据库（重启后数据清空）');
   console.log('🔑 测试账户：');
