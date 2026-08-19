@@ -160,7 +160,7 @@ function ExcelPreview({ sheets }: { sheets: ExcelSheet[] }) {
               {activeSheet.rows.map((row, rowIndex) => (
                 <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                   {row.map((cell, columnIndex) => (
-                    <td key={`${rowIndex}-${columnIndex}`} className="whitespace-pre-wrap border-b border-r border-slate-200 px-3 py-2 align-top last:border-r-0">
+                    <td key={`${rowIndex}-${columnIndex}`} className="whitespace-nowrap border-b border-r border-slate-200 px-3 py-2 align-top last:border-r-0">
                       {cell}
                     </td>
                   ))}
