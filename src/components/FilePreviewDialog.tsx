@@ -94,13 +94,17 @@ type MammothElement = {
 };
 
 function wordParagraphStyleName(element: MammothElement): string | null {
-  const alignment = element.alignment === 'center'
+  const directAlignment = element.alignment === 'center'
     ? 'center'
     : element.alignment === 'right'
       ? 'right'
       : element.alignment === 'justify'
         ? 'justify'
         : null;
+  const styleId = (element.styleId || '').toLowerCase();
+  const styleName = (element.styleName || '').toLowerCase();
+  const isTitleStyle = styleId === 'title' || styleName === 'title' || styleName === '标题';
+  const alignment = directAlignment || (isTitleStyle ? 'center' : null);
   const hasFirstLineIndent = Boolean(element.indent && element.indent.firstLine);
   if (!alignment && !hasFirstLineIndent) return null;
   if (alignment && hasFirstLineIndent) return `wp-${alignment}-indent`;
