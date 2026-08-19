@@ -2024,36 +2024,59 @@ function UserManagement({
   };
 
   const importRosterFile = async (file: File) => {
-    const className = rosterClassName.trim();
-    if (!className) {
-      setRosterError('请先填写班级名称');
-      return;
-    }
     setLoadingRoster(true);
     setRosterError('');
     try {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       if (!sheet) throw new Error('Excel 中没有可读取的工作表');
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
-      const students = rows.map((row) => {
-        const entries = Object.entries(row);
-        const findValue = (aliases: string[]) => entries.find(([key]) => aliases.some((alias) => key.trim().toLowerCase().includes(alias)))?.[1];
+      const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: false }) as unknown[][];
+      const normalizeHeader = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/[^\u4e00-\u9fffA-Za-z0-9]/g, '');
+      const headerAliases = {
+        className: ['班级', '班级名称', '所在班级', 'class', 'classname'],
+        studentId: ['学号', '学生学号', '学籍号', 'studentid', 'studentnumber', 'studentno', 'id'],
+        studentName: ['姓名', '学生姓名', 'studentname', 'student_name', 'name'],
+      };
+      const matchesHeader = (value: string, aliases: string[]) => aliases.some((alias) => {
+        const normalizedAlias = normalizeHeader(alias);
+        return value === normalizedAlias || (normalizedAlias.length > 1 && value.startsWith(normalizedAlias));
+      });
+      const findHeaderIndex = (row: unknown[], aliases: string[]) => row.findIndex((value) => matchesHeader(normalizeHeader(value), aliases));
+      const header = rows.slice(0, 20).reduce<{ rowIndex: number; classIndex: number; studentIdIndex: number; studentNameIndex: number } | null>((found, row, rowIndex) => {
+        if (found || !Array.isArray(row)) return found;
+        const classIndex = findHeaderIndex(row, headerAliases.className);
+        const studentIdIndex = findHeaderIndex(row, headerAliases.studentId);
+        const studentNameIndex = findHeaderIndex(row, headerAliases.studentName);
+        return classIndex >= 0 && studentIdIndex >= 0 && studentNameIndex >= 0
+          ? { rowIndex, classIndex, studentIdIndex, studentNameIndex }
+          : null;
+      }, null);
+      if (!header) throw new Error('未识别到“班级、学号、姓名”表头，请检查 Excel 首行或前几行是否包含这三列');
+      const fallbackClassName = rosterClassName.trim();
+      let lastClassName = fallbackClassName;
+      const students = rows.slice(header.rowIndex + 1).map((row) => {
+        if (!Array.isArray(row)) return null;
+        const currentClassName = String(row[header.classIndex] ?? '').trim();
+        if (currentClassName) lastClassName = currentClassName;
         return {
-          student_id: String(findValue(['学号', 'student_id', 'studentid', 'id']) ?? '').trim(),
-          student_name: String(findValue(['姓名', 'student_name', 'studentname', 'name']) ?? '').trim(),
+          class_name: currentClassName || lastClassName,
+          student_id: String(row[header.studentIdIndex] ?? '').trim(),
+          student_name: String(row[header.studentNameIndex] ?? '').trim(),
         };
-      }).filter((student) => student.student_id && student.student_name);
-      if (!students.length) throw new Error('未识别到有效数据，请确认首行包含“学号”和“姓名”列');
+      }).filter((student): student is { class_name: string; student_id: string; student_name: string } => Boolean(student?.class_name && student.student_id && student.student_name));
+      if (!students.length) throw new Error('未识别到有效学生数据，请确认每行都包含班级、学号和姓名');
       const response = await apiFetch('/api/class-roster', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ className, students }),
+        body: JSON.stringify({ students }),
       });
       const data = await response.json();
       if (!data.success) throw new Error(data.error || '导入花名册失败');
-      await loadRoster();
-      setRosterError(`已导入 ${students.length} 名学生`);
+      const savedStudents = Array.isArray(data.data) ? data.data as RosterStudent[] : [];
+      const classNames = [...new Set(savedStudents.map((student) => student.class_name).filter(Boolean))];
+      setRosterStudents(savedStudents);
+      setRosterClassName(classNames.length === 1 ? classNames[0] : '');
+      setRosterError(`已导入 ${savedStudents.length || students.length} 名学生，识别到 ${classNames.length || 1} 个班级`);
     } catch (error) {
       setRosterError(error instanceof Error ? error.message : '导入花名册失败');
     } finally {
@@ -2090,6 +2113,7 @@ function UserManagement({
     leader: users.filter((item) => item.role === 'leader').length,
     student: users.filter((item) => item.role === 'student').length,
   };
+  const rosterClassNames = [...new Set(rosterStudents.map((student) => student.class_name).filter(Boolean))];
 
   return (
     <div className="space-y-5">
@@ -2325,15 +2349,15 @@ function UserManagement({
         </div>
         <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(14rem,0.8fr)_minmax(0,1.2fr)]">
           <div>
-            <label className="text-xs font-medium text-slate-600" htmlFor="roster-class-name">班级名称</label>
+            <label className="text-xs font-medium text-slate-600" htmlFor="roster-class-name">查看或手动录入的班级</label>
             <div className="mt-1.5 flex flex-col gap-2 sm:flex-row lg:flex-col">
               <Input id="roster-class-name" type="text" placeholder="例如：计算机2101" value={rosterClassName} onChange={(event) => setRosterClassName(event.target.value)} />
               <Button type="button" variant="outline" onClick={() => void loadRoster()} disabled={loadingRoster} className="shrink-0 lg:w-full">{loadingRoster ? '加载中...' : '查看花名册'}</Button>
             </div>
-            <p className="mt-2 text-xs leading-5 text-slate-500">可先填写班级并查看已有成员，再追加录入或导入。</p>
+            <p className="mt-2 text-xs leading-5 text-slate-500">手动录入或查看已有成员时填写；Excel 导入会自动识别表内班级。</p>
           </div>
           <div>
-            <label className="text-xs font-medium text-slate-600" htmlFor="roster-text">批量录入</label>
+            <label className="text-xs font-medium text-slate-600" htmlFor="roster-text">批量录入（仍需填写班级）</label>
             <textarea id="roster-text" value={rosterText} onChange={(event) => setRosterText(event.target.value)} placeholder={'每行一名学生\n学号,姓名'} className="mt-1.5 min-h-28 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
             <div className="mt-2 flex flex-wrap gap-2">
               <Button type="button" onClick={() => void saveRoster()} disabled={loadingRoster}><ShieldCheck className="size-4" />保存花名册</Button>
@@ -2349,21 +2373,21 @@ function UserManagement({
         {rosterStudents.length > 0 ? (
           <div className="mt-5">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-slate-800">{rosterClassName.trim()} 成员</h3>
+              <h3 className="text-sm font-semibold text-slate-800">{rosterClassNames.length === 1 ? `${rosterClassNames[0]} 成员` : `已识别 ${rosterClassNames.length} 个班级`}</h3>
               <span className="text-xs text-slate-500 tabular-nums">共 {rosterStudents.length} 人</span>
             </div>
             <div className="hidden overflow-x-auto rounded-lg border border-slate-200 sm:block">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-3 py-2.5 text-left font-medium">学号</th><th className="px-3 py-2.5 text-left font-medium">姓名</th><th className="px-3 py-2.5 text-right font-medium">操作</th></tr></thead>
-                <tbody className="divide-y divide-slate-100">{rosterStudents.map((student) => <tr key={student.id}><td className="px-3 py-2.5 tabular-nums text-slate-700">{student.student_id}</td><td className="px-3 py-2.5 text-slate-700">{student.student_name}</td><td className="px-3 py-2.5 text-right"><Button type="button" variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => setRosterDeleteTarget(student)}><Trash2 className="size-3.5" />移除</Button></td></tr>)}</tbody>
+                <thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-3 py-2.5 text-left font-medium">班级</th><th className="px-3 py-2.5 text-left font-medium">学号</th><th className="px-3 py-2.5 text-left font-medium">姓名</th><th className="px-3 py-2.5 text-right font-medium">操作</th></tr></thead>
+                <tbody className="divide-y divide-slate-100">{rosterStudents.map((student) => <tr key={student.id}><td className="px-3 py-2.5 text-slate-700">{student.class_name}</td><td className="px-3 py-2.5 tabular-nums text-slate-700">{student.student_id}</td><td className="px-3 py-2.5 text-slate-700">{student.student_name}</td><td className="px-3 py-2.5 text-right"><Button type="button" variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => setRosterDeleteTarget(student)}><Trash2 className="size-3.5" />移除</Button></td></tr>)}</tbody>
               </table>
             </div>
             <div className="space-y-2 sm:hidden">
-              {rosterStudents.map((student) => <div key={student.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2.5"><div className="min-w-0"><p className="truncate text-sm font-medium text-slate-800">{student.student_name}</p><p className="mt-0.5 text-xs text-slate-500 tabular-nums">{student.student_id}</p></div><Button type="button" variant="ghost" size="sm" className="shrink-0 text-red-600 hover:text-red-700" onClick={() => setRosterDeleteTarget(student)}><Trash2 className="size-3.5" />移除</Button></div>)}
+              {rosterStudents.map((student) => <div key={student.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2.5"><div className="min-w-0"><p className="truncate text-sm font-medium text-slate-800">{student.student_name}</p><p className="mt-0.5 text-xs text-slate-500">{student.class_name}</p><p className="mt-0.5 text-xs text-slate-500 tabular-nums">{student.student_id}</p></div><Button type="button" variant="ghost" size="sm" className="shrink-0 text-red-600 hover:text-red-700" onClick={() => setRosterDeleteTarget(student)}><Trash2 className="size-3.5" />移除</Button></div>)}
             </div>
           </div>
         ) : (
-          <div className="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-4 py-6 text-center text-sm text-slate-500">输入班级名称后可查看花名册成员</div>
+          <div className="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-4 py-6 text-center text-sm text-slate-500">输入班级名称查看，或直接导入包含“班级、学号、姓名”列的 Excel</div>
         )}
       </section>
 
