@@ -1,4 +1,4 @@
-export type PreviewKind = 'image' | 'pdf' | 'word' | 'excel' | 'unsupported';
+export type PreviewKind = 'image' | 'pdf' | 'word' | 'legacy-word' | 'excel' | 'unsupported';
 
 function hasExtension(source: string, extensions: readonly string[]) {
   const cleanSource = source.toLowerCase().split(/[?#]/, 1)[0];
@@ -12,6 +12,7 @@ export function previewKind(fileName: string | null | undefined, url: string): P
   }
   if (sources.some((source) => hasExtension(source, ['.pdf']))) return 'pdf';
   if (sources.some((source) => hasExtension(source, ['.docx']))) return 'word';
+  if (sources.some((source) => hasExtension(source, ['.doc']))) return 'legacy-word';
   if (sources.some((source) => hasExtension(source, ['.xlsx', '.xls']))) return 'excel';
   return 'unsupported';
 }
