@@ -84,15 +84,49 @@ async function fetchPreviewBuffer(url: string): Promise<ArrayBuffer> {
   return response.arrayBuffer();
 }
 
+type MammothElement = {
+  type?: string;
+  children?: MammothElement[];
+  alignment?: string | null;
+  styleId?: string | null;
+  styleName?: string | null;
+};
+
+function transformWordAlignment(element: MammothElement): MammothElement {
+  const children = element.children ? element.children.map(transformWordAlignment) : element.children;
+  const next = children === element.children ? element : { ...element, children };
+  if (next.type === 'paragraph' && next.alignment) {
+    const className = next.alignment === 'center'
+      ? 'align-center'
+      : next.alignment === 'right'
+        ? 'align-right'
+        : next.alignment === 'justify'
+          ? 'align-justify'
+          : null;
+    if (className) {
+      return { ...next, styleId: className, styleName: className };
+    }
+  }
+  return next;
+}
+
 async function parseWordDocument(buffer: ArrayBuffer): Promise<string> {
   const mammothModule = (await import('mammoth')) as unknown as {
-    convertToHtml?: (input: { arrayBuffer: ArrayBuffer }) => Promise<{ value: string }>;
-    default?: { convertToHtml: (input: { arrayBuffer: ArrayBuffer }) => Promise<{ value: string }> };
+    convertToHtml?: (input: { arrayBuffer: ArrayBuffer; styleMap?: string[]; transformDocument?: (element: MammothElement) => MammothElement }) => Promise<{ value: string }>;
+    default?: { convertToHtml: (input: { arrayBuffer: ArrayBuffer; styleMap?: string[]; transformDocument?: (element: MammothElement) => MammothElement }) => Promise<{ value: string }> };
   };
   const mammoth = mammothModule.default || mammothModule;
   if (!mammoth.convertToHtml) throw new Error('Word 预览组件加载失败');
 
-  const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
+  const result = await mammoth.convertToHtml({
+    arrayBuffer: buffer,
+    styleMap: [
+      "p[style-name='align-center'] => p.align-center:fresh",
+      "p[style-name='align-right'] => p.align-right:fresh",
+      "p[style-name='align-justify'] => p.align-justify:fresh",
+    ],
+    transformDocument: transformWordAlignment,
+  });
   return sanitizeWordHtml(result.value);
 }
 
@@ -117,7 +151,7 @@ function DocumentError({ message }: { message: string }) {
 function WordPreview({ html }: { html: string }) {
   return (
     <article
-      className="mx-auto min-h-[24rem] w-full max-w-[794px] select-text rounded border bg-white p-6 shadow-sm [&_a]:text-blue-700 [&_a]:underline [&_img]:max-h-[32rem] [&_img]:max-w-full [&_img]:object-contain [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-300 [&_td]:p-2 [&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-50 [&_th]:p-2"
+      className="mx-auto min-h-[24rem] w-full max-w-[794px] select-text rounded border bg-white p-6 shadow-sm [&_a]:text-blue-700 [&_a]:underline [&_img]:max-h-[32rem] [&_img]:max-w-full [&_img]:object-contain [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-300 [&_td]:p-2 [&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-50 [&_th]:p-2 [&_.align-center]:text-center [&_.align-right]:text-right [&_.align-justify]:text-justify"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
