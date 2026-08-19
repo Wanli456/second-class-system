@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -1873,6 +1873,7 @@ function UserManagement({
   const [rosterStudents, setRosterStudents] = useState<RosterStudent[]>([]);
   const [rosterError, setRosterError] = useState('');
   const [loadingRoster, setLoadingRoster] = useState(false);
+  const rosterFileInputRef = useRef<HTMLInputElement>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [rosterDeleteTarget, setRosterDeleteTarget] = useState<RosterStudent | null>(null);
   const [departmentDeleteTarget, setDepartmentDeleteTarget] = useState<DepartmentRecord | null>(null);
@@ -2350,10 +2351,31 @@ function UserManagement({
             <textarea id="roster-text" value={rosterText} onChange={(event) => setRosterText(event.target.value)} placeholder={'每行一名学生\n学号,姓名'} className="mt-1.5 min-h-28 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
             <div className="mt-2 flex flex-wrap gap-2">
               <Button type="button" onClick={() => void saveRoster()} disabled={loadingRoster}><ShieldCheck className="size-4" />保存花名册</Button>
-              <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-within:ring-2 focus-within:ring-slate-200">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={loadingRoster}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  rosterFileInputRef.current?.click();
+                }}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
                 <Upload className="size-4" />导入 Excel
-                <input type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importRosterFile(file); event.target.value = ''; }} />
-              </label>
+              </Button>
+              <input
+                ref={rosterFileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="sr-only"
+                onClick={(event) => event.stopPropagation()}
+                onChange={(event) => {
+                  event.stopPropagation();
+                  const file = event.target.files?.[0];
+                  if (file) void importRosterFile(file);
+                  event.target.value = '';
+                }}
+              />
             </div>
           </div>
         </div>
