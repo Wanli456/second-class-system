@@ -7,7 +7,8 @@ import * as XLSX from 'xlsx';
 import {
   GraduationCap, Lock, LogOut, Table, FileCheck, UserCheck, Award, Users,
   Plus, Pencil, Trash2, Eye, Check, X, Upload, FileText, Image as ImageIcon,
-  ChevronDown, ChevronUp, Search, AlertCircle, Download,
+  ChevronDown, ChevronUp, Search, AlertCircle, Download, Building2, BookOpen,
+  KeyRound, ShieldCheck, UserRound,
 } from 'lucide-react';
 import {
   Activity, ActivitySubmission, LeaveRequest,
@@ -22,6 +23,11 @@ import { useUser } from '@/contexts/UserContext';
 import { canOpenAdminTab, formatActivityScopes } from '@/lib/business-rules';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
 import { CategoryBadge } from '@/components/CategoryBadge';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { cn } from '@/lib/utils';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -1708,6 +1714,7 @@ function UserManagement({
   const [loadingRoster, setLoadingRoster] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [rosterDeleteTarget, setRosterDeleteTarget] = useState<RosterStudent | null>(null);
+  const [departmentDeleteTarget, setDepartmentDeleteTarget] = useState<DepartmentRecord | null>(null);
   const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
   const [newDepartment, setNewDepartment] = useState('');
   const [departmentError, setDepartmentError] = useState('');
@@ -1803,12 +1810,12 @@ function UserManagement({
   };
 
   const deleteDepartment = async (department: DepartmentRecord) => {
-    if (!confirm(`确认删除部门“${department.name}”？`)) return;
     setDepartmentError('');
     try {
       const response = await apiFetch(`/api/departments?id=${encodeURIComponent(department.id)}`, { method: 'DELETE' });
       const data = await response.json();
       if (!data.success) throw new Error(data.error || '删除部门失败');
+      setDepartmentDeleteTarget(null);
       await loadDepartments();
     } catch (error) {
       setDepartmentError(error instanceof Error ? error.message : '删除部门失败');
@@ -1895,66 +1902,273 @@ function UserManagement({
     }
   };
 
+  const roleMeta: Record<string, { label: string; icon: typeof ShieldCheck; badge: string; surface: string; text: string }> = {
+    admin: {
+      label: '管理员',
+      icon: ShieldCheck,
+      badge: 'border-red-200 bg-red-50 text-red-700',
+      surface: 'border-red-200/80',
+      text: 'text-red-600',
+    },
+    leader: {
+      label: '部门负责人',
+      icon: UserRound,
+      badge: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+      surface: 'border-emerald-200/80',
+      text: 'text-emerald-600',
+    },
+    student: {
+      label: '学生',
+      icon: UserRound,
+      badge: 'border-slate-200 bg-slate-100 text-slate-600',
+      surface: 'border-slate-200',
+      text: 'text-slate-600',
+    },
+  };
+  const permissionedUserCount = users.filter((item) => item.role === 'admin' || getEnabledPermissions(item).length > 0).length;
+  const roleCounts = {
+    admin: users.filter((item) => item.role === 'admin').length,
+    leader: users.filter((item) => item.role === 'leader').length,
+    student: users.filter((item) => item.role === 'student').length,
+  };
+
   return (
-    <div className="space-y-6">
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-gray-800">用户管理</h2>
-          <input type="search" placeholder="搜索姓名、学号或班级" value={userSearch} onChange={(event) => onUserSearchChange(event.target.value)} className="rounded border border-gray-200 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none" />
+    <div className="space-y-5">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 bg-slate-50/80 px-4 py-5 sm:px-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="flex size-9 items-center justify-center rounded-lg bg-slate-900 text-white">
+                  <Users className="size-4" />
+                </div>
+                <div>
+                  <h2 className="text-balance text-lg font-semibold text-slate-900">用户管理</h2>
+                  <p className="text-pretty text-sm text-slate-500">统一维护账号角色、功能权限和人员归属</p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2 text-xs tabular-nums">
+                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-slate-600">共 {users.length} 人</span>
+                <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-emerald-700">已配置权限 {permissionedUserCount} 人</span>
+                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-slate-600">当前显示 {filteredUsers.length} 人</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center text-xs tabular-nums sm:min-w-72">
+              <div className="rounded-lg border border-red-100 bg-red-50/70 px-3 py-2"><div className="font-semibold text-red-700">{roleCounts.admin}</div><div className="mt-0.5 text-red-600/80">管理员</div></div>
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50/70 px-3 py-2"><div className="font-semibold text-emerald-700">{roleCounts.leader}</div><div className="mt-0.5 text-emerald-600/80">负责人</div></div>
+              <div className="rounded-lg border border-slate-200 bg-white px-3 py-2"><div className="font-semibold text-slate-700">{roleCounts.student}</div><div className="mt-0.5 text-slate-500">学生</div></div>
+            </div>
+          </div>
+          <div className="relative mt-5 max-w-2xl">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              type="search"
+              aria-label="搜索用户"
+              placeholder="搜索姓名、学号、部门或班级"
+              value={userSearch}
+              onChange={(event) => onUserSearchChange(event.target.value)}
+              className="h-10 bg-white pl-9"
+            />
+          </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-max text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">学号</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">角色</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">部门</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-600">班级</th>
-                <th className="min-w-64 px-3 py-2 text-left font-medium text-gray-600">权限总览</th>
-                {permissions.map(permission => <th key={permission.key} className="px-3 py-2 text-left font-medium text-gray-600">{permission.label}</th>)}
-                <th className="px-3 py-2 text-left font-medium text-gray-600">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filteredUsers.map(item => (
-                <tr key={item.id} className="hover:bg-gray-50">
-                  <td className="px-3 py-2 text-gray-800">{item.name || '-'}</td>
-                  <td className="px-3 py-2 text-gray-500">{item.studentId || '-'}</td>
-                  <td className="px-3 py-2"><select aria-label={`${item.name}的角色`} value={item.role} onChange={(event) => void onUpdateRole(item.id, event.target.value)} className={`rounded border border-gray-200 bg-white px-2 py-1 text-xs ${roleTextStyles[item.role] || roleTextStyles.student}`}><option value="admin" style={{ color: roleTextColors.admin }}>管理员</option><option value="leader" style={{ color: roleTextColors.leader }}>部门负责人</option><option value="student" style={{ color: roleTextColors.student }}>学生</option></select></td>
-                  <td className="px-3 py-2"><select value={item.department || ''} onChange={(event) => void onUpdateDepartment(item.id, event.target.value || null)} className="rounded border border-gray-200 bg-white px-2 py-1 text-xs"><option value="">未设置</option>{departments.map((department) => <option key={department.id} value={department.name}>{department.name}</option>)}</select></td>
-                  <td className="px-3 py-2 text-xs text-gray-600">{item.className || '-'}</td>
-                  <td className="max-w-96 px-3 py-2 align-top"><div title={getPermissionSummary(item)}><div className="mb-1 text-[11px] font-medium text-gray-500">{item.role === 'admin' ? '系统全部权限' : `已开通 ${getEnabledPermissions(item).length} 项`}</div><div className="flex flex-wrap gap-1">{item.role === 'admin' ? <span className="rounded border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">全部权限</span> : getEnabledPermissions(item).map((permission) => <span key={permission.key} className="rounded border border-blue-100 bg-blue-50 px-2 py-0.5 text-xs text-blue-700">{permission.label}</span>)}{item.role !== 'admin' && !getEnabledPermissions(item).length && <span className="text-xs text-gray-400">未开通功能权限</span>}</div></div></td>
-                  {permissions.map(permission => <td key={permission.key} className="px-3 py-2"><label className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap"><input type="checkbox" aria-label={`${item.name}的${permission.label}权限`} checked={item[permission.key]} disabled={item.role === 'admin'} onChange={(event) => void onUpdatePermission(item.id, permission.key, event.target.checked)} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed" /><span className="text-xs text-gray-600">{item[permission.key] ? '已开启' : '未开启'}</span></label></td>)}
-                  <td className="px-3 py-2"><div className="flex gap-1"><button onClick={() => void onChangePassword(item.id, item.name)} className="rounded border border-blue-200 px-1.5 py-0.5 text-xs text-blue-600 hover:bg-blue-50">改密</button><button onClick={() => setDeleteTarget({ id: item.id, name: item.name })} className="rounded border border-red-200 px-1.5 py-0.5 text-xs text-red-600 hover:bg-red-50">删除</button></div></td>
-                </tr>
-              ))}
-              {filteredUsers.length === 0 && <tr><td colSpan={15} className="px-3 py-8 text-center text-gray-400">没有匹配用户</td></tr>}
-            </tbody>
-          </table>
+
+        <div className="p-4 sm:p-6">
+          {filteredUsers.length > 0 ? (
+            <div className="grid gap-4 xl:grid-cols-2">
+              {filteredUsers.map((item) => {
+                const meta = roleMeta[item.role] || roleMeta.student;
+                const RoleIcon = meta.icon;
+                const enabledCount = getEnabledPermissions(item).length;
+                return (
+                  <article key={item.id} className={cn('rounded-xl border bg-white p-4 shadow-sm', meta.surface)}>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className={cn('flex size-11 shrink-0 items-center justify-center rounded-full border bg-white', meta.text, meta.surface)}>
+                          <RoleIcon className="size-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="truncate font-semibold text-slate-900">{item.name || '未命名用户'}</h3>
+                            <Badge variant="outline" className={meta.badge}>{meta.label}</Badge>
+                          </div>
+                          <p className="mt-1 truncate text-sm text-slate-500 tabular-nums">学号 {item.studentId || '-'}</p>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 gap-2 sm:pt-0.5">
+                        <Button type="button" variant="outline" size="sm" onClick={() => void onChangePassword(item.id, item.name)}>
+                          <KeyRound className="size-3.5" />改密
+                        </Button>
+                        <Button type="button" variant="destructive" size="sm" onClick={() => setDeleteTarget({ id: item.id, name: item.name })}>
+                          <Trash2 className="size-3.5" />删除
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 border-y border-slate-100 py-3 sm:grid-cols-2">
+                      <label className="min-w-0">
+                        <span className="mb-1.5 block text-xs font-medium text-slate-500">角色</span>
+                        <select
+                          aria-label={`${item.name}的角色`}
+                          value={item.role}
+                          onChange={(event) => void onUpdateRole(item.id, event.target.value)}
+                          className={cn('h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200', meta.text)}
+                        >
+                          <option value="admin" style={{ color: roleTextColors.admin }}>管理员</option>
+                          <option value="leader" style={{ color: roleTextColors.leader }}>部门负责人</option>
+                          <option value="student" style={{ color: roleTextColors.student }}>学生</option>
+                        </select>
+                      </label>
+                      <label className="min-w-0">
+                        <span className="mb-1.5 block text-xs font-medium text-slate-500">所属部门</span>
+                        <select
+                          aria-label={`${item.name}的所属部门`}
+                          value={item.department || ''}
+                          onChange={(event) => void onUpdateDepartment(item.id, event.target.value || null)}
+                          className="h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                        >
+                          <option value="">未设置</option>
+                          {departments.map((department) => <option key={department.id} value={department.name}>{department.name}</option>)}
+                        </select>
+                      </label>
+                      <div className="flex min-w-0 items-center gap-2 text-sm text-slate-600 sm:col-span-2">
+                        <BookOpen className="size-4 shrink-0 text-slate-400" />
+                        <span className="text-xs text-slate-500">所属班级</span>
+                        <span className="truncate font-medium">{item.className || '未设置'}</span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <ShieldCheck className="size-4 text-slate-500" />
+                          <h4 className="text-sm font-semibold text-slate-800">功能权限</h4>
+                        </div>
+                        <span className={cn('text-xs tabular-nums', item.role === 'admin' ? 'text-red-600' : 'text-slate-500')}>
+                          {item.role === 'admin' ? '管理员默认全部开启' : `已开启 ${enabledCount}/${permissions.length} 项`}
+                        </span>
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {permissions.map((permission) => {
+                          const checked = item.role === 'admin' || Boolean(item[permission.key]);
+                          return (
+                            <label key={permission.key} className="flex min-h-9 items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-2.5 py-2">
+                              <span className={cn('min-w-0 text-xs', checked ? 'font-medium text-slate-700' : 'text-slate-500')}>{permission.label}</span>
+                              <Switch
+                                aria-label={`${item.name}的${permission.label}权限`}
+                                checked={checked}
+                                disabled={item.role === 'admin'}
+                                onCheckedChange={(value) => void onUpdatePermission(item.id, permission.key, value)}
+                              />
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <p className="mt-3 truncate text-xs text-slate-400" title={getPermissionSummary(item)}>
+                        {item.role === 'admin' ? '系统角色拥有全部功能权限' : getPermissionSummary(item)}
+                      </p>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex min-h-40 flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-4 text-center">
+              <Search className="size-5 text-slate-400" />
+              <p className="mt-2 text-sm font-medium text-slate-700">没有匹配用户</p>
+              <p className="mt-1 text-xs text-slate-500">换一个姓名、学号、部门或班级关键词试试</p>
+            </div>
+          )}
         </div>
       </section>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <div className="mb-3"><h2 className="text-base font-semibold text-gray-800">部门维护</h2><p className="mt-1 text-sm text-gray-500">部门名称用于活动主办、联办和人员归属选择。</p></div>
-        <div className="flex flex-wrap gap-2"><input value={newDepartment} onChange={(event) => setNewDepartment(event.target.value)} placeholder="输入部门名称" className="rounded border border-gray-300 px-3 py-2 text-sm" /><button onClick={() => void addDepartment()} className="inline-flex items-center gap-1 rounded bg-[#1e3a5f] px-3 py-2 text-sm font-medium text-white"><Plus className="h-4 w-4" />新增部门</button></div>
-        <div className="mt-3 flex flex-wrap gap-2">{departments.map((department) => <span key={department.id} className="inline-flex items-center gap-1 rounded border border-gray-200 bg-gray-50 px-2 py-1 text-sm text-gray-700">{department.name}<button type="button" title={`删除${department.name}`} onClick={() => void deleteDepartment(department)} className="text-gray-400 hover:text-red-600"><X className="h-3.5 w-3.5" /></button></span>)}</div>
-        {departmentError && <p className="mt-2 text-sm text-red-600">{departmentError}</p>}
-      </section>
-
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <div className="mb-4"><h2 className="text-base font-semibold text-gray-800">班级花名册</h2><p className="mt-1 text-sm text-gray-500">为集体请假维护班级成员。重复学号会更新姓名。</p></div>
-        <div className="grid gap-3 md:grid-cols-[minmax(12rem,1fr)_auto]">
-          <input type="text" placeholder="班级名称，例如：计算机2101" value={rosterClassName} onChange={(event) => setRosterClassName(event.target.value)} className="rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" />
-          <button onClick={() => void loadRoster()} disabled={loadingRoster} className="rounded bg-[#1e3a5f] px-3 py-2 text-sm font-medium text-white hover:bg-[#1e3a5f]/90 disabled:opacity-50">查看花名册</button>
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <div className="flex items-start gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700"><Building2 className="size-4" /></div>
+          <div>
+            <h2 className="text-balance text-base font-semibold text-slate-900">部门维护</h2>
+            <p className="mt-1 text-pretty text-sm text-slate-500">部门名称用于活动主办、联办和人员归属选择。</p>
+          </div>
         </div>
-        <textarea value={rosterText} onChange={(event) => setRosterText(event.target.value)} placeholder={'批量导入，每行一名学生\n学号,姓名'} className="mt-3 min-h-28 w-full rounded border border-gray-300 px-3 py-2 font-mono text-sm focus:border-blue-500 focus:outline-none" />
-        <div className="mt-3 flex flex-wrap items-center gap-3"><button onClick={() => void saveRoster()} disabled={loadingRoster} className="rounded bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">保存花名册</button><label className="inline-flex cursor-pointer items-center gap-1 rounded border border-blue-200 px-3 py-2 text-sm text-blue-700 hover:bg-blue-50"><Upload className="h-4 w-4" />导入 Excel<input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importRosterFile(file); event.target.value = ''; }} /></label>{rosterError && <p className="text-sm text-red-600">{rosterError}</p>}</div>
-        {rosterStudents.length > 0 && <div className="mt-4 overflow-x-auto rounded border border-gray-200"><table className="w-full text-sm"><thead className="bg-gray-50"><tr><th className="px-3 py-2 text-left font-medium text-gray-600">学号</th><th className="px-3 py-2 text-left font-medium text-gray-600">姓名</th><th className="px-3 py-2 text-right font-medium text-gray-600">操作</th></tr></thead><tbody className="divide-y divide-gray-100">{rosterStudents.map(student => <tr key={student.id}><td className="px-3 py-2">{student.student_id}</td><td className="px-3 py-2">{student.student_name}</td><td className="px-3 py-2 text-right"><button onClick={() => setRosterDeleteTarget(student)} className="text-xs text-red-600 hover:underline">移除</button></td></tr>)}</tbody></table></div>}
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+          <Input value={newDepartment} onChange={(event) => setNewDepartment(event.target.value)} placeholder="输入部门名称" aria-label="新部门名称" className="sm:max-w-sm" />
+          <Button type="button" onClick={() => void addDepartment()}><Plus className="size-4" />新增部门</Button>
+        </div>
+        {departments.length > 0 ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {departments.map((department) => (
+              <span key={department.id} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm text-slate-700">
+                {department.name}
+                <button type="button" title={`删除${department.name}`} aria-label={`删除${department.name}`} onClick={() => setDepartmentDeleteTarget(department)} className="rounded p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-200"><X className="size-3.5" /></button>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-slate-500">暂无部门，请先新增一个部门。</p>
+        )}
+        {departmentError && <p role="alert" className="mt-3 text-sm text-red-600">{departmentError}</p>}
       </section>
 
-      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>删除用户</AlertDialogTitle><AlertDialogDescription>将删除“{deleteTarget?.name}”的账号。历史提交记录会保留。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={() => deleteTarget && void onDeleteUser(deleteTarget.id, deleteTarget.name)} className="bg-red-600 hover:bg-red-700">删除</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
-      <AlertDialog open={Boolean(rosterDeleteTarget)} onOpenChange={(open) => !open && setRosterDeleteTarget(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>移除花名册成员</AlertDialogTitle><AlertDialogDescription>将从 {rosterDeleteTarget?.class_name} 花名册中移除“{rosterDeleteTarget?.student_name}”。不会删除该学生的账号或历史记录。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={() => void deleteRosterStudent()} className="bg-red-600 hover:bg-red-700">移除</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <div className="flex items-start gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700"><BookOpen className="size-4" /></div>
+          <div>
+            <h2 className="text-balance text-base font-semibold text-slate-900">班级花名册</h2>
+            <p className="mt-1 text-pretty text-sm text-slate-500">为集体请假维护班级成员，重复学号会更新姓名。</p>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(14rem,0.8fr)_minmax(0,1.2fr)]">
+          <div>
+            <label className="text-xs font-medium text-slate-600" htmlFor="roster-class-name">班级名称</label>
+            <div className="mt-1.5 flex flex-col gap-2 sm:flex-row lg:flex-col">
+              <Input id="roster-class-name" type="text" placeholder="例如：计算机2101" value={rosterClassName} onChange={(event) => setRosterClassName(event.target.value)} />
+              <Button type="button" variant="outline" onClick={() => void loadRoster()} disabled={loadingRoster} className="shrink-0 lg:w-full">{loadingRoster ? '加载中...' : '查看花名册'}</Button>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-slate-500">可先填写班级并查看已有成员，再追加录入或导入。</p>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-600" htmlFor="roster-text">批量录入</label>
+            <textarea id="roster-text" value={rosterText} onChange={(event) => setRosterText(event.target.value)} placeholder={'每行一名学生\n学号,姓名'} className="mt-1.5 min-h-28 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" />
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button type="button" onClick={() => void saveRoster()} disabled={loadingRoster}><ShieldCheck className="size-4" />保存花名册</Button>
+              <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-within:ring-2 focus-within:ring-slate-200">
+                <Upload className="size-4" />导入 Excel
+                <input type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importRosterFile(file); event.target.value = ''; }} />
+              </label>
+            </div>
+          </div>
+        </div>
+        {rosterError && <p role="alert" className={cn('mt-3 text-sm', rosterError.startsWith('已导入') ? 'text-emerald-600' : 'text-red-600')}>{rosterError}</p>}
+
+        {rosterStudents.length > 0 ? (
+          <div className="mt-5">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-slate-800">{rosterClassName.trim()} 成员</h3>
+              <span className="text-xs text-slate-500 tabular-nums">共 {rosterStudents.length} 人</span>
+            </div>
+            <div className="hidden overflow-x-auto rounded-lg border border-slate-200 sm:block">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-3 py-2.5 text-left font-medium">学号</th><th className="px-3 py-2.5 text-left font-medium">姓名</th><th className="px-3 py-2.5 text-right font-medium">操作</th></tr></thead>
+                <tbody className="divide-y divide-slate-100">{rosterStudents.map((student) => <tr key={student.id}><td className="px-3 py-2.5 tabular-nums text-slate-700">{student.student_id}</td><td className="px-3 py-2.5 text-slate-700">{student.student_name}</td><td className="px-3 py-2.5 text-right"><Button type="button" variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => setRosterDeleteTarget(student)}><Trash2 className="size-3.5" />移除</Button></td></tr>)}</tbody>
+              </table>
+            </div>
+            <div className="space-y-2 sm:hidden">
+              {rosterStudents.map((student) => <div key={student.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2.5"><div className="min-w-0"><p className="truncate text-sm font-medium text-slate-800">{student.student_name}</p><p className="mt-0.5 text-xs text-slate-500 tabular-nums">{student.student_id}</p></div><Button type="button" variant="ghost" size="sm" className="shrink-0 text-red-600 hover:text-red-700" onClick={() => setRosterDeleteTarget(student)}><Trash2 className="size-3.5" />移除</Button></div>)}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-4 py-6 text-center text-sm text-slate-500">输入班级名称后可查看花名册成员</div>
+        )}
+      </section>
+
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>删除用户</AlertDialogTitle><AlertDialogDescription>将删除“{deleteTarget?.name}”的账号。历史提交记录会保留。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={() => deleteTarget && void onDeleteUser(deleteTarget.id, deleteTarget.name)} className="bg-red-600 hover:bg-red-700">删除</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={Boolean(departmentDeleteTarget)} onOpenChange={(open) => !open && setDepartmentDeleteTarget(null)}>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>删除部门</AlertDialogTitle><AlertDialogDescription>确认删除部门“{departmentDeleteTarget?.name}”？已产生的历史记录不会被删除。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={() => departmentDeleteTarget && void deleteDepartment(departmentDeleteTarget)} className="bg-red-600 hover:bg-red-700">删除</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={Boolean(rosterDeleteTarget)} onOpenChange={(open) => !open && setRosterDeleteTarget(null)}>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>移除花名册成员</AlertDialogTitle><AlertDialogDescription>将从 {rosterDeleteTarget?.class_name} 花名册中移除“{rosterDeleteTarget?.student_name}”。不会删除该学生的账号或历史记录。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={() => void deleteRosterStudent()} className="bg-red-600 hover:bg-red-700">移除</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
