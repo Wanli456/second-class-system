@@ -117,7 +117,7 @@ function DocumentError({ message }: { message: string }) {
 function WordPreview({ html }: { html: string }) {
   return (
     <article
-      className="min-h-[24rem] w-full select-text rounded border bg-white p-6 shadow-sm [&_a]:text-blue-700 [&_a]:underline [&_img]:max-h-[32rem] [&_img]:max-w-full [&_img]:object-contain [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-300 [&_td]:p-2 [&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-50 [&_th]:p-2"
+      className="mx-auto min-h-[24rem] w-full max-w-[794px] select-text rounded border bg-white p-6 shadow-sm [&_a]:text-blue-700 [&_a]:underline [&_img]:max-h-[32rem] [&_img]:max-w-full [&_img]:object-contain [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-300 [&_td]:p-2 [&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-50 [&_th]:p-2"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
@@ -258,7 +258,7 @@ export function FilePreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={`flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 ${kind === 'excel' || kind === 'word' ? 'sm:max-w-[calc(100vw-2rem)]' : 'sm:max-w-5xl'}`} style={kind === 'excel' || kind === 'word' ? { width: 'calc(100vw - 2rem)', maxWidth: 'calc(100vw - 2rem)' } : undefined}>
+      <DialogContent className={`flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 ${kind === 'excel' ? 'sm:max-w-[calc(100vw-2rem)]' : 'sm:max-w-5xl'}`} style={kind === 'excel' ? { width: 'calc(100vw - 2rem)', maxWidth: 'calc(100vw - 2rem)' } : undefined}>
         <DialogHeader className="border-b px-5 py-4 pr-12 sm:flex-row sm:items-center sm:justify-between">
           <DialogTitle className="flex min-w-0 items-center gap-2 text-base">
             {kind === 'image' ? <ImageIcon className="size-4 shrink-0" /> : <FileText className="size-4 shrink-0" />}
