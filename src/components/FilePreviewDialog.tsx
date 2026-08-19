@@ -251,6 +251,7 @@ export function FilePreviewDialog({
           {kind === 'excel' && documentState.status === 'loading' && <DocumentLoading />}
           {kind === 'excel' && documentState.status === 'excel-ready' && <ExcelPreview sheets={documentState.sheets} />}
           {(kind === 'word' || kind === 'excel') && documentState.status === 'error' && <DocumentError message={documentState.message} />}
+          {kind === 'legacy-word' && <DocumentError message="旧版 Word（.doc）文件暂不支持网页内预览，请下载后使用 Word 打开。" />}
           {kind === 'unsupported' && <DocumentError message="此文件格式暂不支持网页内预览。" />}
         </div>
       </DialogContent>
