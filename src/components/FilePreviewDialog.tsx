@@ -112,21 +112,23 @@ function transformWordAlignment(element: MammothElement): MammothElement {
 
 async function parseWordDocument(buffer: ArrayBuffer): Promise<string> {
   const mammothModule = (await import('mammoth')) as unknown as {
-    convertToHtml?: (input: { arrayBuffer: ArrayBuffer; styleMap?: string[]; transformDocument?: (element: MammothElement) => MammothElement }) => Promise<{ value: string }>;
-    default?: { convertToHtml: (input: { arrayBuffer: ArrayBuffer; styleMap?: string[]; transformDocument?: (element: MammothElement) => MammothElement }) => Promise<{ value: string }> };
+    convertToHtml?: (input: { arrayBuffer: ArrayBuffer }, options?: { styleMap?: string[]; transformDocument?: (element: MammothElement) => MammothElement }) => Promise<{ value: string }>;
+    default?: { convertToHtml: (input: { arrayBuffer: ArrayBuffer }, options?: { styleMap?: string[]; transformDocument?: (element: MammothElement) => MammothElement }) => Promise<{ value: string }> };
   };
   const mammoth = mammothModule.default || mammothModule;
   if (!mammoth.convertToHtml) throw new Error('Word 预览组件加载失败');
 
-  const result = await mammoth.convertToHtml({
-    arrayBuffer: buffer,
-    styleMap: [
-      "p[style-name='align-center'] => p.align-center:fresh",
-      "p[style-name='align-right'] => p.align-right:fresh",
-      "p[style-name='align-justify'] => p.align-justify:fresh",
-    ],
-    transformDocument: transformWordAlignment,
-  });
+  const result = await mammoth.convertToHtml(
+    { arrayBuffer: buffer },
+    {
+      styleMap: [
+        "p[style-name='align-center'] => p.align-center:fresh",
+        "p[style-name='align-right'] => p.align-right:fresh",
+        "p[style-name='align-justify'] => p.align-justify:fresh",
+      ],
+      transformDocument: transformWordAlignment,
+    },
+  );
   return sanitizeWordHtml(result.value);
 }
 
