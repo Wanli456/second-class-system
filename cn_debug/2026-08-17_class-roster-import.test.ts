@@ -15,6 +15,15 @@ assert.deepEqual(unified.students, [{ className: '计算机2101', studentId: '00
 const sheets = parseRosterWorkbook(workbookBuffer({ 计算机2102: [['学号', '姓名'], ['002', '李四']] }));
 assert.deepEqual(sheets.students, [{ className: '计算机2102', studentId: '002', studentName: '李四' }]);
 
+const multipleSheets = parseRosterWorkbook(workbookBuffer({
+  计算机2102: [['学号', '姓名'], ['002', '李四']],
+  计算机2103: [['班级', '学号', '姓名'], ['计算机2103', '003', '王五']],
+}));
+assert.deepEqual(multipleSheets.students, [
+  { className: '计算机2102', studentId: '002', studentName: '李四' },
+  { className: '计算机2103', studentId: '003', studentName: '王五' },
+]);
+
 const invalid = parseRosterWorkbook(workbookBuffer({ 计算机2103: [['学号', '姓名'], ['', '王五']] }));
 assert.equal(invalid.students.length, 0);
 assert.equal(invalid.errors.length, 1);
