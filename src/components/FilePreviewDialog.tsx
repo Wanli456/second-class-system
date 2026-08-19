@@ -171,7 +171,7 @@ function DocumentError({ message }: { message: string }) {
 function WordPreview({ html }: { html: string }) {
   return (
     <article
-      className="mx-auto min-h-[24rem] w-full max-w-[794px] select-text rounded bg-white p-6 leading-[1.5] [&_a]:text-blue-700 [&_a]:underline [&_img]:max-h-[32rem] [&_img]:max-w-full [&_img]:object-contain [&_p]:whitespace-pre-wrap [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-300 [&_td]:p-2 [&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-50 [&_th]:p-2 [&_.align-center]:text-center [&_.align-right]:text-right [&_.align-justify]:text-justify [&_.indent-first-line]:[text-indent:2em]"
+      className="mx-auto min-h-[24rem] w-full max-w-[794px] select-text rounded bg-white p-6 leading-[1.5] [&_a]:text-blue-700 [&_a]:underline [&_img]:max-h-[32rem] [&_img]:max-w-full [&_img]:object-contain [&_p]:whitespace-pre-wrap [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-300 [&_td]:p-2 [&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-50 [&_th]:p-2 [&_.align-center]:text-center [&_.align-center_img]:mx-auto [&_.align-center_img]:block [&_.align-right]:text-right [&_.align-justify]:text-justify [&_.indent-first-line]:[text-indent:2em]"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
