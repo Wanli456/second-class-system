@@ -2,14 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission, requireUser } from '@/lib/auth';
 import { ensureDatabaseSchema, query, queryOne } from '@/storage/database/supabase-client';
 
-type NormalizedRosterStudent = { studentId: string; studentName: string };
+type NormalizedRosterStudent = { className: string; studentId: string; studentName: string };
 
 function normalizeStudent(value: unknown): NormalizedRosterStudent | null {
   if (!value || typeof value !== 'object') return null;
-  const student = value as { student_id?: unknown; student_name?: unknown };
-  const studentId = String(student.student_id || '').trim();
-  const studentName = String(student.student_name || '').trim();
-  return studentId && studentName ? { studentId, studentName } : null;
+  const student = value as {
+    class_name?: unknown;
+    className?: unknown;
+    student_id?: unknown;
+    studentId?: unknown;
+    student_name?: unknown;
+    studentName?: unknown;
+  };
+  const firstText = (...values: unknown[]) => values.map((value) => String(value ?? '').trim()).find(Boolean) || '';
+  const className = firstText(student.class_name, student.className);
+  const studentId = firstText(student.student_id, student.studentId);
+  const studentName = firstText(student.student_name, student.studentName);
+  return studentId && studentName ? { className, studentId, studentName } : null;
 }
 
 export async function GET(request: NextRequest) {
@@ -39,25 +48,27 @@ export async function POST(request: NextRequest) {
     const auth = await requirePermission(request, 'admin');
     if (auth.response) return auth.response;
     const body = await request.json();
-    const className = String(body.className || '').trim();
+    const defaultClassName = String(body.className || '').trim();
     const source: unknown[] = Array.isArray(body.students) ? body.students : [body];
     const students = [...new Map(
       source
         .map((student) => normalizeStudent(student))
         .filter((student): student is NormalizedRosterStudent => student !== null)
-        .map((student) => [student.studentId, student]),
+        .map((student) => ({ ...student, className: student.className || defaultClassName }))
+        .filter((student) => student.className)
+        .map((student) => [`${student.className}\u0000${student.studentId}`, student]),
     ).values()];
-    if (!className || !students.length) return NextResponse.json({ success: false, error: '请填写班级、学号和姓名' }, { status: 400 });
+    if (!students.length) return NextResponse.json({ success: false, error: '请提供班级、学号和姓名' }, { status: 400 });
     const data = [];
     for (const student of students) {
       const row = await queryOne(
         `INSERT INTO class_roster (class_name,student_id,student_name) VALUES ($1,$2,$3)
          ON CONFLICT (class_name,student_id) DO UPDATE SET student_name=EXCLUDED.student_name,updated_at=NOW()
          RETURNING id,class_name,student_id,student_name`,
-        [className, student.studentId, student.studentName],
+        [student.className, student.studentId, student.studentName],
       );
       if (row) data.push(row);
-      await query('UPDATE users SET class_name=$1 WHERE student_id=$2', [className, student.studentId]);
+      await query('UPDATE users SET class_name=$1 WHERE student_id=$2', [student.className, student.studentId]);
     }
     return NextResponse.json({ success: true, data });
   } catch (error) {
