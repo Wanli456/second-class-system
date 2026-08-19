@@ -803,6 +803,64 @@ function AdminPage() {
     activity.scope_names,
     activity.scoring_status,
   ]));
+  const filteredPendingScoring = filteredScoringList.filter(activity => activity.scoring_status === '待赋分');
+  const filteredProcessedScoring = filteredScoringList.filter(activity => activity.scoring_status === '已赋分');
+
+  const renderScoringCard = (a: ScoringActivity) => {
+    const isExpanded = expandedScoring === a.id;
+    const canConfirm = Boolean(a.scoring_table_url) && (a.level !== '校级' || Boolean(a.record_photo_url));
+
+    return (
+      <article key={a.id} className={cn(
+        'overflow-hidden rounded-xl border bg-white shadow-sm transition-colors',
+        a.scoring_status === '待赋分' ? 'border-amber-200' : 'border-slate-200',
+      )}>
+        <button
+          type="button"
+          onClick={() => setExpandedScoring(isExpanded ? null : a.id)}
+          className="flex w-full items-start justify-between gap-4 p-4 text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600"
+          aria-expanded={isExpanded}
+          aria-controls={`scoring-detail-${a.id}`}
+        >
+          <span className="min-w-0">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="truncate font-semibold text-slate-950">{a.full_name}</span>
+              <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', STATUS_COLORS[a.scoring_status] || 'bg-slate-100 text-slate-700')}>
+                {a.scoring_status}
+              </span>
+            </span>
+            <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+              <span className="font-mono tabular-nums text-slate-600">{a.id}</span>
+              <CategoryBadge category={a.category} primary={a.category_primary} secondary={a.category_secondary} topLevelOnly />
+              <span>{a.level}</span>
+              <span>负责人：{a.leader_name}</span>
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center gap-2 text-slate-400">
+            {isExpanded ? <ChevronUp className="size-4" aria-hidden="true" /> : <ChevronDown className="size-4" aria-hidden="true" />}
+            <span className="sr-only">{isExpanded ? '收起详情' : '展开详情'}</span>
+          </span>
+        </button>
+        {isExpanded && (
+          <div id={`scoring-detail-${a.id}`} className="border-t border-slate-200 bg-slate-50/70 px-4 pb-4 pt-4">
+            <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-3">
+              <span>活动时间：{formatDateTime(a.start_time)} 至 {formatDateTime(a.end_time)}</span>
+              <span className="text-sky-700">活动报名时间：{a.registration_start_time && a.registration_end_time ? `${formatDateTime(a.registration_start_time)} 至 ${formatDateTime(a.registration_end_time)}` : '未填写（历史记录）'}</span>
+              <span className="flex items-center gap-2">分类：<CategoryBadge category={a.category} primary={a.category_primary} secondary={a.category_secondary} /></span>
+              <span>主办/联办单位：{formatActivityScopes(a)}</span>
+              <span>负责人：{a.leader_name}（{a.leader_phone}）</span>
+              <span>实际赋分材料提交人：{a.scoring_material_submitter_name || '-'}{a.scoring_material_submitter_student_id ? `（${a.scoring_material_submitter_student_id}）` : ''}</span>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-3 border-t border-slate-200 pt-4 text-sm">
+              <div className="flex items-center gap-2"><span className="text-slate-500">赋分表：</span>{a.scoring_table_url ? <div className="flex items-center gap-2"><FilePreviewLink url={a.scoring_table_url} fileName={a.scoring_table_file_name} label="查看赋分表" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /><a href={a.scoring_table_url} download className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"><Download className="size-3" aria-hidden="true" />下载</a></div> : <span className="text-xs text-red-600">负责人尚未上传赋分表</span>}</div>
+              {a.level === '校级' && <div className="flex items-center gap-2"><span className="text-slate-500">备案表照片：</span>{a.record_photo_url ? <div className="flex items-center gap-2"><FilePreviewLink url={a.record_photo_url} fileName={a.record_photo_file_name} label="查看备案表照片" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /><a href={a.record_photo_url} download className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"><Download className="size-3" aria-hidden="true" />下载</a></div> : <span className="text-xs text-red-600">未上传备案表照片（无法赋分）</span>}</div>}
+            </div>
+            {a.scoring_status === '待赋分' && <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4"><Button type="button" onClick={() => handleScoring(a.id, a.level)} disabled={scoringInProgress || !canConfirm} className="bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">{scoringInProgress ? '处理中...' : '确认赋分'}</Button>{!canConfirm && <span className="text-xs text-amber-700">请等待负责人上传完整材料</span>}</div>}
+          </div>
+        )}
+      </article>
+    );
+  };
 
   if (!initialized || !authResolved) {
     return <AuthLoadingScreen />;
@@ -889,31 +947,42 @@ function AdminPage() {
     >
       <div className="space-y-6">
         {/* Page Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">管理后台</h1>
-            <p className="mt-1 text-sm text-gray-500">{activeTabLabel || ROLE_LABELS[role!]}</p>
+        <header className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-teal-700">管理工作台</p>
+              <h1 className="mt-1 text-balance text-2xl font-semibold text-slate-950 sm:text-3xl">{activeTabLabel || ROLE_LABELS[role!]}</h1>
+              <p className="mt-2 max-w-2xl text-pretty text-sm text-slate-500">集中处理活动、审核、赋分和请假记录。选择一项工作开始处理。</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              <span className="block text-xs text-slate-500">当前身份</span>
+              <span className="mt-1 block font-medium text-slate-900">{user?.name || ROLE_LABELS[role!]}</span>
+            </div>
           </div>
-        </div>
+        </header>
 
         {/* Tabs Navigation */}
-        <div className="border-b border-gray-200">
-          <nav className="flex gap-6 overflow-x-auto">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <nav className="flex gap-1 overflow-x-auto p-2" aria-label="管理功能" role="tablist">
             {tabs.map(tab => (
               <button
                 key={tab.key}
+                type="button"
                 onClick={() => handleTabChange(tab.key)}
-                className={`flex shrink-0 items-center gap-2 border-b-2 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                role="tab"
+                aria-selected={activeTab === tab.key}
+                aria-controls={`admin-panel-${tab.key}`}
+                className={`flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 sm:px-4 ${
                   activeTab === tab.key
-                    ? 'border-teal-600 text-teal-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950'
                 }`}
               >
-                <tab.icon className="h-4 w-4 shrink-0" />
+                <tab.icon className="size-4 shrink-0" aria-hidden="true" />
                 <span>{tab.label}</span>
                 {tab.count > 0 && (
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${
-                    activeTab === tab.key ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-600'
+                  <span className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${
+                    activeTab === tab.key ? 'bg-teal-500 text-white' : 'bg-slate-100 text-slate-600'
                   }`}>{tab.count}</span>
                 )}
               </button>
@@ -955,35 +1024,58 @@ function AdminPage() {
           <>
             {/* ===== 活动总表 ===== */}
             {activeTab === 'activities' && isAdmin && (
-              <div>
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <section id="admin-panel-activities" role="tabpanel" aria-label="活动总表" className="space-y-5">
+                <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="flex flex-col gap-1">
+                    <p className="text-sm font-medium text-teal-700">活动台账</p>
+                    <h2 className="text-balance text-xl font-semibold text-slate-950">活动总表</h2>
+                    <p className="text-sm text-slate-500">查看活动状态、材料和负责人信息，支持直接编辑或删除。</p>
+                  </div>
+                  <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                      <div className="relative min-w-0 sm:w-64">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
                       <input
                         type="text"
                         placeholder="搜索活动..."
+                        aria-label="搜索活动"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="rounded-md border border-gray-300 py-1.5 pl-8 pr-3 text-sm focus:border-[#1e3a5f] focus:outline-none"
+                        className="h-10 w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20"
                       />
                     </div>
-                    <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+                    <select aria-label="按分类筛选" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20">
                       <option value="">全部分类</option>
                       {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+                    <select aria-label="按活动状态筛选" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20">
                       <option value="">全部状态</option>
                       <option value="正常活动">正常活动</option>
                       <option value="活动取消">活动取消</option>
                     </select>
                   </div>
-                  <button
+                  <Button
+                    type="button"
                     onClick={() => setShowAddForm(true)}
-                    className="flex items-center gap-1.5 rounded-md bg-[#1e3a5f] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#1e3a5f]/90"
+                    className="w-full bg-slate-900 text-white hover:bg-slate-800 sm:w-auto"
                   >
-                    <Plus className="h-4 w-4" /> 新增活动
-                  </button>
+                    <Plus className="size-4" aria-hidden="true" /> 新增活动
+                  </Button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {[
+                    ['活动总数', activities.length, 'text-slate-950'],
+                    ['正常活动', activities.filter(activity => activity.status === '正常活动').length, 'text-emerald-700'],
+                    ['活动取消', activities.filter(activity => activity.status === '活动取消').length, 'text-red-700'],
+                    ['待赋分', activities.filter(activity => (activity.scoring_status || '待赋分') === '待赋分').length, 'text-amber-700'],
+                  ].map(([label, value, color]) => (
+                    <div key={label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <p className="text-xs text-slate-500">{label}</p>
+                      <p className={cn('mt-2 text-2xl font-semibold tabular-nums', color)}>{value}</p>
+                    </div>
+                  ))}
                 </div>
 
                 {showAddForm && (
@@ -1019,41 +1111,42 @@ function AdminPage() {
                   />
                 )}
 
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {filteredActivities.map(a => {
                     const isExpanded = expandedActivity === a.id;
                     return (
-                      <div key={a.id} className="rounded-lg border border-gray-200 bg-white shadow-sm">
-                        <div className="flex items-center gap-3 p-3">
+                      <article key={a.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                        <div className="flex items-center gap-3 p-4">
                           <button
                             type="button"
                             onClick={() => setExpandedActivity(isExpanded ? null : a.id)}
-                            className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left hover:bg-gray-50"
+                            className="flex min-w-0 flex-1 items-start justify-between gap-3 text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600"
                             aria-expanded={isExpanded}
+                            aria-controls={`activity-detail-${a.id}`}
                           >
                             <span className="min-w-0">
-                              <span className="block truncate font-medium text-gray-900">{a.full_name}</span>
-                              <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
-                                <span className="font-mono">{a.id}</span>
+                              <span className="block truncate font-semibold text-slate-950">{a.full_name}</span>
+                              <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                                <span className="font-mono tabular-nums text-slate-600">{a.id}</span>
                                 <CategoryBadge category={a.category} primary={a.category_primary} secondary={a.category_secondary} topLevelOnly />
                                 <span>{a.level}</span>
                                 <span>{a.leader_name}</span>
                               </span>
                             </span>
                             <span className="flex shrink-0 items-center gap-2">
-                              <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[a.status] || 'bg-gray-100 text-gray-700'}`}>{a.status}</span>
-                              <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[a.scoring_status] || 'bg-gray-100 text-gray-700'}`}>{a.scoring_status || '待赋分'}</span>
-                              {isExpanded ? <ChevronUp className="size-4 text-gray-400" /> : <ChevronDown className="size-4 text-gray-400" />}
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[a.status] || 'bg-slate-100 text-slate-700'}`}>{a.status}</span>
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[a.scoring_status] || 'bg-slate-100 text-slate-700'}`}>{a.scoring_status || '待赋分'}</span>
+                              {isExpanded ? <ChevronUp className="size-4 text-slate-400" aria-hidden="true" /> : <ChevronDown className="size-4 text-slate-400" aria-hidden="true" />}
                             </span>
                           </button>
                           <div className="flex shrink-0 gap-1">
-                            <button type="button" onClick={() => setEditActivity(a)} aria-label={`编辑${a.full_name}`} className="rounded p-1.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600"><Pencil className="size-4" /></button>
-                            <button type="button" onClick={() => handleDeleteActivity(a.id)} aria-label={`删除${a.full_name}`} className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="size-4" /></button>
+                            <button type="button" onClick={() => setEditActivity(a)} aria-label={`编辑${a.full_name}`} className="rounded-lg p-2 text-slate-400 hover:bg-sky-50 hover:text-sky-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"><Pencil className="size-4" aria-hidden="true" /></button>
+                            <button type="button" onClick={() => handleDeleteActivity(a.id)} aria-label={`删除${a.full_name}`} className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"><Trash2 className="size-4" aria-hidden="true" /></button>
                           </div>
                         </div>
                         {isExpanded && (
-                          <div className="border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-3">
-                            <div className="grid gap-2 text-xs text-gray-600 sm:grid-cols-2 lg:grid-cols-3">
+                          <div id={`activity-detail-${a.id}`} className="border-t border-slate-200 bg-slate-50/70 px-4 pb-4 pt-4">
+                            <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-3">
                               <span>活动时间：{formatDateTime(a.start_time)} 至 {formatDateTime(a.end_time)}</span>
                               <span className="text-sky-700">活动报名时间：{a.registration_start_time && a.registration_end_time ? `${formatDateTime(a.registration_start_time)} 至 ${formatDateTime(a.registration_end_time)}` : '未填写（历史记录）'}</span>
                               <span className="flex items-center gap-2">分类：<CategoryBadge category={a.category} primary={a.category_primary} secondary={a.category_secondary} /></span>
@@ -1065,27 +1158,31 @@ function AdminPage() {
                               <span>活动状态：{a.status}</span>
                               <span>赋分状态：{a.scoring_status || '待赋分'}</span>
                             </div>
-                            <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-200 pt-3">
-                              {a.plan_file_url ? <FilePreviewLink url={a.plan_file_url} fileName={a.plan_file_name} label="策划书" className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50" /> : <span className="text-xs text-gray-400">未上传策划书</span>}
-                              {a.record_file_url ? <FilePreviewLink url={a.record_file_url} fileName={a.record_file_name} label="备案表" className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50" /> : <span className="text-xs text-gray-400">未上传备案表</span>}
-                              {a.scoring_table_url ? <FilePreviewLink url={a.scoring_table_url} fileName={a.scoring_table_file_name} label="赋分表" className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50" /> : <span className="text-xs text-gray-400">未上传赋分表</span>}
-                              {a.level === '校级' && (a.record_photo_url ? <FilePreviewLink url={a.record_photo_url} fileName={a.record_photo_file_name} label="备案表照片" className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50" /> : <span className="text-xs text-gray-400">未上传备案表照片</span>)}
+                            <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-200 pt-4">
+                              {a.plan_file_url ? <FilePreviewLink url={a.plan_file_url} fileName={a.plan_file_name} label="策划书" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /> : <span className="text-xs text-slate-400">未上传策划书</span>}
+                              {a.record_file_url ? <FilePreviewLink url={a.record_file_url} fileName={a.record_file_name} label="备案表" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /> : <span className="text-xs text-slate-400">未上传备案表</span>}
+                              {a.scoring_table_url ? <FilePreviewLink url={a.scoring_table_url} fileName={a.scoring_table_file_name} label="赋分表" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /> : <span className="text-xs text-slate-400">未上传赋分表</span>}
+                              {a.level === '校级' && (a.record_photo_url ? <FilePreviewLink url={a.record_photo_url} fileName={a.record_photo_file_name} label="备案表照片" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /> : <span className="text-xs text-slate-400">未上传备案表照片</span>)}
                             </div>
                           </div>
                         )}
-                      </div>
+                      </article>
                     );
                   })}
-                  {filteredActivities.length === 0 && <div className="rounded-lg border border-gray-200 bg-white px-3 py-8 text-center text-gray-400">暂无活动数据</div>}
+                  {filteredActivities.length === 0 && <div className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-12 text-center text-slate-500"><p className="font-medium text-slate-700">暂无活动数据</p><p className="mt-1 text-sm">可以调整筛选条件，或点击“新增活动”创建第一条记录。</p></div>}
                 </div>
-              </div>
+              </section>
             )}
 
             {/* ===== 活动审核 ===== */}
             {activeTab === 'review' && canPublish && (
-              <div>
-                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <h2 className="text-base font-semibold text-gray-800">活动审核</h2>
+              <section id="admin-panel-review" role="tabpanel" aria-label="活动审核" className="space-y-5">
+                <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-end sm:justify-between sm:p-5">
+                  <div>
+                    <p className="text-sm font-medium text-teal-700">提交审核</p>
+                    <h2 className="mt-1 text-balance text-xl font-semibold text-slate-950">活动审核</h2>
+                    <p className="mt-2 text-sm text-slate-500">核对活动信息与附件后，决定是否通过本次提交。</p>
+                  </div>
                   <div className="relative w-full sm:max-w-md">
                     <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                     <Input
@@ -1100,23 +1197,23 @@ function AdminPage() {
                 </div>
 
                 {filteredPendingSubmissions.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="mb-3 text-sm font-medium text-gray-600">待审核 ({filteredPendingSubmissions.length})</h3>
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 sm:p-5">
+                    <div className="mb-4 flex items-center justify-between gap-3"><div><h3 className="text-base font-semibold text-slate-950">待审核</h3><p className="mt-1 text-sm text-slate-500">需要你处理的活动提交</p></div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-sm font-semibold tabular-nums text-amber-800">{filteredPendingSubmissions.length}</span></div>
                     <div className="space-y-2">
                       {filteredPendingSubmissions.map(s => {
                         const isExpanded = expandedSubmission === s.id;
                         return (
-                          <div key={s.id} className="rounded-lg border border-amber-200 bg-amber-50/50">
+                          <div key={s.id} className="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm">
                             <button type="button" onClick={() => setExpandedSubmission(isExpanded ? null : s.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-amber-50">
                               <span className="min-w-0">
                                 <span className="block truncate font-medium text-gray-900">{s.full_name}</span>
                                 <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500"><span>{s.leader_name}</span><span>{s.level}</span><CategoryBadge category={s.category} primary={s.category_primary} secondary={s.category_secondary} topLevelOnly /><span>提交于 {formatDateTime(s.created_at)}</span></span>
                               </span>
-                              <span className="flex shrink-0 items-center gap-2 text-xs text-amber-700"><span>待审核</span>{isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}</span>
+                              <span className="flex shrink-0 items-center gap-2 text-xs text-amber-700"><span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium">待审核</span>{isExpanded ? <ChevronUp className="size-4" aria-hidden="true" /> : <ChevronDown className="size-4" aria-hidden="true" />}</span>
                             </button>
                             {isExpanded && (
                               <div className="border-t border-amber-200 px-3 pb-3 pt-3">
-                                <div className="grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
+                                <div className="grid gap-2 text-sm text-gray-600 sm:grid-cols-2">
                                   <span>活动时间：{formatDateTime(s.start_time)} 至 {formatDateTime(s.end_time)}</span>
                                   <span className="text-sky-700">活动报名时间：{s.registration_start_time && s.registration_end_time ? `${formatDateTime(s.registration_start_time)} 至 ${formatDateTime(s.registration_end_time)}` : '未填写（历史记录）'}</span>
                                   <span className="flex items-center gap-2"><span>分类</span><CategoryBadge category={s.category} primary={s.category_primary} secondary={s.category_secondary} /></span>
@@ -1144,20 +1241,20 @@ function AdminPage() {
                 )}
 
                 {filteredProcessedSubmissions.length > 0 && (
-                  <div>
-                    <h3 className="mb-3 text-sm font-medium text-gray-600">已处理 ({filteredProcessedSubmissions.length})</h3>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
+                    <div className="mb-4 flex items-center justify-between gap-3"><div><h3 className="text-base font-semibold text-slate-950">已处理</h3><p className="mt-1 text-sm text-slate-500">历史审核结果可展开查看详情</p></div><span className="rounded-full bg-slate-200 px-2.5 py-1 text-sm font-semibold tabular-nums text-slate-700">{filteredProcessedSubmissions.length}</span></div>
                     <div className="space-y-2">
                       {filteredProcessedSubmissions.map(s => {
                         const isExpanded = expandedSubmission === s.id;
                         return (
-                          <div key={s.id} className="rounded-lg border border-gray-200 bg-white">
+                          <div key={s.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                             <button type="button" onClick={() => setExpandedSubmission(isExpanded ? null : s.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-gray-50" aria-expanded={isExpanded}>
                               <span className="min-w-0"><span className="block truncate font-medium text-gray-900">{s.full_name}</span><span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500"><span>{s.leader_name}</span><CategoryBadge category={s.category} primary={s.category_primary} secondary={s.category_secondary} topLevelOnly /><span>{s.level}</span><span>{formatActivityScopes(s)}</span><span>实际活动信息提交人：{s.activity_submitter_name || '-'}</span></span></span>
                               <span className="flex shrink-0 items-center gap-2"><span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[s.review_status as ReviewStatus]}`}>{s.review_status}</span>{isExpanded ? <ChevronUp className="size-4 text-gray-400" /> : <ChevronDown className="size-4 text-gray-400" />}</span>
                             </button>
                             {isExpanded && (
                               <div className="border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-3">
-                                <div className="grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
+                                <div className="grid gap-2 text-sm text-gray-600 sm:grid-cols-2">
                                   <span>活动时间：{formatDateTime(s.start_time)} 至 {formatDateTime(s.end_time)}</span>
                                   <span className="text-sky-700">活动报名时间：{s.registration_start_time && s.registration_end_time ? `${formatDateTime(s.registration_start_time)} 至 ${formatDateTime(s.registration_end_time)}` : '未填写（历史记录）'}</span>
                                   <span className="flex items-center gap-2">分类：<CategoryBadge category={s.category} primary={s.category_primary} secondary={s.category_secondary} /></span>
@@ -1181,18 +1278,22 @@ function AdminPage() {
                 )}
 
                 {submissions.length === 0 ? (
-                  <div className="py-16 text-center text-gray-400">暂无提交记录</div>
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-12 text-center text-slate-500"><p className="font-medium text-slate-700">暂无提交记录</p><p className="mt-1 text-sm">新的活动提交会出现在这里。</p></div>
                 ) : filteredPendingSubmissions.length === 0 && filteredProcessedSubmissions.length === 0 ? (
                   <div className="rounded-lg border border-gray-200 bg-white px-3 py-8 text-center text-gray-500">没有匹配的活动审核记录</div>
                 ) : null}
-              </div>
+              </section>
             )}
 
             {/* ===== 请假审核 ===== */}
             {activeTab === 'leave' && canReviewLeave && (
-              <div>
-                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <h2 className="text-base font-semibold text-gray-800">请假审核</h2>
+              <section id="admin-panel-leave" role="tabpanel" aria-label="请假审核" className="space-y-5">
+                <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-end sm:justify-between sm:p-5">
+                  <div>
+                    <p className="text-sm font-medium text-teal-700">请假申请</p>
+                    <h2 className="mt-1 text-balance text-xl font-semibold text-slate-950">请假审核</h2>
+                    <p className="mt-2 text-sm text-slate-500">支持个人与集体请假审核，展开记录查看附件和成员详情。</p>
+                  </div>
                   <div className="relative w-full sm:max-w-md">
                     <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                     <Input
@@ -1207,13 +1308,13 @@ function AdminPage() {
                 </div>
 
                 {filteredPendingLeaveGroups.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="mb-3 text-sm font-medium text-gray-600">待审核集体请假 ({filteredPendingLeaveGroups.length})</h3>
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 sm:p-5">
+                    <div className="mb-4 flex items-center justify-between gap-3"><div><h3 className="text-base font-semibold text-slate-950">待审核集体请假</h3><p className="mt-1 text-sm text-slate-500">整组处理，展开后核对成员</p></div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-sm font-semibold tabular-nums text-amber-800">{filteredPendingLeaveGroups.length}</span></div>
                     <div className="space-y-3">
                       {filteredPendingLeaveGroups.map(group => {
                         const isExpanded = expandedLeaveGroup === group.id;
                         return (
-                          <div key={group.id} className="rounded-lg border border-amber-200 bg-amber-50/50">
+                          <div key={group.id} className="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm">
                             <button type="button" onClick={() => void loadLeaveGroupMembers(group.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-amber-50" aria-expanded={isExpanded}>
                               <span className="min-w-0">
                                 <span className="block truncate font-medium text-gray-900">{group.class_name}集体请假</span>
@@ -1223,7 +1324,7 @@ function AdminPage() {
                             </button>
                             {isExpanded && (
                               <div className="border-t border-amber-200 px-3 pb-3 pt-3">
-                                <p className="text-xs text-gray-600">请假时间：{formatDateTime(group.start_time)} 至 {formatDateTime(group.end_time)}</p>
+                                <p className="text-sm text-gray-600">请假时间：{formatDateTime(group.start_time)} 至 {formatDateTime(group.end_time)}</p>
                                 <div className="mt-3 rounded-md border border-amber-100 bg-white p-3">
                                   <div className="flex flex-wrap gap-2">{(leaveGroupMembers[group.id] || []).map(member => <span key={member.id} className="rounded border px-2 py-1 text-xs text-gray-600">{member.student_name}（{member.student_id}）</span>)}</div>
                                   {leaveGroupMembers[group.id]?.[0]?.leave_image_url && <div className="mt-3"><FilePreviewLink url={leaveGroupMembers[group.id][0].leave_image_url} fileName={leaveGroupMembers[group.id][0].leave_image_name} label="查看请假条" className="text-xs text-[#1e3a5f]" /></div>}
@@ -1243,13 +1344,13 @@ function AdminPage() {
                 )}
 
                 {filteredPendingLeaves.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="mb-3 text-sm font-medium text-gray-600">待审核个人请假 ({filteredPendingLeaves.length})</h3>
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 sm:p-5">
+                    <div className="mb-4 flex items-center justify-between gap-3"><div><h3 className="text-base font-semibold text-slate-950">待审核个人请假</h3><p className="mt-1 text-sm text-slate-500">需要你处理的个人申请</p></div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-sm font-semibold tabular-nums text-amber-800">{filteredPendingLeaves.length}</span></div>
                     <div className="space-y-3">
                       {filteredPendingLeaves.map(l => {
                         const isExpanded = expandedLeaveRequest === l.id;
                         return (
-                          <div key={l.id} className="rounded-lg border border-amber-200 bg-amber-50/50">
+                          <div key={l.id} className="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm">
                             <button type="button" onClick={() => setExpandedLeaveRequest(isExpanded ? null : l.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-amber-50" aria-expanded={isExpanded}>
                               <span className="min-w-0">
                                 <span className="block truncate font-medium text-gray-900">{l.student_name}（{l.student_id}）</span>
@@ -1259,7 +1360,7 @@ function AdminPage() {
                             </button>
                             {isExpanded && (
                               <div className="border-t border-amber-200 px-3 pb-3 pt-3">
-                                <p className="text-xs text-gray-600">请假时间：{formatDateTime(l.start_time)} 至 {formatDateTime(l.end_time)}</p>
+                                <p className="text-sm text-gray-600">请假时间：{formatDateTime(l.start_time)} 至 {formatDateTime(l.end_time)}</p>
                                 {l.leave_image_url && <div className="mt-3"><span className="text-xs text-gray-500">请假条截图：{l.leave_image_name || '已上传'}</span><div className="mt-1"><FilePreviewLink url={l.leave_image_url} fileName={l.leave_image_name} label="查看请假条" className="text-xs text-[#1e3a5f]" /></div></div>}
                                 <div className="mt-3 flex flex-wrap items-center gap-2">
                                   <input type="text" placeholder="审核备注（可选）" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} className="min-w-48 flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-[#1e3a5f] focus:outline-none" />
@@ -1276,13 +1377,13 @@ function AdminPage() {
                 )}
 
                 {filteredProcessedLeaves.length > 0 && (
-                  <div>
-                    <h3 className="mb-3 text-sm font-medium text-gray-600">已处理 ({filteredProcessedLeaves.length})</h3>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
+                    <div className="mb-4 flex items-center justify-between gap-3"><div><h3 className="text-base font-semibold text-slate-950">已处理个人请假</h3><p className="mt-1 text-sm text-slate-500">历史审核结果</p></div><span className="rounded-full bg-slate-200 px-2.5 py-1 text-sm font-semibold tabular-nums text-slate-700">{filteredProcessedLeaves.length}</span></div>
                     <div className="space-y-2">
                       {filteredProcessedLeaves.map(l => {
                         const isExpanded = expandedLeaveRequest === l.id;
                         return (
-                          <div key={l.id} className="rounded-lg border border-gray-200 bg-white">
+                          <div key={l.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                             <button type="button" onClick={() => setExpandedLeaveRequest(isExpanded ? null : l.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-gray-50" aria-expanded={isExpanded}>
                               <span className="min-w-0">
                                 <span className="block truncate font-medium text-gray-900">{l.student_name}（{l.student_id}）</span>
@@ -1291,7 +1392,7 @@ function AdminPage() {
                               <span className="flex shrink-0 items-center gap-2"><span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[l.review_status as LeaveStatus]}`}>{l.review_status}</span>{isExpanded ? <ChevronUp className="size-4 text-gray-400" /> : <ChevronDown className="size-4 text-gray-400" />}</span>
                             </button>
                             {isExpanded && (
-                              <div className="border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-3 text-xs text-gray-600">
+                              <div className="border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-3 text-sm text-gray-600">
                                 <div className="grid gap-2 sm:grid-cols-2"><span>申请人：{l.applicant_name || '-'}{l.applicant_student_id ? `（${l.applicant_student_id}）` : ''}</span><span>班级：{l.class_name}</span><span>请假时间：{formatDateTime(l.start_time)} 至 {formatDateTime(l.end_time)}</span><span>活动：{l.activity_name || '-'}</span><span>审核备注：{l.review_note || '-'}</span></div>
                                 {l.leave_image_url && <div className="mt-3"><FilePreviewLink url={l.leave_image_url} fileName={l.leave_image_name} label="查看请假条" className="text-[#1e3a5f]" /></div>}
                               </div>
@@ -1304,18 +1405,18 @@ function AdminPage() {
                 )}
 
                 {filteredProcessedLeaveGroups.length > 0 && (
-                  <div className="mt-6">
-                    <h3 className="mb-3 text-sm font-medium text-gray-600">已处理集体请假 ({filteredProcessedLeaveGroups.length})</h3>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
+                    <div className="mb-4 flex items-center justify-between gap-3"><div><h3 className="text-base font-semibold text-slate-950">已处理集体请假</h3><p className="mt-1 text-sm text-slate-500">历史集体申请</p></div><span className="rounded-full bg-slate-200 px-2.5 py-1 text-sm font-semibold tabular-nums text-slate-700">{filteredProcessedLeaveGroups.length}</span></div>
                     <div className="space-y-2">
                       {filteredProcessedLeaveGroups.map(group => {
                         const isExpanded = expandedLeaveGroup === group.id;
                         return (
-                          <div key={group.id} className="rounded-lg border border-gray-200 bg-white">
+                          <div key={group.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                             <button type="button" onClick={() => void loadLeaveGroupMembers(group.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-gray-50" aria-expanded={isExpanded}>
                               <span className="min-w-0"><span className="block truncate font-medium text-gray-900">{group.class_name}集体请假</span><span className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-gray-500"><span>{group.member_count} 人</span><span>发起人：{group.applicant_name || '-'}</span><span>{group.leave_type}</span>{group.activity_name && <span>活动：{group.activity_name}</span>}</span></span>
                               <span className="flex shrink-0 items-center gap-2"><span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[group.review_status]}`}>{group.review_status}</span>{isExpanded ? <ChevronUp className="size-4 text-gray-400" /> : <ChevronDown className="size-4 text-gray-400" />}</span>
                             </button>
-                            {isExpanded && <div className="border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-3 text-xs text-gray-600"><p>请假时间：{formatDateTime(group.start_time)} 至 {formatDateTime(group.end_time)}</p><p className="mt-1">审核备注：{group.review_note || '-'}</p><div className="mt-3 flex flex-wrap gap-2">{(leaveGroupMembers[group.id] || []).map(member => <span key={member.id} className="rounded border bg-white px-2 py-1">{member.student_name}（{member.student_id}）</span>)}</div>{leaveGroupMembers[group.id]?.[0]?.leave_image_url && <div className="mt-3"><FilePreviewLink url={leaveGroupMembers[group.id][0].leave_image_url} fileName={leaveGroupMembers[group.id][0].leave_image_name} label="查看请假条" className="text-[#1e3a5f]" /></div>}</div>}
+                            {isExpanded && <div className="border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-3 text-sm text-gray-600"><p>请假时间：{formatDateTime(group.start_time)} 至 {formatDateTime(group.end_time)}</p><p className="mt-1">审核备注：{group.review_note || '-'}</p><div className="mt-3 flex flex-wrap gap-2">{(leaveGroupMembers[group.id] || []).map(member => <span key={member.id} className="rounded border bg-white px-2 py-1">{member.student_name}（{member.student_id}）</span>)}</div>{leaveGroupMembers[group.id]?.[0]?.leave_image_url && <div className="mt-3"><FilePreviewLink url={leaveGroupMembers[group.id][0].leave_image_url} fileName={leaveGroupMembers[group.id][0].leave_image_name} label="查看请假条" className="text-[#1e3a5f]" /></div>}</div>}
                           </div>
                         );
                       })}
@@ -1324,18 +1425,22 @@ function AdminPage() {
                 )}
 
                 {leaves.length === 0 && leaveGroups.length === 0 ? (
-                  <div className="py-16 text-center text-gray-400">暂无请假记录</div>
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-12 text-center text-slate-500"><p className="font-medium text-slate-700">暂无请假记录</p><p className="mt-1 text-sm">新的请假申请会出现在这里。</p></div>
                 ) : filteredPendingLeaveGroups.length === 0 && filteredPendingLeaves.length === 0 && filteredProcessedLeaves.length === 0 && filteredProcessedLeaveGroups.length === 0 ? (
                   <div className="rounded-lg border border-gray-200 bg-white px-3 py-8 text-center text-gray-500">没有匹配的请假审核记录</div>
                 ) : null}
-              </div>
+              </section>
             )}
 
             {/* ===== 活动赋分 ===== */}
             {activeTab === 'scoring' && canScore && (
-              <div>
-                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <h2 className="text-base font-semibold text-gray-800">活动赋分</h2>
+              <section id="admin-panel-scoring" role="tabpanel" aria-label="活动赋分" className="space-y-5">
+                <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-end sm:justify-between sm:p-5">
+                  <div>
+                    <p className="text-sm font-medium text-teal-700">材料核验</p>
+                    <h2 className="mt-1 text-balance text-xl font-semibold text-slate-950">活动赋分</h2>
+                    <p className="mt-2 text-sm text-slate-500">按处理状态查看活动，确认材料齐全后完成赋分。</p>
+                  </div>
                   <div className="relative w-full sm:max-w-md">
                     <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                     <Input
@@ -1349,54 +1454,30 @@ function AdminPage() {
                   </div>
                 </div>
 
-                <div className="mb-4 flex flex-wrap gap-3 rounded-lg border border-gray-200 bg-white p-3">
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <AlertCircle className="h-4 w-4 text-amber-500" />
-                    <span>院系级活动：仅需上传赋分表即可赋分</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <AlertCircle className="h-4 w-4 text-amber-500" />
-                    <span>校级活动：需要备案表照片 + 赋分表才能赋分</span>
-                  </div>
+                <p className="flex items-center gap-2 text-xs text-slate-500">
+                  <AlertCircle className="size-4 shrink-0 text-slate-400" aria-hidden="true" />
+                  <span>材料要求：院系级活动仅需上传赋分表；校级活动需同时上传备案表照片和赋分表。</span>
+                </p>
+
+                <div className="space-y-5">
+                  <section className="rounded-2xl border border-amber-200 bg-amber-50/35 p-4 sm:p-5" aria-labelledby="pending-scoring-title">
+                    <div className="mb-4 flex items-center justify-between gap-3"><div><h3 id="pending-scoring-title" className="text-base font-semibold text-slate-950">待赋分</h3><p className="mt-1 text-sm text-slate-500">优先处理已提交完整材料的活动</p></div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-sm font-semibold tabular-nums text-amber-800">{filteredPendingScoring.length}</span></div>
+                    <div className="space-y-3">
+                      {filteredPendingScoring.map(renderScoringCard)}
+                      {filteredPendingScoring.length === 0 && <div className="rounded-xl border border-dashed border-amber-300 bg-white px-3 py-10 text-center text-slate-500"><p className="font-medium text-slate-700">暂无待赋分活动</p><p className="mt-1 text-sm">负责人提交赋分材料后会出现在这里。</p></div>}
+                    </div>
+                  </section>
+
+                  <section className="rounded-2xl border border-emerald-200 bg-emerald-50/30 p-4 sm:p-5" aria-labelledby="processed-scoring-title">
+                    <div className="mb-4 flex items-center justify-between gap-3"><div><h3 id="processed-scoring-title" className="text-base font-semibold text-slate-950">已赋分</h3><p className="mt-1 text-sm text-slate-500">已完成赋分的活动记录</p></div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-sm font-semibold tabular-nums text-emerald-800">{filteredProcessedScoring.length}</span></div>
+                    <div className="space-y-3">
+                      {filteredProcessedScoring.map(renderScoringCard)}
+                      {filteredProcessedScoring.length === 0 && <div className="rounded-xl border border-dashed border-emerald-300 bg-white px-3 py-10 text-center text-slate-500"><p className="font-medium text-slate-700">暂无已赋分记录</p><p className="mt-1 text-sm">完成赋分的活动会保留在这里。</p></div>}
+                    </div>
+                  </section>
                 </div>
 
-                <div className="space-y-2">
-                  {filteredScoringList.map(a => {
-                    const isExpanded = expandedScoring === a.id;
-                    const canConfirm = Boolean(a.scoring_table_url) && (a.level !== '校级' || Boolean(a.record_photo_url));
-                    return (
-                      <div key={a.id} className={`rounded-lg border ${a.scoring_status === '待赋分' ? 'border-amber-200 bg-amber-50/50' : 'border-gray-200 bg-white'}`}>
-                        <button type="button" onClick={() => setExpandedScoring(isExpanded ? null : a.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-gray-50" aria-expanded={isExpanded}>
-                          <span className="min-w-0">
-                            <span className="block truncate font-medium text-gray-900">{a.full_name}</span>
-                            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500"><span className="font-mono">{a.id}</span><CategoryBadge category={a.category} primary={a.category_primary} secondary={a.category_secondary} topLevelOnly /><span>{a.level}</span><span>负责人：{a.leader_name}</span><span>赋分材料提交人：{a.scoring_material_submitter_name || '-'}</span></span>
-                          </span>
-                          <span className="flex shrink-0 items-center gap-2"><span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[a.scoring_status] || 'bg-gray-100 text-gray-700'}`}>{a.scoring_status}</span>{isExpanded ? <ChevronUp className="size-4 text-gray-400" /> : <ChevronDown className="size-4 text-gray-400" />}</span>
-                        </button>
-                        {isExpanded && (
-                          <div className="border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-3">
-                            <div className="grid gap-2 text-xs text-gray-600 sm:grid-cols-2 lg:grid-cols-3">
-                              <span>活动时间：{formatDateTime(a.start_time)} 至 {formatDateTime(a.end_time)}</span>
-                              <span className="text-sky-700">活动报名时间：{a.registration_start_time && a.registration_end_time ? `${formatDateTime(a.registration_start_time)} 至 ${formatDateTime(a.registration_end_time)}` : '未填写（历史记录）'}</span>
-                              <span className="flex items-center gap-2">分类：<CategoryBadge category={a.category} primary={a.category_primary} secondary={a.category_secondary} /></span>
-                              <span>主办/联办单位：{formatActivityScopes(a)}</span>
-                              <span>负责人：{a.leader_name}（{a.leader_phone}）</span>
-                              <span>实际活动信息提交人：{a.activity_submitter_name || '-'}{a.activity_submitter_student_id ? `（${a.activity_submitter_student_id}）` : ''}</span>
-                              <span>实际赋分材料提交人：{a.scoring_material_submitter_name || '-'}{a.scoring_material_submitter_student_id ? `（${a.scoring_material_submitter_student_id}）` : ''}</span>
-                            </div>
-                            <div className="mt-3 flex flex-wrap gap-3 border-t border-gray-200 pt-3 text-xs">
-                              <div className="flex items-center gap-2"><span className="text-gray-500">赋分表:</span>{a.scoring_table_url ? <div className="flex items-center gap-2"><FilePreviewLink url={a.scoring_table_url} fileName={a.scoring_table_file_name} label="查看赋分表" className="rounded border border-gray-200 bg-white px-2 py-1 text-[#1e3a5f] hover:bg-blue-50" /><a href={a.scoring_table_url} download className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-emerald-600 hover:bg-emerald-50"><Download className="h-3 w-3" />下载</a></div> : <span className="text-red-500">负责人尚未上传赋分表</span>}</div>
-                              {a.level === '校级' && <div className="flex items-center gap-2"><span className="text-gray-500">备案表照片:</span>{a.record_photo_url ? <div className="flex items-center gap-2"><FilePreviewLink url={a.record_photo_url} fileName={a.record_photo_file_name} label="查看备案表照片" className="rounded border border-gray-200 bg-white px-2 py-1 text-[#1e3a5f] hover:bg-blue-50" /><a href={a.record_photo_url} download className="flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-emerald-600 hover:bg-emerald-50"><Download className="h-3 w-3" />下载</a></div> : <span className="text-red-500">未上传备案表照片（无法赋分）</span>}</div>}
-                            </div>
-                            {a.scoring_status === '待赋分' && <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3"><button type="button" onClick={() => handleScoring(a.id, a.level)} disabled={scoringInProgress || !canConfirm} className="rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">{scoringInProgress ? '处理中...' : '确认赋分'}</button>{!canConfirm && <span className="text-xs text-amber-600">请等待负责人上传完整材料</span>}</div>}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {scoringList.length === 0 ? <div className="rounded-lg border border-gray-200 bg-white px-3 py-8 text-center text-gray-400">暂无可赋分活动</div> : filteredScoringList.length === 0 ? <div className="rounded-lg border border-gray-200 bg-white px-3 py-8 text-center text-gray-500">没有匹配的活动赋分记录</div> : null}
-                </div>
-              </div>
+              </section>
             )}
 
             {/* Users Tab */}
