@@ -8,7 +8,7 @@ import {
   GraduationCap, Lock, LogOut, Table, FileCheck, UserCheck, Award, Users,
   Plus, Pencil, Trash2, Eye, Check, X, Upload, FileText, Image as ImageIcon,
   ChevronDown, ChevronUp, Search, AlertCircle, Download, Building2, BookOpen,
-  KeyRound, ShieldCheck, UserRound,
+  KeyRound, ShieldCheck, UserRound, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import {
   Activity, ActivitySubmission, LeaveRequest,
@@ -39,6 +39,8 @@ type ScoringStatus = '待赋分' | '已赋分';
 type AdminRole = 'admin' | 'leader' | 'student';
 type AdminTab = 'activities' | 'review' | 'scoring' | 'leave' | 'users';
 type UserPermission = 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave';
+
+const USER_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
 const ROLE_LABELS: Record<AdminRole, string> = {
   admin: '管理员',
@@ -1862,11 +1864,16 @@ function UserManagement({
   const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
   const [newDepartment, setNewDepartment] = useState('');
   const [departmentError, setDepartmentError] = useState('');
+  const [userPage, setUserPage] = useState(1);
+  const [userPageSize, setUserPageSize] = useState<number>(USER_PAGE_SIZE_OPTIONS[0]);
 
   const filteredUsers = users.filter((item) => {
     const keyword = userSearch.trim();
     return !keyword || item.name.includes(keyword) || item.studentId.includes(keyword) || (item.department || '').includes(keyword) || (item.className || '').includes(keyword);
   });
+  const totalUserPages = Math.max(1, Math.ceil(filteredUsers.length / userPageSize));
+  const currentUserPage = Math.min(userPage, totalUserPages);
+  const paginatedUsers = filteredUsers.slice((currentUserPage - 1) * userPageSize, currentUserPage * userPageSize);
   const permissions: Array<{ key: UserPermission; label: string }> = [
     { key: 'canPublish', label: '活动审核' },
     { key: 'canScore', label: '活动赋分' },
@@ -1930,6 +1937,14 @@ function UserManagement({
   useEffect(() => {
     void loadDepartments();
   }, []);
+
+  useEffect(() => {
+    setUserPage(1);
+  }, [userSearch]);
+
+  useEffect(() => {
+    if (userPage > totalUserPages) setUserPage(totalUserPages);
+  }, [totalUserPages, userPage]);
 
   const addDepartment = async () => {
     const name = newDepartment.trim();
@@ -2094,7 +2109,7 @@ function UserManagement({
               <div className="mt-4 flex flex-wrap gap-2 text-xs tabular-nums">
                 <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-slate-600">共 {users.length} 人</span>
                 <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-emerald-700">已配置权限 {permissionedUserCount} 人</span>
-                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-slate-600">当前显示 {filteredUsers.length} 人</span>
+                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-slate-600">匹配 {filteredUsers.length} 人</span>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center text-xs tabular-nums sm:min-w-72">
@@ -2119,7 +2134,7 @@ function UserManagement({
         <div className="p-4 sm:p-6">
           {filteredUsers.length > 0 ? (
             <div className="grid gap-4 xl:grid-cols-2">
-              {filteredUsers.map((item) => {
+              {paginatedUsers.map((item) => {
                 const meta = roleMeta[item.role] || roleMeta.student;
                 const RoleIcon = meta.icon;
                 const enabledCount = getEnabledPermissions(item).length;
@@ -2220,6 +2235,54 @@ function UserManagement({
               <Search className="size-5 text-slate-400" />
               <p className="mt-2 text-sm font-medium text-slate-700">没有匹配用户</p>
               <p className="mt-1 text-xs text-slate-500">换一个姓名、学号、部门或班级关键词试试</p>
+            </div>
+          )}
+          {filteredUsers.length > 0 && (
+            <div className="mt-5 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                <span className="tabular-nums">
+                  显示 {(currentUserPage - 1) * userPageSize + 1}-{Math.min(currentUserPage * userPageSize, filteredUsers.length)} / {filteredUsers.length} 人
+                </span>
+                <label className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500">每页</span>
+                  <select
+                    aria-label="用户列表每页数量"
+                    value={userPageSize}
+                    onChange={(event) => {
+                      setUserPageSize(Number(event.target.value));
+                      setUserPage(1);
+                    }}
+                    className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+                  >
+                    {USER_PAGE_SIZE_OPTIONS.map((option) => <option key={option} value={option}>{option} 人</option>)}
+                  </select>
+                </label>
+              </div>
+              <div className="flex items-center justify-between gap-2 sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-label="上一页用户"
+                  disabled={currentUserPage <= 1}
+                  onClick={() => setUserPage((page) => Math.max(1, page - 1))}
+                >
+                  <ChevronLeft className="size-4" />
+                  <span className="hidden sm:inline">上一页</span>
+                </Button>
+                <span className="min-w-20 text-center text-sm tabular-nums text-slate-600">第 {currentUserPage} / {totalUserPages} 页</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-label="下一页用户"
+                  disabled={currentUserPage >= totalUserPages}
+                  onClick={() => setUserPage((page) => Math.min(totalUserPages, page + 1))}
+                >
+                  <span className="hidden sm:inline">下一页</span>
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
             </div>
           )}
         </div>
