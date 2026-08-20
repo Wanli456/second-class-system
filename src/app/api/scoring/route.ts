@@ -4,6 +4,7 @@ import { createNotification } from '@/app/api/notifications/route';
 import { requirePermission } from '@/lib/auth';
 import { getActivityScopes, normalizeIds, scopeMatchesUser } from '@/lib/business-rules';
 import { hasRequiredScoringMaterials } from '@/lib/activity-scoring';
+import { hydrateActivityLeaderDetails } from '@/lib/hydrate-activity-leaders';
 
 async function notifyRecipients(ids: string[], title: string, content: string, activityId: string) {
   for (const userId of [...new Set(ids)].filter(Boolean)) await createNotification(userId, 'activity_scored', title, content, activityId);
@@ -20,9 +21,9 @@ export async function GET(request: NextRequest) {
     const level = searchParams.get('level');
     if (status) { params.push(status); clauses.push(`scoring_status=$${params.length}`); }
     if (level) { params.push(level); clauses.push(`level=$${params.length}`); }
-    const allData = await query(`SELECT id,full_name,start_time,end_time,registration_start_time,registration_end_time,level,scoring_status,scoring_table_url,scoring_table_file_name,record_file_url,record_file_name,record_photo_url,record_photo_file_name,leader_name,leader_phone,leader_ids,scope_type,scope_name,scope_names,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,scoring_material_submitter_id,scoring_material_submitter_name,scoring_material_submitter_student_id,category,category_primary,category_secondary,status FROM activities WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC`, params);
+    const allData = await query(`SELECT id,full_name,start_time,end_time,registration_start_time,registration_end_time,level,scoring_status,scoring_table_url,scoring_table_file_name,record_file_url,record_file_name,record_photo_url,record_photo_file_name,leader_name,leader_phone,leader_ids,leader_details,scope_type,scope_name,scope_names,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,scoring_material_submitter_id,scoring_material_submitter_name,scoring_material_submitter_student_id,category,category_primary,category_secondary,status FROM activities WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC`, params);
     const data = auth.user!.role === 'admin' ? allData : allData.filter((item) => scopeMatchesUser(auth.user!, getActivityScopes(item)));
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true, data: await hydrateActivityLeaderDetails(data) });
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '获取赋分数据失败' }, { status: 500 });
   }

@@ -53,6 +53,7 @@ if (localDb && shouldInitializeLocalDb) {
       can_start_group_leave BOOLEAN NOT NULL DEFAULT false,
       department TEXT,
       class_name TEXT,
+      contact_phone TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
 
@@ -85,6 +86,7 @@ if (localDb && shouldInitializeLocalDb) {
       scope_name TEXT,
       scope_names TEXT,
       leader_ids TEXT,
+      leader_details TEXT,
       activity_submitter_id TEXT,
       activity_submitter_name TEXT,
       activity_submitter_student_id TEXT,
@@ -120,6 +122,7 @@ if (localDb && shouldInitializeLocalDb) {
       scope_name TEXT,
       scope_names TEXT,
       leader_ids TEXT,
+      leader_details TEXT,
       activity_submitter_id TEXT,
       activity_submitter_name TEXT,
       activity_submitter_student_id TEXT,
@@ -317,12 +320,14 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_start_group_leave BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_phone TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS scope_type TEXT DEFAULT 'department';
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS category_primary TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS category_secondary TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS scope_name TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS scope_names TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS leader_ids TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS leader_details TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_submitter_id TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_submitter_name TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_submitter_student_id TEXT;
@@ -342,6 +347,7 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_name TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_names TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS leader_ids TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS leader_details TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_submitter_id TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_submitter_name TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_submitter_student_id TEXT;

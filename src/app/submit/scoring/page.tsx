@@ -292,7 +292,7 @@ export default function SubmitScoringPage() {
                       <span className="font-medium">{selectedActivity.level}</span>
                     </div>
                     <div className="flex justify-between gap-4">
-                      <span className="shrink-0 text-gray-500">联办单位</span>
+                      <span className="shrink-0 text-gray-500">单位</span>
                       <span className="text-right font-medium">{formatActivityScopes(selectedActivity)}</span>
                     </div>
                     <div className="flex justify-between">

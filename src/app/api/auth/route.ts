@@ -14,7 +14,7 @@ import type { AuthUser } from '@/lib/auth';
 
 const PUBLIC_USER_FIELDS = `id, username, student_id, role, can_publish, can_score,
   can_submit_activity, can_view_submission_status, can_submit_scoring,
-  can_review_leave, can_view_evening_study, can_start_group_leave, department, class_name`;
+  can_review_leave, can_view_evening_study, can_start_group_leave, department, class_name, contact_phone`;
 
 type StoredUser = AuthUser & { password: string };
 
@@ -118,9 +118,18 @@ export async function PATCH(request: NextRequest) {
       role: 'role', canPublish: 'can_publish', canScore: 'can_score', canSubmitActivity: 'can_submit_activity',
       canViewSubmissionStatus: 'can_view_submission_status', canSubmitScoring: 'can_submit_scoring',
       canReviewLeave: 'can_review_leave', canViewEveningStudy: 'can_view_evening_study', canStartGroupLeave: 'can_start_group_leave',
-      department: 'department', className: 'class_name',
+      department: 'department', className: 'class_name', contactPhone: 'contact_phone',
     };
     const updates: string[] = [];
+    if (body.contactPhone !== undefined) {
+      const current = await queryOne<{ role: string; can_submit_activity: boolean; can_submit_scoring: boolean }>('SELECT role,can_submit_activity,can_submit_scoring FROM users WHERE id=$1', [userId]);
+      const effectiveRole = body.role === undefined ? current?.role : String(body.role);
+      const canSubmitActivity = body.canSubmitActivity === undefined ? current?.can_submit_activity : body.canSubmitActivity === true;
+      const canSubmitScoring = body.canSubmitScoring === undefined ? current?.can_submit_scoring : body.canSubmitScoring === true;
+      if (!(effectiveRole === 'admin' || effectiveRole === 'leader' || canSubmitActivity || canSubmitScoring)) {
+        return NextResponse.json({ success: false, error: '只有管理员、部门负责人或拥有活动业务权限的学生可以填写联系方式' }, { status: 400 });
+      }
+    }
     const params: unknown[] = [];
     for (const [key, column] of Object.entries(fields)) {
       if (body[key] !== undefined) { params.push(body[key]); updates.push(`${column}=$${params.length}`); }

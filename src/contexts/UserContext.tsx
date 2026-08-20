@@ -19,6 +19,7 @@ interface User {
   canStartGroupLeave?: boolean;
   department?: string | null;
   className?: string | null;
+  contactPhone?: string | null;
   sessionToken?: string;
 }
 
