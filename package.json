@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "bash ./scripts/build.sh",
-    "dev": "bash ./scripts/dev.sh",
+    "dev": "node node_modules/tsx/dist/cli.mjs watch src/server.ts",
     "preinstall": "npx only-allow pnpm",
     "lint": "eslint",
     "lint:build": "eslint . --quiet",
