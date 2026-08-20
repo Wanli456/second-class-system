@@ -3,6 +3,7 @@ import { query, queryOne } from '@/storage/database/supabase-client';
 import { createNotification } from '@/app/api/notifications/route';
 import { requirePermission } from '@/lib/auth';
 import { getActivityScopes, newActivityId, normalizeIds, scopeMatchesUser } from '@/lib/business-rules';
+import { hydrateActivityLeaderDetails } from '@/lib/hydrate-activity-leaders';
 
 async function notifyUsers(ids: string[], type: string, title: string, content: string, relatedId: string) {
   for (const userId of [...new Set(ids)].filter(Boolean)) await createNotification(userId, type, title, content, relatedId);
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '';
     const allData = await query(`SELECT * FROM activity_submissions${where} ORDER BY created_at DESC`, params);
     const data = auth.user!.role === 'admin' ? allData : allData.filter((item) => scopeMatchesUser(auth.user!, getActivityScopes(item)));
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true, data: await hydrateActivityLeaderDetails(data) });
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '获取活动审核数据失败' }, { status: 500 });
   }
@@ -47,6 +48,7 @@ export async function PUT(request: NextRequest) {
         submission.plan_file_url, submission.plan_file_name || null, submission.record_file_url, submission.record_file_name || null, submission.leader_name, submission.leader_phone,
         submission.scope_type || 'department', submission.scope_name, submission.scope_names || null, submission.leader_ids || '[]', submission.activity_submitter_id || null, submission.activity_submitter_name || null, submission.activity_submitter_student_id || null,
       ]);
+      await query('UPDATE activities SET leader_details=$1 WHERE id=$2', [submission.leader_details || null, activityId]);
       await query('UPDATE activity_submissions SET activity_id=$1 WHERE id=$2', [activityId, id]);
     }
     const updated = await queryOne(`UPDATE activity_submissions SET review_status=$1,review_note=$2,updated_at=NOW() WHERE id=$3 AND review_status='待审核' RETURNING *`, [review_status, review_note || null, id]);

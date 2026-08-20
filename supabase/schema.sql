@@ -15,8 +15,9 @@ CREATE TABLE IF NOT EXISTS users (
   can_review_leave BOOLEAN NOT NULL DEFAULT false,
   can_view_evening_study BOOLEAN NOT NULL DEFAULT false,
   can_start_group_leave BOOLEAN NOT NULL DEFAULT false,
-  department TEXT,
-  class_name TEXT,
+ department TEXT,
+ class_name TEXT,
+  contact_phone TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -25,6 +26,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_activity BOOLEAN NOT NULL 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_submission_status BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_phone TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS can_start_group_leave BOOLEAN NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS departments (
@@ -61,7 +63,8 @@ CREATE TABLE IF NOT EXISTS activities (
   scope_type TEXT DEFAULT 'department',
   scope_name TEXT,
   scope_names TEXT,
-  leader_ids TEXT,
+ leader_ids TEXT,
+  leader_details TEXT,
   activity_submitter_id TEXT,
   activity_submitter_name TEXT,
   activity_submitter_student_id TEXT,
@@ -96,7 +99,8 @@ CREATE TABLE IF NOT EXISTS activity_submissions (
   scope_type TEXT DEFAULT 'department',
   scope_name TEXT,
   scope_names TEXT,
-  leader_ids TEXT,
+ leader_ids TEXT,
+  leader_details TEXT,
   activity_submitter_id TEXT,
   activity_submitter_name TEXT,
   activity_submitter_student_id TEXT,
@@ -157,6 +161,8 @@ ALTER TABLE activities ADD COLUMN IF NOT EXISTS registration_start_time TIMESTAM
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS registration_end_time TIMESTAMP;
 ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS registration_start_time TIMESTAMP;
 ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS registration_end_time TIMESTAMP;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS leader_details TEXT;
+ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS leader_details TEXT;
 
 CREATE TABLE IF NOT EXISTS leave_group_members (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,

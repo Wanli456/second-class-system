@@ -17,6 +17,7 @@ export interface Activity {
   record_photo_file_name?: string | null;
   leader_name: string;
   leader_phone: string;
+  leader_details?: string | null;
   scope_names?: string | null;
   scope_type?: 'department' | 'class' | null;
   scope_name?: string | null;
@@ -50,6 +51,7 @@ export interface ActivitySubmission {
   activity_id?: string | null;
   leader_name: string;
   leader_phone: string;
+  leader_details?: string | null;
   scope_names?: string | null;
   scope_type?: 'department' | 'class' | null;
   scope_name?: string | null;

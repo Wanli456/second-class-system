@@ -33,6 +33,7 @@ export type AuthUser = {
   can_review_leave: boolean;
   can_view_evening_study: boolean;
   can_start_group_leave: boolean;
+  contact_phone?: string | null;
   department?: string | null;
   class_name?: string | null;
 };
@@ -117,6 +118,7 @@ function calculateUserPermissions(user: AuthUser) {
     role,
     department: user.department || null,
     className: user.class_name || null,
+    contactPhone: user.contact_phone || null,
     // 权限计算：admin OR 勾选权限
     canPublish: isAdmin || user.can_publish,
     canScore: isAdmin || user.can_score,
@@ -144,7 +146,7 @@ export async function getSessionUser(request: NextRequest): Promise<AuthUser | n
   const userId = readSession(request.cookies.get(SESSION_COOKIE)?.value) || readSession(bearerToken);
   if (!userId) return null;
   return queryOne(
-    `SELECT id, username, student_id, role, can_publish, can_score, can_submit_activity, can_view_submission_status, can_submit_scoring, can_review_leave, can_view_evening_study, can_start_group_leave, department, class_name
+    `SELECT id, username, student_id, role, can_publish, can_score, can_submit_activity, can_view_submission_status, can_submit_scoring, can_review_leave, can_view_evening_study, can_start_group_leave, department, class_name, contact_phone
      FROM users WHERE id = $1`,
     [userId],
   );

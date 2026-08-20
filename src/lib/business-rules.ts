@@ -67,9 +67,12 @@ export function getActivityScopes(row: { scope_names?: unknown; scope_type?: str
 }
 
 export function formatActivityScopes(row: { scope_names?: unknown; scope_type?: string | null; scope_name?: string | null }) {
-  return getActivityScopes(row)
-    .map((scope) => `${scope.type === 'class' ? '班级' : '部门'}：${scope.name}`)
-    .join('、') || '-';
+  const scopes = getActivityScopes(row);
+  const host = scopes[0];
+  if (!host) return '-';
+  const hostLabel = `主办单位：${host.name}`;
+  const coHosts = scopes.slice(1).map((scope) => scope.name);
+  return coHosts.length ? `${hostLabel}；联办单位：${coHosts.join('、')}` : hostLabel;
 }
 
 export function validateScopes(scopes: ActivityScopeAssignment[]) {

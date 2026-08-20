@@ -22,6 +22,7 @@ import { useUser } from '@/contexts/UserContext';
 import { canOpenAdminTab, formatActivityScopes } from '@/lib/business-rules';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
 import { CategoryBadge } from '@/components/CategoryBadge';
+import { ActivityLeaderDetails } from '@/components/ActivityLeaderDetails';
 import { parseRosterWorkbook } from '@/lib/class-roster-import';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -89,6 +90,7 @@ interface ScoringActivity {
   record_photo_file_name: string | null;
   leader_name: string;
   leader_phone: string;
+  leader_details?: string | null;
   category: string;
   category_primary?: string | null;
   category_secondary?: string | null;
@@ -121,6 +123,7 @@ interface UserData {
   canStartGroupLeave: boolean;
   department?: string | null;
   className?: string | null;
+  contactPhone?: string | null;
   createdAt?: string;
 }
 
@@ -257,6 +260,7 @@ function AdminPage() {
       canStartGroupLeave: globalUser.canStartGroupLeave || false,
       department: globalUser.department || null,
       className: globalUser.className || null,
+      contactPhone: globalUser.contactPhone || null,
     };
 
     setUser(userData);
@@ -676,6 +680,13 @@ function AdminPage() {
     }
   };
 
+  const handleUpdateContactPhone = async (userId: string, contactPhone: string | null) => {
+    const res = await apiFetch('/api/auth', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, contactPhone }) });
+    const data = await res.json();
+    if (!data.success) { alert(data.error || '更新联系方式失败'); return; }
+    setUsers((previous) => previous.map((item) => item.id === userId ? { ...item, contactPhone } : item));
+  };
+
   const loadLeaveGroupMembers = async (groupId: string) => {
     if (leaveGroupMembers[groupId]) {
       setExpandedLeaveGroup(expandedLeaveGroup === groupId ? null : groupId);
@@ -833,7 +844,7 @@ function AdminPage() {
               <span className="font-mono tabular-nums text-slate-600">{a.id}</span>
               <CategoryBadge category={a.category} primary={a.category_primary} secondary={a.category_secondary} topLevelOnly />
               <span>{a.level}</span>
-              <span>负责人：{a.leader_name}</span>
+              <ActivityLeaderDetails record={a} compact />
             </span>
           </span>
           <span className="flex shrink-0 items-center gap-2 text-slate-400">
@@ -847,8 +858,8 @@ function AdminPage() {
               <span>活动时间：{formatDateTime(a.start_time)} 至 {formatDateTime(a.end_time)}</span>
               <span className="text-sky-700">活动报名时间：{a.registration_start_time && a.registration_end_time ? `${formatDateTime(a.registration_start_time)} 至 ${formatDateTime(a.registration_end_time)}` : '未填写（历史记录）'}</span>
               <span className="flex items-center gap-2">分类：<CategoryBadge category={a.category} primary={a.category_primary} secondary={a.category_secondary} /></span>
-              <span>主办/联办单位：{formatActivityScopes(a)}</span>
-              <span>负责人：{a.leader_name}（{a.leader_phone}）</span>
+              <span>{formatActivityScopes(a)}</span>
+              <ActivityLeaderDetails record={a} />
               <span>实际赋分材料提交人：{a.scoring_material_submitter_name || '-'}{a.scoring_material_submitter_student_id ? `（${a.scoring_material_submitter_student_id}）` : ''}</span>
             </div>
             <div className="mt-4 flex flex-wrap gap-3 border-t border-slate-200 pt-4 text-sm">
@@ -1130,7 +1141,7 @@ function AdminPage() {
                                 <span className="font-mono tabular-nums text-slate-600">{a.id}</span>
                                 <CategoryBadge category={a.category} primary={a.category_primary} secondary={a.category_secondary} topLevelOnly />
                                 <span>{a.level}</span>
-                                <span>{a.leader_name}</span>
+                                <ActivityLeaderDetails record={a} compact />
                               </span>
                             </span>
                             <span className="flex shrink-0 items-center gap-2">
@@ -1151,8 +1162,8 @@ function AdminPage() {
                               <span className="text-sky-700">活动报名时间：{a.registration_start_time && a.registration_end_time ? `${formatDateTime(a.registration_start_time)} 至 ${formatDateTime(a.registration_end_time)}` : '未填写（历史记录）'}</span>
                               <span className="flex items-center gap-2">分类：<CategoryBadge category={a.category} primary={a.category_primary} secondary={a.category_secondary} /></span>
                               <span>活动级别：{a.level}</span>
-                              <span>主办/联办单位：{formatActivityScopes(a)}</span>
-                              <span>负责人：{a.leader_name}（{a.leader_phone}）</span>
+                              <span>{formatActivityScopes(a)}</span>
+                              <ActivityLeaderDetails record={a} />
                               <span>实际活动信息提交人：{a.activity_submitter_name || '-'}{a.activity_submitter_student_id ? `（${a.activity_submitter_student_id}）` : ''}</span>
                               <span>实际赋分材料提交人：{a.scoring_material_submitter_name || '-'}{a.scoring_material_submitter_student_id ? `（${a.scoring_material_submitter_student_id}）` : ''}</span>
                               <span>活动状态：{a.status}</span>
@@ -1218,8 +1229,8 @@ function AdminPage() {
                                   <span className="text-sky-700">活动报名时间：{s.registration_start_time && s.registration_end_time ? `${formatDateTime(s.registration_start_time)} 至 ${formatDateTime(s.registration_end_time)}` : '未填写（历史记录）'}</span>
                                   <span className="flex items-center gap-2"><span>分类</span><CategoryBadge category={s.category} primary={s.category_primary} secondary={s.category_secondary} /></span>
                                   <span>活动级别：{s.level}</span>
-                                  <span>负责人：{s.leader_name}（{s.leader_phone}）</span>
-                                  <span>主办/联办单位：{formatActivityScopes(s)}</span>
+                                  <ActivityLeaderDetails record={s} />
+                                  <span>{formatActivityScopes(s)}</span>
                                   <span>实际活动信息提交人：{s.activity_submitter_name || '-'}{s.activity_submitter_student_id ? `（${s.activity_submitter_student_id}）` : ''}</span>
                                 </div>
                                 <div className="mt-3 flex flex-wrap gap-2">
@@ -1259,8 +1270,8 @@ function AdminPage() {
                                   <span className="text-sky-700">活动报名时间：{s.registration_start_time && s.registration_end_time ? `${formatDateTime(s.registration_start_time)} 至 ${formatDateTime(s.registration_end_time)}` : '未填写（历史记录）'}</span>
                                   <span className="flex items-center gap-2">分类：<CategoryBadge category={s.category} primary={s.category_primary} secondary={s.category_secondary} /></span>
                                   <span>活动级别：{s.level}</span>
-                                  <span>负责人：{s.leader_name}（{s.leader_phone}）</span>
-                                  <span>主办/联办单位：{formatActivityScopes(s)}</span>
+                                  <ActivityLeaderDetails record={s} />
+                                  <span>{formatActivityScopes(s)}</span>
                                   <span>实际活动信息提交人：{s.activity_submitter_name || '-'}{s.activity_submitter_student_id ? `（${s.activity_submitter_student_id}）` : ''}</span>
                                 </div>
                                 <div className="mt-3 flex flex-wrap gap-3 border-t border-gray-200 pt-3">
@@ -1489,6 +1500,7 @@ function AdminPage() {
                 onUpdatePermission={handleUpdatePermission}
                 onUpdateRole={handleUpdateRole}
                 onUpdateDepartment={handleUpdateDepartment}
+                onUpdateContactPhone={handleUpdateContactPhone}
                 onChangePassword={handleChangePassword}
                 onDeleteUser={handleDeleteUser}
               />
@@ -1936,7 +1948,8 @@ function UserManagement({
   onUserSearchChange,
   onUpdatePermission,
   onUpdateRole,
-  onUpdateDepartment,
+      onUpdateDepartment,
+  onUpdateContactPhone,
   onChangePassword,
   onDeleteUser,
 }: {
@@ -1946,6 +1959,7 @@ function UserManagement({
   onUpdatePermission: (userId: string, permission: UserPermission, value: boolean) => Promise<void>;
   onUpdateRole: (userId: string, role: string) => Promise<void>;
   onUpdateDepartment: (userId: string, department: string | null) => Promise<void>;
+  onUpdateContactPhone: (userId: string, contactPhone: string | null) => Promise<void>;
   onChangePassword: (userId: string, userName: string) => Promise<void>;
   onDeleteUser: (userId: string, userName: string) => Promise<void>;
 }) {
@@ -2289,6 +2303,10 @@ function UserManagement({
                         <span className="text-xs text-slate-500">所属班级</span>
                         <span className="truncate font-medium">{item.className || '未设置'}</span>
                       </div>
+                      {(item.role === 'admin' || item.role === 'leader' || item.canSubmitActivity || item.canSubmitScoring) && <label className="min-w-0 sm:col-span-2">
+                        <span className="mb-1.5 block text-xs font-medium text-slate-500">联系方式（手机号/微信号）</span>
+                        <input aria-label={`${item.name}的联系方式`} defaultValue={item.contactPhone || ''} onBlur={(event) => void onUpdateContactPhone(item.id, event.target.value.trim() || null)} placeholder="未填写" className="h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200" />
+                      </label>}
                     </div>
 
                     <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">

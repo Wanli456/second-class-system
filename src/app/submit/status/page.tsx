@@ -10,6 +10,7 @@ import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { formatActivityScopes } from '@/lib/business-rules';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
+import { ActivityLeaderDetails } from '@/components/ActivityLeaderDetails';
 
 interface Submission {
   id: string;
@@ -24,6 +25,7 @@ interface Submission {
   level: string;
   leader_name: string;
   leader_phone: string;
+  leader_details?: string | null;
   scope_names?: string | null;
   scope_type?: 'department' | 'class' | null;
   scope_name?: string | null;
@@ -182,8 +184,8 @@ export default function SubmitStatusPage() {
                         </div>
                          <p className="mt-1 text-xs text-gray-500">活动时间：{new Date(s.start_time).toLocaleString('zh-CN')} ~ {new Date(s.end_time).toLocaleString('zh-CN')}</p>
                          <p className="mt-0.5 text-xs text-sky-700">活动报名时间：{s.registration_start_time && s.registration_end_time ? `${new Date(s.registration_start_time).toLocaleString('zh-CN')} ~ ${new Date(s.registration_end_time).toLocaleString('zh-CN')}` : '未填写（历史记录）'}</p>
-                        <p className="mt-0.5 text-xs text-gray-500">负责人：{s.leader_name} · {s.leader_phone}</p>
-                        <p className="mt-0.5 text-xs text-gray-500">联办单位：{formatActivityScopes(s)}</p>
+                        <p className="mt-0.5 text-xs text-gray-500"><ActivityLeaderDetails record={s} /></p>
+                        <p className="mt-0.5 text-xs text-gray-500">{formatActivityScopes(s)}</p>
                       </div>
                       <span className={`shrink-0 rounded border px-2 py-0.5 text-xs ${STATUS_COLORS[s.review_status]}`}>
                         {s.review_status}
