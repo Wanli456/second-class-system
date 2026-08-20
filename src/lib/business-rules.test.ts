@@ -27,6 +27,21 @@ assert.equal(
   '主办单位：学生会；联办单位：组织部、宣传部',
 );
 
+assert.equal(
+  formatActivityScopes({
+    scope_names: '[{"type":"class","name":"软件工程1班"},{"type":"class","name":"软件工程2班"}]',
+  }),
+  '主办单位：软件工程1班；联办单位：软件工程2班',
+);
+
+assert.equal(
+  formatActivityScopes({
+    scope_type: 'class',
+    scope_name: '软件工程1班',
+  }),
+  '主办单位：软件工程1班',
+);
+
 assert.equal(formatActivityScopes({}), '-');
 
 console.log('business rules scope format tests passed');
