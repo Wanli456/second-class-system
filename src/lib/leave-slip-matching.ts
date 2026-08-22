@@ -38,8 +38,8 @@ export type AutoMatchResult = {
 export async function compareSlipWithOriginals(slipId: string): Promise<AutoMatchResult> {
   const slip = await queryOne<SlipRow>('SELECT * FROM leave_slips WHERE id=$1', [slipId]);
   if (!slip) return { action: 'skipped', missing: [], matched: [] };
-  // 外院/非本学院举办的校级活动，以及手机假条，都没有系统活动记录或原假条可比，跳过自动名单比对。
-  if (slip.slip_type === '校级（且不为数经举办）假条' || slip.slip_type === '手机假条') return { action: 'skipped', missing: [], matched: [] };
+  // 外院/非本学院举办的校级活动、手机假条和其他请假，都没有系统活动记录或原假条可比，跳过自动名单比对。
+  if (slip.slip_type === '校级（且不为数经举办）假条' || slip.slip_type === '手机假条' || slip.slip_type === '其他请假') return { action: 'skipped', missing: [], matched: [] };
 
   const studentRows = await query<{ student_name: string }>(
     'SELECT student_name FROM leave_slip_students WHERE slip_id=$1',

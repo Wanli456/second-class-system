@@ -581,6 +581,48 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS ocr_names TEXT NOT NULL DEFAULT '[]';
   `);
 
+  if (!(await tableExists('attendance_work_arrangements'))) {
+    await executeSchemaSql(`
+      CREATE TABLE attendance_work_arrangements (
+        id TEXT PRIMARY KEY DEFAULT ${uuidDefault},
+        name TEXT NOT NULL DEFAULT '考勤工作安排',
+        start_date TEXT,
+        end_date TEXT,
+        student_names TEXT NOT NULL DEFAULT '[]',
+        schedules TEXT NOT NULL DEFAULT '[]',
+        image_list TEXT NOT NULL DEFAULT '[]',
+        ocr_names TEXT NOT NULL DEFAULT '[]',
+        review_status TEXT NOT NULL DEFAULT '待查对',
+        review_note TEXT,
+        reviewed_by_user_id TEXT,
+        reviewed_by_name TEXT,
+        reviewed_at TIMESTAMP,
+        created_by_user_id TEXT,
+        created_by_name TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+  }
+
+  await executeSchemaSql(`
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT '考勤工作安排';
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS start_date TEXT;
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS end_date TEXT;
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS student_names TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS schedules TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS image_list TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS ocr_names TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT '待查对';
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS review_note TEXT;
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS reviewed_by_user_id TEXT;
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS reviewed_by_name TEXT;
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP;
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS created_by_user_id TEXT;
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS created_by_name TEXT;
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
+  `);
+
   await ensureDepartmentsTable();
 }
 

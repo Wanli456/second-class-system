@@ -5,8 +5,9 @@ import { compareSlipWithOriginals } from '@/lib/leave-slip-matching';
 import { computeImageHashes } from '@/lib/image-hash';
 import { detectDuplicateSlip } from '@/lib/leave-slip-duplicate';
 
-const SLIP_TYPES = ['手写假条', '二课活动请假', '校级（且不为数经举办）假条', '手机假条'] as const;
+const SLIP_TYPES = ['手写假条', '二课活动请假', '校级（且不为数经举办）假条', '手机假条', '其他请假'] as const;
 const LEAVE_TYPES = ['事假', '病假', '活动公假'] as const;
+const OTHER_LEAVE_TYPES = ['社团', '比赛', '培训', '虚拟工作室', '临时请假'] as const;
 const REVIEW_STATUSES = ['待查对', '已通过', '已驳回'] as const;
 
 type StudentInput = { student_id: string; student_name: string; class_name: string };
@@ -72,14 +73,20 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const slipType = String(body.slip_type || '');
-    const leaveType = String(body.leave_type || (slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条' ? '活动公假' : '事假'));
-    if (!SLIP_TYPES.includes(slipType as (typeof SLIP_TYPES)[number])) {
-      return NextResponse.json({ success: false, error: '假条类型只能是手写假条、二课活动请假、校级（且不为数经举办）假条或手机假条' }, { status: 400 });
+    const normalizedSlipType = slipType;
+    const defaultLeaveType = (slipType === '其他请假' ? '社团' : slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条' ? '活动公假' : '事假');
+    const leaveType = String(body.leave_type || defaultLeaveType);
+    if (!SLIP_TYPES.includes(normalizedSlipType as (typeof SLIP_TYPES)[number])) {
+      return NextResponse.json({ success: false, error: '假条类型只能是手写假条、二课活动请假、校级（且不为数经举办）假条、手机假条或其他请假' }, { status: 400 });
     }
-    if (!LEAVE_TYPES.includes(leaveType as (typeof LEAVE_TYPES)[number])) {
+    if (normalizedSlipType === '其他请假') {
+      if (!OTHER_LEAVE_TYPES.includes(leaveType as (typeof OTHER_LEAVE_TYPES)[number])) {
+        return NextResponse.json({ success: false, error: '其他请假的请假类型只能是社团、比赛、培训、虚拟工作室或临时请假' }, { status: 400 });
+      }
+    } else if (!LEAVE_TYPES.includes(leaveType as (typeof LEAVE_TYPES)[number])) {
       return NextResponse.json({ success: false, error: '请假类型不合法' }, { status: 400 });
     }
-    if ((slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条') && leaveType !== '活动公假') {
+    if ((normalizedSlipType === '二课活动请假' || normalizedSlipType === '校级（且不为数经举办）假条') && leaveType !== '活动公假') {
       return NextResponse.json({ success: false, error: '该假条类型的请假类型只能是“活动公假”' }, { status: 400 });
     }
     if (slipType === '二课活动请假' && (!body.activity_id || !body.activity_name)) {
@@ -137,11 +144,14 @@ export async function POST(request: NextRequest) {
     const chinaNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
     const isLate = chinaNow.getUTCHours() > 18 || (chinaNow.getUTCHours() === 18 && chinaNow.getUTCMinutes() > 30);
 
+    const autoApprove = slipType === '其他请假' && leaveType === '临时请假';
+    const initialReviewStatus = autoApprove ? '已通过' : '待查对';
+
     const result = await withTransaction(async (client) => {
       const slip = (await client.query(
         `INSERT INTO leave_slips (slip_type, leave_type, class_names, start_time, end_time, activity_id, activity_name, applicant_user_id, applicant_name, applicant_student_id, leave_image_url, leave_image_name, image_list, ocr_names, image_hashes, counselor_signature, official_seal, teacher_signature, is_late, review_status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'待查对') RETURNING *`,
-        [slipType, leaveType, JSON.stringify(classNames), startTime ? startTime.toISOString() : null, endTime ? endTime.toISOString() : null, activityId, activityName, user.id, user.username, user.student_id, imageList[0].url, imageList[0].name, JSON.stringify(imageList), JSON.stringify(ocrNames), JSON.stringify(imageHashes), counselorSignature, officialSeal, teacherSignature, isLate],
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
+        [slipType, leaveType, JSON.stringify(classNames), startTime ? startTime.toISOString() : null, endTime ? endTime.toISOString() : null, activityId, activityName, user.id, user.username, user.student_id, imageList[0].url, imageList[0].name, JSON.stringify(imageList), JSON.stringify(ocrNames), JSON.stringify(imageHashes), counselorSignature, officialSeal, teacherSignature, isLate, initialReviewStatus],
       )).rows[0] as { id: string };
 
       for (const student of students) {
@@ -152,6 +162,13 @@ export async function POST(request: NextRequest) {
       }
       return slip;
     });
+
+    if (autoApprove && result?.id) {
+      await query(
+        `UPDATE leave_slips SET review_status='已通过', review_note='临时请假自动审核通过', reviewed_by_user_id=$1, reviewed_by_name='自动审核', reviewed_at=NOW() WHERE id=$2`,
+        [user.id, String(result.id)],
+      );
+    }
 
     const isCollectiveActivitySlip = slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条';
     let duplicateCheck: Awaited<ReturnType<typeof detectDuplicateSlip>> | null = null;
@@ -172,6 +189,7 @@ export async function POST(request: NextRequest) {
     }
 
     const warnings = isLate ? ['上传时间已超过 18:30，已标记为迟到假条'] : [];
+    if (autoApprove) warnings.push('临时请假已自动审核通过');
     if (duplicateCheck?.found && duplicateCheck.warning) warnings.push(duplicateCheck.warning);
 
     return NextResponse.json({

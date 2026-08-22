@@ -89,8 +89,8 @@ export interface LeaveRequest {
 
 export interface LeaveSlip {
   id: string;
-  slip_type: '手写假条' | '二课活动请假';
-  leave_type: '事假' | '病假' | '活动公假';
+  slip_type: '手写假条' | '二课活动请假' | '校级（且不为数经举办）假条' | '手机假条' | '其他请假';
+  leave_type: '事假' | '病假' | '活动公假' | '社团' | '比赛' | '培训' | '虚拟工作室' | '临时请假';
   class_names: string;
   start_time: string | null;
   end_time: string | null;

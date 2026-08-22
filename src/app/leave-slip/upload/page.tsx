@@ -19,9 +19,11 @@ const SLIP_TYPES = [
   { value: '二课活动请假', description: '活动方提供的假条，必须有公章和老师签字', icon: FileCheck2 },
   { value: '校级（且不为数经举办）假条', description: '其他学院举办的校级活动，需上传假条截图和到梦空间“等待活动”手机截图', icon: FileCheck2 },
   { value: '手机假条', description: '手机上的请假/审批截图，请假类型可选事假、病假、活动公假', icon: FileCheck2 },
+  { value: '其他请假', description: '社团、比赛、培训、虚拟工作室等，上传相关请假/通知截图', icon: FileCheck2 },
 ] as const;
 
 const LEAVE_TYPES = ['事假', '病假', '活动公假'] as const;
+const OTHER_LEAVE_TYPES = ['社团', '比赛', '培训', '虚拟工作室'] as const;
 
 function FieldBadge({ kind, label }: { kind: 'auto' | 'manual'; label?: string }) {
   if (kind === 'auto') {
@@ -289,7 +291,7 @@ export default function LeaveSlipUploadPage() {
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {SLIP_TYPES.map((type) => (
                 <label key={type.value} className={cn('flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors', slipType === type.value ? 'border-teal-600 bg-teal-50 ring-1 ring-teal-600' : 'border-slate-200 bg-white hover:border-slate-300')}>
-                  <input type="radio" className="peer sr-only" checked={slipType === type.value} onChange={() => { setSlipType(type.value); if (type.value === '二课活动请假' || type.value === '校级（且不为数经举办）假条') { setLeaveType('活动公假'); setCounselorSignature(false); } }} />
+                  <input type="radio" className="peer sr-only" checked={slipType === type.value} onChange={() => { setSlipType(type.value); setCounselorSignature(false); if (type.value === '二课活动请假' || type.value === '校级（且不为数经举办）假条') { setLeaveType('活动公假'); } else if (type.value === '其他请假') { setLeaveType('社团'); } else { setLeaveType('事假'); } }} />
                   <type.icon className={cn('size-5', slipType === type.value ? 'text-teal-700' : 'text-slate-400')} />
                   <span className="min-w-0"><span className="block text-sm font-semibold text-slate-900">{type.value}</span><span className="mt-0.5 block text-xs text-pretty text-slate-500">{type.description}</span></span>
                 </label>
@@ -302,7 +304,7 @@ export default function LeaveSlipUploadPage() {
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <label className="block text-xs font-semibold text-slate-600">请假类型{(slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条') ? <FieldBadge kind="auto" label="固定" /> : <FieldBadge kind="manual" />}
                 <select value={leaveType} disabled={slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条'} onChange={(event) => setLeaveType(event.target.value)} className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500">
-                  {slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条' ? <option value="活动公假">活动公假（固定）</option> : LEAVE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+                  {slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条' ? <option value="活动公假">活动公假（固定）</option> : (slipType === '其他请假' ? OTHER_LEAVE_TYPES : LEAVE_TYPES).map((type) => <option key={type} value={type}>{type}</option>)}
                 </select>
                 {(slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条') && <span className="mt-1 block text-[11px] text-slate-500">该假条类型只允许“活动公假”</span>}
               </label>
@@ -344,6 +346,9 @@ export default function LeaveSlipUploadPage() {
             )}
             {slipType === '手机假条' && (
               <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-700">请上传手机上的请假/审批记录截图（至少 1 张），请假类型可选择<strong>事假、病假、活动公假</strong>；该类型不关联系统活动。</p>
+            )}
+            {slipType === '其他请假' && (
+              <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-700">请上传社团、比赛、培训、虚拟工作室等相关截图（至少 1 张）；请假类型可选<strong>社团、比赛、培训、虚拟工作室</strong>；该类型不关联系统活动。</p>
             )}
             <label className="mt-4 block cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 transition-colors hover:border-teal-400 hover:bg-teal-50/40">
               <span className="flex items-center gap-3">

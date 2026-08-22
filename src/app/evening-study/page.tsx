@@ -58,8 +58,9 @@ export default function EveningStudyPage() {
   const [className, setClassName] = useState('');
   const [date, setDate] = useState(today);
   const [persons, setPersons] = useState<Record<'approved' | 'pending' | 'rejected', PersonRow[]>>({ approved: [], pending: [], rejected: [] });
+  const [dutyNames, setDutyNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [expanded, setExpanded] = useState<'approved' | 'pending' | 'rejected' | null>(null);
+  const [expanded, setExpanded] = useState<'approved' | 'pending' | 'rejected' | 'duty' | null>(null);
   const canView = Boolean(user && (user.role === 'admin' || user.canViewEveningStudy || user.canQueryLeave));
 
   useEffect(() => { if (user?.className) setClassName(user.className); }, [user?.className]);
@@ -90,6 +91,37 @@ export default function EveningStudyPage() {
         pending: rows.filter((row) => slips.find((slip) => slip.id === students.find((student) => student.student_id === row.student_id)?.slip_id)?.review_status === '待查对'),
         rejected: rows.filter((row) => slips.find((slip) => slip.id === students.find((student) => student.student_id === row.student_id)?.slip_id)?.review_status === '已驳回'),
       });
+
+      try {
+        const dutyResponse = await apiFetch(`/api/attendance-work?date=${encodeURIComponent(date)}&review_status=已通过`);
+        const dutyData = await dutyResponse.json();
+        if (dutyData.success) {
+          const names = new Set<string>();
+          for (const item of (dutyData.data || [])) {
+            let dayNames: string[] = [];
+            const rawSchedules = item.schedules;
+            if (rawSchedules) {
+              try {
+                const schedules = JSON.parse(rawSchedules);
+                if (Array.isArray(schedules)) {
+                  const matched = schedules.find((schedule: { date?: string; students?: unknown }) => schedule.date === date);
+                  if (Array.isArray(matched?.students)) dayNames = matched.students.map(String).filter(Boolean);
+                }
+              } catch { dayNames = []; }
+            }
+            if (!dayNames.length) {
+              const raw = item.student_names;
+              const parsed = raw ? (() => { try { return JSON.parse(raw); } catch { return []; } })() : [];
+              if (Array.isArray(parsed)) dayNames = parsed.map(String).filter(Boolean);
+            }
+            dayNames.forEach((name: string) => names.add(name));
+          }
+          setDutyNames([...names]);
+        }
+      } catch {
+        setDutyNames([]);
+      }
+
       setExpanded(null);
     } catch (error) {
       alert(error instanceof Error ? error.message : '查询失败');
@@ -105,12 +137,23 @@ export default function EveningStudyPage() {
   const approved = persons.approved;
   const pending = persons.pending;
   const rejected = persons.rejected;
-  const people = expanded === 'approved' ? approved : expanded === 'pending' ? pending : rejected;
+  const people = expanded === 'duty' ? [] : expanded === 'approved' ? approved : expanded === 'pending' ? pending : rejected;
 
   return <DashboardLayout title="晚自习请假查询" user={user}><div className="mx-auto max-w-4xl space-y-4">
     <div className="rounded-lg border bg-white p-5 shadow-sm"><div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-teal-700" /><h2 className="font-semibold">按日期和班级查询</h2></div><div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px_auto]"><label className="text-sm font-medium">班级<input value={className} onChange={(e) => setClassName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void search()} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" placeholder="例如：计算机2101" /></label><label className="text-sm font-medium">日期<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" /></label><button onClick={() => void search()} disabled={loading} className="mt-auto inline-flex h-10 items-center justify-center gap-2 rounded-md bg-slate-900 px-4 text-sm text-white disabled:opacity-50"><Search className="h-4 w-4" />{loading ? '查询中' : '查询'}</button></div></div>
-    <div className="rounded-lg border bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-sm text-gray-600"><Users className="h-4 w-4" />{date} · {className} · 点击人数查看名单</div><div className="mt-4 grid gap-3 sm:grid-cols-3"><CountButton label="已通过" count={approved.length} active={expanded === 'approved'} onClick={() => setExpanded(expanded === 'approved' ? null : 'approved')} color="text-emerald-700" /><CountButton label="待查对" count={pending.length} active={expanded === 'pending'} onClick={() => setExpanded(expanded === 'pending' ? null : 'pending')} color="text-amber-700" /><CountButton label="已驳回" count={rejected.length} active={expanded === 'rejected'} onClick={() => setExpanded(expanded === 'rejected' ? null : 'rejected')} color="text-gray-500" /></div></div>
-    {expanded && <div className="rounded-lg border bg-white p-5 shadow-sm"><h3 className="font-semibold">{expanded === 'approved' ? '已通过名单' : expanded === 'pending' ? '待查对名单' : '已驳回名单'}</h3>{people.length ? <div className="mt-3 divide-y">{people.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span className="font-medium">{item.student_name}（{item.student_id}）· {item.class_name}</span><span className="text-gray-500">{item.leave_type} · {formatTime(item.start_time)} 至 {formatTime(item.end_time)}</span></div>)}</div> : <p className="mt-4 text-sm text-gray-400">暂无人员</p>}</div>}
+    <div className="rounded-lg border bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-sm text-gray-600"><Users className="h-4 w-4" />{date} · {className} · 点击人数查看名单</div><div className="mt-4 grid gap-3 sm:grid-cols-4"><CountButton label="已通过" count={approved.length} active={expanded === 'approved'} onClick={() => setExpanded(expanded === 'approved' ? null : 'approved')} color="text-emerald-700" /><CountButton label="待查对" count={pending.length} active={expanded === 'pending'} onClick={() => setExpanded(expanded === 'pending' ? null : 'pending')} color="text-amber-700" /><CountButton label="已驳回" count={rejected.length} active={expanded === 'rejected'} onClick={() => setExpanded(expanded === 'rejected' ? null : 'rejected')} color="text-gray-500" /><CountButton label="考勤工作" count={dutyNames.length} active={expanded === 'duty'} onClick={() => setExpanded(expanded === 'duty' ? null : 'duty')} color="text-sky-700" /></div></div>
+    {expanded === 'duty' ? (
+      <div className="rounded-lg border bg-white p-5 shadow-sm">
+        <h3 className="font-semibold">考勤工作人员名单</h3>
+        {dutyNames.length ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {dutyNames.map((name) => <span key={name} className="rounded-md bg-sky-50 px-3 py-1.5 text-sm font-medium text-sky-800 ring-1 ring-sky-200">{name}</span>)}
+          </div>
+        ) : <p className="mt-4 text-sm text-gray-400">当天暂无已通过的考勤工作安排</p>}
+      </div>
+    ) : expanded ? (
+      <div className="rounded-lg border bg-white p-5 shadow-sm"><h3 className="font-semibold">{expanded === 'approved' ? '已通过名单' : expanded === 'pending' ? '待查对名单' : '已驳回名单'}</h3>{people.length ? <div className="mt-3 divide-y">{people.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span className="font-medium">{item.student_name}（{item.student_id}）· {item.class_name}</span><span className="text-gray-500">{item.leave_type} · {formatTime(item.start_time)} 至 {formatTime(item.end_time)}</span></div>)}</div> : <p className="mt-4 text-sm text-gray-400">暂无人员</p>}</div>
+    ) : null}
   </div></DashboardLayout>;
 }
 

@@ -123,15 +123,17 @@ const NAV_ITEMS: NavItem[] = [
   { label: '活动总表', href: '/admin?role=admin&tab=activities', icon: ClipboardList, requiredRole: 'admin' },
   { label: '活动审核', href: '/admin?role=admin&tab=review', icon: FileCheck, requiredPermission: 'canPublish' },
   { label: '活动赋分', href: '/admin?role=admin&tab=scoring', icon: Award, requiredPermission: 'canScore' },
-  { label: '我的假条', href: '/leave-slip/mine', icon: FileCheck },
   { label: '用户管理', href: '/admin?role=admin&tab=users', icon: Users, requiredRole: 'admin' },
   { label: '活动提交', href: '/submit', icon: Send, requiredPermission: 'canSubmitActivity' },
   { label: '提交状态', href: '/submit/status', icon: FileCheck, requiredPermission: 'canViewSubmissionStatus' },
   { label: '赋分材料', href: '/submit/scoring', icon: Award, requiredPermission: 'canSubmitScoring' },
+  { label: '我的假条', href: '/leave-slip/mine', icon: FileCheck },
   { label: '假条上传', href: '/leave-slip/upload', icon: FileCheck, requiredPermission: 'canUploadLeave' },
+  { label: '临时请假', href: '/leave-slip/temporary', icon: Send, requiredPermission: 'canUploadLeave' },
   { label: '假条查对', href: '/leave-slip/review', icon: UserCheck, requiredPermission: 'canReviewLeave' },
   { label: '假条查询', href: '/leave-slip/query', icon: Moon, requiredPermission: 'canQueryLeave' },
   { label: '原假条', href: '/leave-slip/originals', icon: FileCheck, requiredPermission: 'canManageOriginalLeave' },
+  { label: '考勤工作安排', href: '/attendance-work', icon: ClipboardList },
   { label: '晚自习查询', href: '/evening-study', icon: Moon, requiredPermission: 'canViewEveningStudy' },
 ];
 
