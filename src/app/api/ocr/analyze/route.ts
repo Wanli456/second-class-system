@@ -67,6 +67,32 @@ type OcrPatch = {
   fields: Record<string, unknown>;
 };
 
+function mergeClassStudents(perImage: OcrPatch[]): Array<{ class_name: string; students: string[]; student_ids: string[] }> {
+  const merged = new Map<string, { students: string[]; student_ids: string[] }>();
+  for (const patch of perImage) {
+    const raw = patch.fields.class_students;
+    if (!Array.isArray(raw)) continue;
+    for (const item of raw) {
+      const class_name = String(item && (item as { class_name?: unknown }).class_name || '').trim();
+      if (!class_name) continue;
+      const studentsRaw = (item as { students?: unknown }).students;
+      const idsRaw = (item as { student_ids?: unknown }).student_ids;
+      const students = Array.isArray(studentsRaw)
+        ? studentsRaw.map((name) => String(name).trim()).filter(Boolean)
+        : [];
+      const student_ids = Array.isArray(idsRaw)
+        ? idsRaw.map((id) => String(id).trim()).filter(Boolean)
+        : [];
+      const existing = merged.get(class_name) || { students: [], student_ids: [] };
+      merged.set(class_name, {
+        students: [...new Set([...existing.students, ...students])],
+        student_ids: [...new Set([...existing.student_ids, ...student_ids])],
+      });
+    }
+  }
+  return [...merged].map(([class_name, value]) => ({ class_name, students: value.students, student_ids: value.student_ids }));
+}
+
 // POST /api/ocr/analyze
 // body: { imageUrls: string[] } 或 { imageUrl: string }，地址来自 /api/upload 的返回值。
 // 返回多张截图合并后的识别行和初步字段（需人工核对）。
@@ -115,6 +141,8 @@ export async function POST(request: NextRequest) {
         activity_name: firstNonEmpty((patch) => String(patch.activity_name || '')),
         classes: unique(perImage.flatMap((patch) => Array.isArray(patch.fields.classes) ? patch.fields.classes.map(String) : [])),
         students: unique(perImage.flatMap((patch) => Array.isArray(patch.fields.students) ? patch.fields.students.map(String) : [])),
+        student_ids: unique(perImage.flatMap((patch) => Array.isArray(patch.fields.student_ids) ? patch.fields.student_ids.map(String) : [])),
+        class_students: mergeClassStudents(perImage),
         start_time: firstNonEmpty((patch) => String(patch.start_time || '')),
         end_time: firstNonEmpty((patch) => String(patch.end_time || '')),
         time_source_image: timeSourceIndex >= 0 ? timeSourceIndex : null,

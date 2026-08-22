@@ -23,6 +23,13 @@ const SLIP_TYPES = [
 
 const LEAVE_TYPES = ['事假', '病假', '活动公假'] as const;
 
+function FieldBadge({ kind, label }: { kind: 'auto' | 'manual'; label?: string }) {
+  if (kind === 'auto') {
+    return <span className="ml-1 inline-flex items-center rounded-full bg-teal-100 px-2 py-0.5 text-[11px] font-semibold text-teal-800">{label || '自动识别'}</span>;
+  }
+  return <span className="ml-1 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">{label || '需手填/手选'}</span>;
+}
+
 export default function LeaveSlipUploadPage() {
   const router = useRouter();
   const { user, initialized } = useUser();
@@ -38,6 +45,7 @@ export default function LeaveSlipUploadPage() {
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrError, setOcrError] = useState('');
   const [ocrLines, setOcrLines] = useState<Array<{ text: string; score?: number; image?: number }>>([]);
+  const [ocrNotice, setOcrNotice] = useState('');
   const [counselorSignature, setCounselorSignature] = useState(false);
   const [officialSeal, setOfficialSeal] = useState(false);
   const [teacherSignature, setTeacherSignature] = useState(false);
@@ -112,15 +120,47 @@ export default function LeaveSlipUploadPage() {
 
       const fields = data.data.fields || {};
       const names: string[] = Array.isArray(fields.students) ? fields.students.map(String) : [];
-      if (names.length) {
+      const classes: string[] = Array.isArray(fields.classes) ? fields.classes.map(String) : [];
+      const classStudents: Array<{ class_name: string; students?: unknown; student_ids?: unknown }> = Array.isArray(fields.class_students) ? fields.class_students as Array<{ class_name: string; students?: unknown; student_ids?: unknown }> : [];
+      const currentClass = (user?.className || '').replace(/\s+/g, '');
+      const recognizedClasses = classes.map((item) => item.replace(/\s+/g, '')).filter(Boolean);
+
+      const matchedClassEntry = classStudents.find((entry) => String(entry.class_name || '').replace(/\s+/g, '') === currentClass);
+      const matchedNames: string[] = Array.isArray(matchedClassEntry?.students) ? matchedClassEntry.students.map(String) : [];
+      const matchedIds: string[] = Array.isArray(matchedClassEntry?.student_ids) ? matchedClassEntry.student_ids.map(String) : [];
+      const studentsToFill = matchedNames.length ? matchedNames : names;
+      const shouldUseMatchedIds = Boolean(matchedClassEntry) && matchedIds.length === studentsToFill.length;
+      const shouldAutoFill = Boolean(currentClass)
+        && (matchedClassEntry ? matchedNames.length > 0 : recognizedClasses.length === 1 && recognizedClasses[0] === currentClass);
+
+      if (recognizedClasses.length > 1) {
+        setOcrNotice(
+          matchedClassEntry
+            ? `识别到多个班级（${classes.join('、')}），已自动只把本班「${matchedClassEntry.class_name}」的同学填入下方名单${shouldUseMatchedIds ? '，姓名和学号一起填入' : '，学号请手填'}，请核对。`
+            : `识别到多个班级（${classes.join('、')}），但没有识别到本班「${user?.className || '未设置班级'}」，请手动填写本班同学。`,
+        );
+      } else if (recognizedClasses.length === 1 && currentClass && recognizedClasses[0] === currentClass) {
+        setOcrNotice(`识别到本班「${classes[0]}」的同学，已自动填入下方名单${shouldUseMatchedIds ? '（姓名和学号）' : ''}，请核对后补全学号。`);
+      } else if (recognizedClasses.length === 1) {
+        setOcrNotice(`图片识别到的是「${classes[0]}」，但当前账号是「${user?.className || '未设置班级'}」，为避免填错班，系统没有自动填入，请手动填写。`);
+      } else {
+        setOcrNotice(`图片里没有识别到明确班级，请手动填写本班「${user?.className || ''}」的同学。`);
+      }
+
+      if (shouldAutoFill && studentsToFill.length) {
         setStudents((previous) => {
           const existingNames = new Set(previous.map((row) => row.student_name.trim()).filter(Boolean));
           const rows = previous.filter((row) => row.student_id.trim() || row.student_name.trim());
-          const added = names.filter((name) => !existingNames.has(name) && name.length >= 2).map((name) => ({ student_id: '', student_name: name, class_name: user?.className || '' }));
+          const added = studentsToFill.map((name, index) => ({ student_id: shouldUseMatchedIds ? matchedIds[index] || '' : '', student_name: name, class_name: user?.className || '' })).filter((row) => !existingNames.has(row.student_name) && row.student_name.length >= 2);
           return [...rows, ...added];
         });
       }
-      if (slipType === '二课活动请假' && fields.activity_name && !activityName) setActivityName(String(fields.activity_name));
+      if (slipType === '二课活动请假' && fields.activity_name && !activityName) {
+        const recognizedActivity = String(fields.activity_name);
+        setActivityName(recognizedActivity);
+        const exactActivity = activityOptions.find((item) => item.full_name === recognizedActivity || item.id === recognizedActivity);
+        if (exactActivity?.id) setActivityId(exactActivity.id);
+      }
       if (fields.start_time && String(fields.start_time).length >= 16) setStartTime(String(fields.start_time).slice(0, 16));
       if (fields.end_time && String(fields.end_time).length >= 16) setEndTime(String(fields.end_time).slice(0, 16));
       setOcrLines(Array.isArray(data.data.lines) ? data.data.lines : []);
@@ -226,6 +266,20 @@ export default function LeaveSlipUploadPage() {
           <p className="mt-2 max-w-2xl text-sm leading-6 text-pretty text-slate-600">由班级负责人统一上传本班假条，18:30 后上传会自动标记为迟到假条。</p>
         </header>
 
+        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-sm font-semibold text-slate-950">哪些能自动识别，哪些要手填？</p>
+          <ul className="mt-2 space-y-2 text-xs leading-5 text-slate-600">
+            <li className="flex flex-wrap items-center gap-y-1">
+              <FieldBadge kind="auto" />
+              <span className="ml-2">上传图片后自动识别：<strong>学生姓名、学生班级、开始时间、结束时间</strong>；图片里出现学号时也会自动识别<strong>学号</strong>；“二课活动请假”还会自动识别<strong>活动名称</strong>（仅作候选，请确认）。识别结果都可以手动改，提交前请核对。</span>
+            </li>
+            <li className="flex flex-wrap items-center gap-y-1">
+              <FieldBadge kind="manual" />
+              <span className="ml-2">必须手填或手选：<strong>假条类型、请假类型、关联活动、公章/老师签字/辅导员签字</strong>的核对勾选；<strong>图片</strong>也需要手动选择上传。<strong>图片里没有学号时，学号只能手填。</strong></span>
+            </li>
+          </ul>
+        </div>
+
         {error && <div role="alert" className="mb-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
         {success && <div role="status" className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"><CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600" /><p>{success}，即将跳转到查询页</p></div>}
 
@@ -246,22 +300,22 @@ export default function LeaveSlipUploadPage() {
           <fieldset>
             <legend className="flex items-center gap-2 text-sm font-semibold text-slate-950"><span className="flex size-6 items-center justify-center rounded-full bg-slate-950 text-xs text-white">2</span>请假时间</legend>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <label className="block text-xs font-semibold text-slate-600">请假类型
+              <label className="block text-xs font-semibold text-slate-600">请假类型{(slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条') ? <FieldBadge kind="auto" label="固定" /> : <FieldBadge kind="manual" />}
                 <select value={leaveType} disabled={slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条'} onChange={(event) => setLeaveType(event.target.value)} className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500">
                   {slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条' ? <option value="活动公假">活动公假（固定）</option> : LEAVE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
                 </select>
                 {(slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条') && <span className="mt-1 block text-[11px] text-slate-500">该假条类型只允许“活动公假”</span>}
               </label>
               {slipType === '二课活动请假' && (
-                <label className="block text-xs font-semibold text-slate-600">关联活动（一次只能选择一个活动）
+                <label className="block text-xs font-semibold text-slate-600">关联活动（一次只能选择一个活动）<FieldBadge kind="manual" />
                   <input list="leave-slip-activity-options" value={activityName} onChange={(event) => { setActivityName(event.target.value); const match = activityOptions.find((item) => item.full_name === event.target.value || item.id === event.target.value); setActivityId(match?.id || ''); }} className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100" placeholder="输入活动名称或ID，一次一种活动" />
                   <datalist id="leave-slip-activity-options">{activityOptionsFiltered.map((activity) => <option key={activity.id} value={activity.full_name}>{activity.id}</option>)}</datalist>
                 </label>
               )}
-              <label className="block text-xs font-semibold text-slate-600">开始时间
+              <label className="block text-xs font-semibold text-slate-600">开始时间<FieldBadge kind="auto" />
                 <input type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100" />
               </label>
-              <label className="block text-xs font-semibold text-slate-600">结束时间
+              <label className="block text-xs font-semibold text-slate-600">结束时间<FieldBadge kind="auto" />
                 <input type="datetime-local" value={endTime} onChange={(event) => setEndTime(event.target.value)} className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-teal-600 focus:ring-4 focus:ring-teal-100" />
               </label>
             </div>
@@ -269,6 +323,7 @@ export default function LeaveSlipUploadPage() {
 
           <fieldset>
             <legend className="flex items-center gap-2 text-sm font-semibold text-slate-950"><span className="flex size-6 items-center justify-center rounded-full bg-slate-950 text-xs text-white">3</span>请假学生</legend>
+            <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600"><span className="font-semibold text-slate-800">姓名、班级</span>：上传图片后自动识别填入（可手改）；<span className="font-semibold text-slate-800">学号</span>：图片里有学号会自动填入，<strong>提交前必须核对</strong>；没有识别到就手填。<span className="ml-2 inline-flex items-center rounded-full bg-teal-100 px-2 py-0.5 text-[11px] font-semibold text-teal-800">姓名自动</span><span className="ml-1 inline-flex items-center rounded-full bg-teal-100 px-2 py-0.5 text-[11px] font-semibold text-teal-800">学号可自动</span></p>
             <div className="mt-4 space-y-3">
               {students.map((student, index) => (
                 <div key={index} className="grid gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-[1fr_1fr_1fr_auto]">
@@ -308,8 +363,8 @@ export default function LeaveSlipUploadPage() {
               {ocrError && <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{ocrError}（识别失败可手动填写，不影响提交）</p>}
               {ocrLines.length > 0 && (
                 <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <p className="mb-2 text-xs font-medium text-slate-600">自动识别到的人员/内容（已自动填入下方名单，请补学号并核对）</p>
-                  <p className="mb-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs leading-5 text-amber-800">原图可能包含多个班级的同学。提交时只保留<strong>本班学生</strong>，把其他班级的同学从下方名单中删除后再提交。</p>
+                  <p className="mb-2 text-xs font-medium text-slate-600">自动识别到的人员/内容</p>
+                  {ocrNotice && <p className="mb-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs leading-5 text-amber-800">{ocrNotice}</p>}
                   <div className="max-h-32 space-y-1 overflow-auto">
                     {ocrLines.map((line, index) => <p key={`${line.text}-${index}`} className="text-xs leading-5 text-slate-700">{line.text}</p>)}
                   </div>
@@ -318,12 +373,17 @@ export default function LeaveSlipUploadPage() {
             </>
 
             {slipType === '手写假条' ? (
-              <label className="mt-4 flex items-center gap-3 rounded-xl border border-slate-200 p-3">
-                <input type="checkbox" checked={counselorSignature} onChange={(event) => setCounselorSignature(event.target.checked)} className="size-4 rounded border-slate-300 text-teal-700 accent-teal-700" />
-                <span className="text-sm text-slate-700">已核对：假条上<strong className="text-slate-950">辅导员签字</strong>齐全且格式按照模板填写</span>
-              </label>
+              <div className="mt-4">
+                <p className="mb-2 text-xs text-slate-500">以下为人工核对后手动勾选，OCR 识别结果仅供参考。</p>
+                <label className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
+                  <input type="checkbox" checked={counselorSignature} onChange={(event) => setCounselorSignature(event.target.checked)} className="size-4 rounded border-slate-300 text-teal-700 accent-teal-700" />
+                  <span className="text-sm text-slate-700">已核对：假条上<strong className="text-slate-950">辅导员签字</strong>齐全且格式按照模板填写</span>
+                </label>
+              </div>
             ) : (
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="mt-4">
+                <p className="mb-2 text-xs text-slate-500">以下为人工核对后手动勾选，OCR 识别结果仅供参考。</p>
+                <div className="grid gap-3 sm:grid-cols-2">
                 <label className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
                   <input type="checkbox" checked={officialSeal} onChange={(event) => setOfficialSeal(event.target.checked)} className="size-4 rounded border-slate-300 text-teal-700 accent-teal-700" />
                   <span className="text-sm text-slate-700">已核对：<strong className="text-slate-950">公章</strong>齐全</span>
@@ -332,6 +392,7 @@ export default function LeaveSlipUploadPage() {
                   <input type="checkbox" checked={teacherSignature} onChange={(event) => setTeacherSignature(event.target.checked)} className="size-4 rounded border-slate-300 text-teal-700 accent-teal-700" />
                   <span className="text-sm text-slate-700">已核对：<strong className="text-slate-950">老师签字</strong>齐全</span>
                 </label>
+              </div>
               </div>
             )}
           </fieldset>
