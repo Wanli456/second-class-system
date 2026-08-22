@@ -6,6 +6,13 @@ import { query, queryOne, withTransaction } from '@/storage/database/supabase-cl
 
 const REVIEW_STATUSES = ['待审核', '已通过', '已驳回'];
 
+class SelfReviewLeaveError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SelfReviewLeaveError';
+  }
+}
+
 function dateCondition(index: number) {
   const dateParam = `$${index}`;
   // datetime-local values are submitted as UTC ISO strings but the database
@@ -209,14 +216,23 @@ export async function PUT(request: NextRequest) {
     const { id, group_id, review_status, review_note } = await request.json();
     if ((!id && !group_id) || !REVIEW_STATUSES.includes(review_status)) return NextResponse.json({ success: false, error: '缺少或无效的审核参数' }, { status: 400 });
     if (!group_id) {
+      const leave = await queryOne<{ applicant_user_id?: string | null; student_id: string }>(
+        `SELECT applicant_user_id, student_id FROM leave_requests WHERE id=$1 AND group_id IS NULL AND review_status='待审核'`,
+        [id],
+      );
+      if (!leave) return NextResponse.json({ success: false, error: '请假申请不存在或已处理' }, { status: 409 });
+      if (leave.applicant_user_id === auth.user!.id || (!leave.applicant_user_id && leave.student_id === auth.user!.student_id)) {
+        throw new SelfReviewLeaveError('不能审核自己提交的请假申请');
+      }
       const data = await queryOne(`UPDATE leave_requests SET review_status=$1,review_note=$2,updated_at=NOW() WHERE id=$3 AND group_id IS NULL AND review_status='待审核' RETURNING *`, [review_status, review_note || null, id]);
       if (!data) return NextResponse.json({ success: false, error: '请假申请不存在或已处理' }, { status: 409 });
       await notifyStudent(data.student_id, review_status === '已通过' ? 'leave_approved' : 'leave_rejected', review_status === '已通过' ? '请假审核通过' : '请假被驳回', `${data.leave_type}${review_status === '已通过' ? '已通过审核' : `未通过审核。${review_note ? `原因：${review_note}` : ''}`}`, data.id);
       return NextResponse.json({ success: true, data });
     }
     const result = await withTransaction(async (client) => {
-      const group = (await client.query('SELECT * FROM leave_groups WHERE id=$1', [group_id])).rows[0] as { review_status: string } | undefined;
+      const group = (await client.query('SELECT * FROM leave_groups WHERE id=$1', [group_id])).rows[0] as { review_status: string; applicant_user_id?: string | null } | undefined;
       if (!group || group.review_status !== '待审核') throw new Error('集体请假组不存在或已处理');
+      if (group.applicant_user_id === auth.user!.id) throw new SelfReviewLeaveError('不能审核自己发起的集体请假');
       const updatedGroup = (await client.query(`UPDATE leave_groups SET review_status=$1,review_note=$2,updated_at=NOW() WHERE id=$3 AND review_status='待审核' RETURNING *`, [review_status, review_note || null, group_id])).rows[0];
       if (!updatedGroup) throw new Error('集体请假状态已发生变化，请刷新后重试');
       const leaves = (await client.query(`UPDATE leave_requests SET review_status=$1,review_note=$2,updated_at=NOW() WHERE group_id=$3 AND review_status='待审核' RETURNING *`, [review_status, review_note || null, group_id])).rows;
@@ -226,6 +242,7 @@ export async function PUT(request: NextRequest) {
     for (const item of result.leaves) await notifyStudent(String(item.student_id), review_status === '已通过' ? 'leave_approved' : 'leave_rejected', review_status === '已通过' ? '集体请假审核通过' : '集体请假被驳回', `集体请假「${item.activity_name || item.leave_type}」${review_status === '已通过' ? '已通过审核' : `未通过审核。${review_note ? `原因：${review_note}` : ''}`}`, String(item.id));
     return NextResponse.json({ success: true, data: result.leaves, group: result.group });
   } catch (error) {
+    if (error instanceof SelfReviewLeaveError) return NextResponse.json({ success: false, error: error.message }, { status: 403 });
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '审核请假失败' }, { status: 500 });
   }
 }
