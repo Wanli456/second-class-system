@@ -38,6 +38,10 @@ interface User {
   canReviewLeave?: boolean;
   canViewEveningStudy?: boolean;
   canStartGroupLeave?: boolean;
+  canUploadLeave?: boolean;
+  canQueryLeave?: boolean;
+  canManageOriginalLeave?: boolean;
+  canManageLeaveTemplate?: boolean;
 }
 
 interface DashboardLayoutProps {
@@ -119,13 +123,15 @@ const NAV_ITEMS: NavItem[] = [
   { label: '活动总表', href: '/admin?role=admin&tab=activities', icon: ClipboardList, requiredRole: 'admin' },
   { label: '活动审核', href: '/admin?role=admin&tab=review', icon: FileCheck, requiredPermission: 'canPublish' },
   { label: '活动赋分', href: '/admin?role=admin&tab=scoring', icon: Award, requiredPermission: 'canScore' },
-  { label: '请假审核', href: '/admin?role=admin&tab=leave', icon: UserCheck, requiredPermission: 'canReviewLeave' },
+  { label: '我的假条', href: '/leave-slip/mine', icon: FileCheck },
   { label: '用户管理', href: '/admin?role=admin&tab=users', icon: Users, requiredRole: 'admin' },
   { label: '活动提交', href: '/submit', icon: Send, requiredPermission: 'canSubmitActivity' },
   { label: '提交状态', href: '/submit/status', icon: FileCheck, requiredPermission: 'canViewSubmissionStatus' },
   { label: '赋分材料', href: '/submit/scoring', icon: Award, requiredPermission: 'canSubmitScoring' },
-  { label: '请假申请', href: '/leave', icon: FileCheck },
-  { label: '请假状态', href: '/leave/status', icon: FileCheck },
+  { label: '假条上传', href: '/leave-slip/upload', icon: FileCheck, requiredPermission: 'canUploadLeave' },
+  { label: '假条查对', href: '/leave-slip/review', icon: UserCheck, requiredPermission: 'canReviewLeave' },
+  { label: '假条查询', href: '/leave-slip/query', icon: Moon, requiredPermission: 'canQueryLeave' },
+  { label: '原假条', href: '/leave-slip/originals', icon: FileCheck, requiredPermission: 'canManageOriginalLeave' },
   { label: '晚自习查询', href: '/evening-study', icon: Moon, requiredPermission: 'canViewEveningStudy' },
 ];
 
@@ -178,6 +184,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
 
   const getNavGroup = (href: string) => {
     if (href === '/') return '工作台';
+    if (href.startsWith('/leave-slip')) return '假条管理';
     if (href.startsWith('/leave')) return '请假';
     if (href.startsWith('/submit')) return '活动';
     if (href.startsWith('/admin')) return '管理';
@@ -187,8 +194,9 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
   const roleLabel = React.useMemo(() => {
     if (!user) return '访客';
     switch (user.role) {
-      case 'admin': return '管理员';
+      case 'admin': return '系统管理员';
       case 'leader': return '部门负责人';
+      case 'class_leader': return '班级负责人';
       case 'student': return '学生';
       default: return '学生';
     }

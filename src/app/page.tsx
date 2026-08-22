@@ -355,17 +355,19 @@ export default function Home() {
                 </Link>
               )}
 
-              {/* 请假申请 */}
-              <Link
-                href="/leave"
-                className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
-              >
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
-                  <FileText className="h-5 w-5" />
-                </div>
-                <h4 className="font-semibold text-gray-900">请假申请</h4>
-                <p className="mt-1 text-xs text-gray-500">提交请假申请（含请假条图片）</p>
-              </Link>
+              {/* 假条上传 */}
+              {(user.role === 'admin' || user.canUploadLeave) && (
+                <Link
+                  href="/leave-slip/upload"
+                  className="group rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition-all hover:border-teal-500 hover:shadow-md"
+                >
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                  <h4 className="font-semibold text-gray-900">假条上传</h4>
+                  <p className="mt-1 text-xs text-gray-500">由班级负责人统一上传本班假条</p>
+                </Link>
+              )}
             </div>
           </div>
 
@@ -384,14 +386,16 @@ export default function Home() {
                 </Link>
               )}
 
-              {/* 请假状态查询 */}
-              <Link
-                href="/leave/status"
-                className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-teal-500 hover:bg-gray-50"
-              >
-                <FileText className="h-5 w-5 text-gray-400" />
-                <span className="text-sm font-medium text-gray-700">请假状态查询</span>
-              </Link>
+              {/* 假条查询 */}
+              {(user.role === 'admin' || user.canQueryLeave) && (
+                <Link
+                  href="/leave-slip/query"
+                  className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-teal-500 hover:bg-gray-50"
+                >
+                  <FileText className="h-5 w-5 text-gray-400" />
+                  <span className="text-sm font-medium text-gray-700">假条查询</span>
+                </Link>
+              )}
 
               {/* 晚自习请假查询 */}
               {(user.role === 'admin' || user.canViewEveningStudy) && (
@@ -457,10 +461,10 @@ export default function Home() {
                 <ArrowUpRight className="h-4 w-4" />
               </button>
               <Link
-                href="/leave"
+                href="/login?redirect=/leave-slip/upload"
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-teal-500 hover:text-teal-700"
               >
-                直接提交请假
+                进入假条上传
               </Link>
             </div>
           </div>
@@ -477,8 +481,8 @@ export default function Home() {
             </div>
             <div className="divide-y divide-slate-100">
               {[
-                { href: '/leave', label: '请假申请', detail: '提交请假信息与请假条', icon: FileText, tone: 'text-sky-700 bg-sky-50' },
-                { href: '/leave/status', label: '请假状态查询', detail: '查看审核处理状态', icon: FileCheck, tone: 'text-slate-700 bg-slate-100' },
+                { href: '/login?redirect=/leave-slip/upload', label: '假条上传', detail: '班级负责人统一上传本班假条', icon: FileText, tone: 'text-sky-700 bg-sky-50' },
+                { href: '/login?redirect=/leave-slip/query', label: '假条查询', detail: '按班级/姓名/日期搜索与匹配', icon: FileCheck, tone: 'text-slate-700 bg-slate-100' },
               ].map(({ href, label, detail, icon: Icon, tone }) => (
                 <Link key={href} href={href} className="group flex items-center gap-3 py-4 transition-colors first:pt-5 last:pb-1 hover:text-teal-700">
                   <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tone}`}>

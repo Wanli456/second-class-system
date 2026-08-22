@@ -17,6 +17,10 @@ interface User {
   canReviewLeave?: boolean;
   canViewEveningStudy?: boolean;
   canStartGroupLeave?: boolean;
+  canUploadLeave?: boolean;
+  canQueryLeave?: boolean;
+  canManageOriginalLeave?: boolean;
+  canManageLeaveTemplate?: boolean;
   department?: string | null;
   className?: string | null;
   contactPhone?: string | null;

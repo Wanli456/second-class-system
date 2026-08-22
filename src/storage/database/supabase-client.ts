@@ -51,6 +51,10 @@ if (localDb && shouldInitializeLocalDb) {
       can_review_leave BOOLEAN NOT NULL DEFAULT false,
       can_view_evening_study BOOLEAN NOT NULL DEFAULT false,
       can_start_group_leave BOOLEAN NOT NULL DEFAULT false,
+      can_upload_leave BOOLEAN NOT NULL DEFAULT false,
+      can_query_leave BOOLEAN NOT NULL DEFAULT false,
+      can_manage_original_leave BOOLEAN NOT NULL DEFAULT false,
+      can_manage_leave_template BOOLEAN NOT NULL DEFAULT false,
       department TEXT,
       class_name TEXT,
       contact_phone TEXT,
@@ -318,6 +322,10 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_review_leave BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_evening_study BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_start_group_leave BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_upload_leave BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_query_leave BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_manage_original_leave BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_manage_leave_template BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_phone TEXT;
@@ -475,6 +483,102 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE class_roster ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
     ALTER TABLE class_roster ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
     CREATE UNIQUE INDEX IF NOT EXISTS class_roster_class_student_key ON class_roster (class_name, student_id);
+  `);
+
+  if (!(await tableExists('leave_slips'))) {
+    await executeSchemaSql(`
+      CREATE TABLE leave_slips (
+        id TEXT PRIMARY KEY DEFAULT ${uuidDefault},
+        slip_type TEXT NOT NULL DEFAULT 'handwritten',
+        leave_type TEXT NOT NULL DEFAULT '事假',
+        class_names TEXT NOT NULL,
+        start_time TIMESTAMP,
+        end_time TIMESTAMP,
+        activity_id TEXT,
+        activity_name TEXT,
+        applicant_user_id TEXT NOT NULL,
+        applicant_name TEXT,
+        applicant_student_id TEXT,
+        leave_image_url TEXT,
+        leave_image_name TEXT,
+        image_list TEXT NOT NULL DEFAULT '[]',
+        ocr_names TEXT NOT NULL DEFAULT '[]',
+        image_hashes TEXT NOT NULL DEFAULT '[]',
+        duplicate_of_slip_id TEXT,
+        duplicate_score INT,
+        duplicate_warning TEXT,
+        counselor_signature BOOLEAN NOT NULL DEFAULT false,
+        official_seal BOOLEAN NOT NULL DEFAULT false,
+        teacher_signature BOOLEAN NOT NULL DEFAULT false,
+        is_late BOOLEAN NOT NULL DEFAULT false,
+        review_status TEXT NOT NULL DEFAULT '待查对',
+        review_note TEXT,
+        reviewed_by_user_id TEXT,
+        reviewed_by_name TEXT,
+        reviewed_at TIMESTAMP,
+        original_slip_id TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+  }
+
+  await executeSchemaSql(`
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS class_names TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS counselor_signature BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS official_seal BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS teacher_signature BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS is_late BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS original_slip_id TEXT;
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS image_list TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS ocr_names TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS image_hashes TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS duplicate_of_slip_id TEXT;
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS duplicate_score INT;
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS duplicate_warning TEXT;
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS reviewed_by_user_id TEXT;
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS reviewed_by_name TEXT;
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP;
+  `);
+
+  if (!(await tableExists('leave_slip_students'))) {
+    await executeSchemaSql(`
+      CREATE TABLE leave_slip_students (
+        id TEXT PRIMARY KEY DEFAULT ${uuidDefault},
+        slip_id TEXT NOT NULL,
+        student_id TEXT NOT NULL,
+        student_name TEXT NOT NULL,
+        class_name TEXT NOT NULL
+      );
+    `);
+  }
+
+  if (!(await tableExists('original_leave_slips'))) {
+    await executeSchemaSql(`
+      CREATE TABLE original_leave_slips (
+        id TEXT PRIMARY KEY DEFAULT ${uuidDefault},
+        activity_id TEXT,
+        activity_name TEXT,
+        class_names TEXT,
+        student_names TEXT,
+        start_time TIMESTAMP,
+        end_time TIMESTAMP,
+        image_url TEXT,
+        image_name TEXT,
+        image_list TEXT NOT NULL DEFAULT '[]',
+        ocr_names TEXT NOT NULL DEFAULT '[]',
+        notes TEXT,
+        created_by_user_id TEXT,
+        created_by_name TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+  }
+
+  await executeSchemaSql(`
+    ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS image_list TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS ocr_names TEXT NOT NULL DEFAULT '[]';
   `);
 
   await ensureDepartmentsTable();

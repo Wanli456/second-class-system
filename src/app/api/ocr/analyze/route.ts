@@ -1,0 +1,138 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { spawn } from 'child_process';
+import { existsSync } from 'fs';
+import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
+import os from 'os';
+import path from 'path';
+import { requirePermission } from '@/lib/auth';
+
+function runPythonOcr(pythonPath: string, args: string[]) {
+  return new Promise<void>((resolve, reject) => {
+    // stdio 使用 ignore：本机沙箱可能禁止通过 pipe 捕获子进程输出。
+    const child = spawn(pythonPath, args, { windowsHide: true, stdio: 'ignore' });
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error('OCR 识别超时'));
+    }, 120000);
+    child.once('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.once('close', (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve();
+      else reject(new Error(`OCR 脚本退出码：${code}`));
+    });
+  });
+}
+
+function resolvePythonPath() {
+  const root = process.cwd();
+  const candidate = process.platform === 'win32'
+    ? path.join(root, '.ocr-venv', 'Scripts', 'python.exe')
+    : path.join(root, '.ocr-venv', 'bin', 'python');
+  if (existsSync(candidate)) return candidate;
+  return process.platform === 'win32' ? 'python' : 'python3';
+}
+
+function unique(value: string[]): string[] {
+  return [...new Set(value.map((item) => item.trim()).filter(Boolean))];
+}
+
+async function resolveInputPath(imageUrl: string, tempDir: string, index: number): Promise<string> {
+  if (/^https?:\/\//i.test(imageUrl)) {
+    const response = await fetch(imageUrl);
+    if (!response.ok) throw new Error(`下载图片失败：HTTP ${response.status}`);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const ext = imageUrl.includes('.png') ? 'png' : 'jpg';
+    const inputPath = path.join(tempDir, `image-${index}.${ext}`);
+    await writeFile(inputPath, buffer);
+    return inputPath;
+  }
+  if (imageUrl.startsWith('/uploads/')) {
+    const fileName = imageUrl.split('/').pop();
+    const inputPath = path.join(process.cwd(), 'public', 'uploads', fileName || '');
+    if (!existsSync(inputPath)) throw new Error(`找不到本地图片：${imageUrl}`);
+    return inputPath;
+  }
+  throw new Error('image_url 只支持 /uploads 本地路径或 http(s) 地址');
+}
+
+type OcrLine = { text: string; score?: number };
+type OcrPatch = {
+  image?: number;
+  url?: string;
+  image_name?: string;
+  lines: OcrLine[];
+  fields: Record<string, unknown>;
+};
+
+// POST /api/ocr/analyze
+// body: { imageUrls: string[] } 或 { imageUrl: string }，地址来自 /api/upload 的返回值。
+// 返回多张截图合并后的识别行和初步字段（需人工核对）。
+export async function POST(request: NextRequest) {
+  try {
+    let auth = await requirePermission(request, 'manageOriginalLeave');
+    if (auth.response) {
+      auth = await requirePermission(request, 'uploadLeave');
+      if (auth.response) return auth.response;
+    }
+
+    const body = await request.json();
+    const rawUrls = Array.isArray(body.imageUrls) ? body.imageUrls
+      : Array.isArray(body.image_urls) ? body.image_urls
+        : [body.imageUrl || body.image_url].filter(Boolean);
+    const imageUrls = rawUrls.map((url: unknown) => String(url).trim()).filter(Boolean);
+
+    if (!imageUrls.length) return NextResponse.json({ success: false, error: '缺少 imageUrl 或 imageUrls 参数' }, { status: 400 });
+
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ds-ocr-'));
+    const pythonPath = resolvePythonPath();
+    const scriptPath = path.join(process.cwd(), 'local-ocr', 'ocr_service.py');
+    if (!existsSync(scriptPath)) throw new Error('OCR 服务脚本 local-ocr/ocr_service.py 不存在');
+
+    try {
+      const perImage: OcrPatch[] = [];
+      for (let index = 0; index < imageUrls.length; index += 1) {
+        const imageUrl = imageUrls[index];
+        const inputPath = await resolveInputPath(imageUrl, tempDir, index);
+        const outputPath = path.join(tempDir, `result-${index}.json`);
+        await runPythonOcr(pythonPath, [scriptPath, inputPath, outputPath]);
+        const raw = await readFile(outputPath, 'utf8');
+        const result = JSON.parse(raw);
+        if (!result?.ok) throw new Error(result?.error || 'OCR 识别失败');
+        perImage.push({ image: index, url: imageUrl, lines: result.lines || [], fields: result.fields || {} });
+      }
+
+      const lines = perImage.flatMap((result) => result.lines.map((line) => ({ ...line, image: result.image })));
+
+      const firstNonEmpty = (selector: (fields: Record<string, unknown>) => string) => (
+        perImage.map((patch) => selector(patch.fields)).find((value) => Boolean(value)) || ''
+      );
+
+      const timeSourceIndex = perImage.findIndex((patch) => Boolean(String(patch.fields.start_time || '')));
+      const fields = {
+        activity_name: firstNonEmpty((patch) => String(patch.activity_name || '')),
+        classes: unique(perImage.flatMap((patch) => Array.isArray(patch.fields.classes) ? patch.fields.classes.map(String) : [])),
+        students: unique(perImage.flatMap((patch) => Array.isArray(patch.fields.students) ? patch.fields.students.map(String) : [])),
+        start_time: firstNonEmpty((patch) => String(patch.start_time || '')),
+        end_time: firstNonEmpty((patch) => String(patch.end_time || '')),
+        time_source_image: timeSourceIndex >= 0 ? timeSourceIndex : null,
+        counselor_signature: perImage.some((patch) => patch.fields.counselor_signature === true),
+        official_seal: perImage.some((patch) => patch.fields.official_seal === true),
+        teacher_signature: perImage.some((patch) => patch.fields.teacher_signature === true),
+        cover_line: perImage.map((patch) => String(patch.fields.cover_line || '')).filter(Boolean).join('\n'),
+        suggested_notes: timeSourceIndex >= 0
+          ? `多张截图：请假时间取自第 ${timeSourceIndex + 1} 张截图；公章/签字按整份材料的侧面（骑缝章）核验，任一张截图识别到即视为有。`
+          : 'OCR 多图初稿，请人工核对班级、姓名、时间后再保存。',
+      };
+
+      return NextResponse.json({ success: true, data: { lines, fields, perImage } });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  } catch (error) {
+    console.error('OCR 识别失败:', error);
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'OCR 识别失败' }, { status: 500 });
+  }
+}

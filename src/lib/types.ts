@@ -87,6 +87,62 @@ export interface LeaveRequest {
   updated_at: string;
 }
 
+export interface LeaveSlip {
+  id: string;
+  slip_type: '手写假条' | '二课活动请假';
+  leave_type: '事假' | '病假' | '活动公假';
+  class_names: string;
+  start_time: string | null;
+  end_time: string | null;
+  activity_id: string | null;
+  activity_name: string | null;
+  applicant_user_id: string;
+  applicant_name: string | null;
+  applicant_student_id: string | null;
+  leave_image_url: string | null;
+  leave_image_name: string | null;
+  counselor_signature: boolean;
+  official_seal: boolean;
+  teacher_signature: boolean;
+  is_late: boolean;
+  review_status: '待查对' | '已通过' | '已驳回';
+  review_note: string | null;
+  reviewed_by_user_id: string | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  original_slip_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeaveSlipStudent {
+  id: string;
+  slip_id: string;
+  student_id: string;
+  student_name: string;
+  class_name: string;
+}
+
+export interface OriginalLeaveSlip {
+  id: string;
+  activity_id: string | null;
+  activity_name: string | null;
+  class_names: string | null;
+  student_names: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  image_url: string | null;
+  image_name: string | null;
+  notes: string | null;
+  created_by_user_id: string | null;
+  created_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const LEAVE_SLIP_TYPES = ['手写假条', '二课活动请假'] as const;
+export const LEAVE_SLIP_REVIEW_STATUSES = ['待查对', '已通过', '已驳回'] as const;
+
 export const CATEGORIES = ['德', '智', '体', '美', '劳'] as const;
 export type Category = typeof CATEGORIES[number];
 
@@ -162,4 +218,8 @@ export interface UserData {
   canReviewLeave: boolean;
   canViewEveningStudy: boolean;
   canStartGroupLeave: boolean;
+  canUploadLeave: boolean;
+  canQueryLeave: boolean;
+  canManageOriginalLeave: boolean;
+  canManageLeaveTemplate: boolean;
 }

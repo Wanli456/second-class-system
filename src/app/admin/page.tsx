@@ -37,15 +37,16 @@ import {
 type ReviewStatus = '待审核' | '已通过' | '已驳回';
 type LeaveStatus = '待审核' | '已通过' | '已驳回';
 type ScoringStatus = '待赋分' | '已赋分';
-type AdminRole = 'admin' | 'leader' | 'student';
+type AdminRole = 'admin' | 'leader' | 'class_leader' | 'student';
 type AdminTab = 'activities' | 'review' | 'scoring' | 'leave' | 'users';
-type UserPermission = 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave';
+type UserPermission = 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave' | 'canUploadLeave' | 'canQueryLeave' | 'canManageOriginalLeave' | 'canManageLeaveTemplate';
 
 const USER_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
 const ROLE_LABELS: Record<AdminRole, string> = {
   admin: '管理员',
   leader: '部门负责人',
+  class_leader: '班级负责人',
   student: '学生',
 };
 
@@ -65,7 +66,7 @@ function canAccessAdminWorkspace(userData: UserData, requestedTab: string) {
       can_review_leave: userData.canReviewLeave,
     }, requestedTab);
   }
-  return userData.canPublish || userData.canScore || userData.canReviewLeave;
+  return userData.canPublish || userData.canScore;
 }
 
 const formatDateTime = (value?: string | null) => value
@@ -121,6 +122,10 @@ interface UserData {
   canReviewLeave: boolean;
   canViewEveningStudy: boolean;
   canStartGroupLeave: boolean;
+  canUploadLeave: boolean;
+  canQueryLeave: boolean;
+  canManageOriginalLeave: boolean;
+  canManageLeaveTemplate: boolean;
   department?: string | null;
   className?: string | null;
   contactPhone?: string | null;
@@ -258,6 +263,10 @@ function AdminPage() {
       canReviewLeave: globalUser.canReviewLeave || false,
       canViewEveningStudy: globalUser.canViewEveningStudy || false,
       canStartGroupLeave: globalUser.canStartGroupLeave || false,
+      canUploadLeave: globalUser.canUploadLeave || false,
+      canQueryLeave: globalUser.canQueryLeave || false,
+      canManageOriginalLeave: globalUser.canManageOriginalLeave || false,
+      canManageLeaveTemplate: globalUser.canManageLeaveTemplate || false,
       department: globalUser.department || null,
       className: globalUser.className || null,
       contactPhone: globalUser.contactPhone || null,
@@ -287,7 +296,6 @@ function AdminPage() {
       ...(isAdmin ? ['activities' as const] : []),
       ...(canPublish ? ['review' as const] : []),
       ...(canScore ? ['scoring' as const] : []),
-      ...(canReviewLeave ? ['leave' as const] : []),
       ...(isAdmin ? ['users' as const] : []),
     ];
 
@@ -556,6 +564,10 @@ function AdminPage() {
       canReviewLeave: 'canReviewLeave',
       canViewEveningStudy: 'canViewEveningStudy',
       canStartGroupLeave: 'canStartGroupLeave',
+      canUploadLeave: 'canUploadLeave',
+      canQueryLeave: 'canQueryLeave',
+      canManageOriginalLeave: 'canManageOriginalLeave',
+      canManageLeaveTemplate: 'canManageLeaveTemplate',
     };
     const apiField = apiFieldMap[permission];
     try {
@@ -935,7 +947,7 @@ function AdminPage() {
     ...(isAdmin ? [{ key: 'activities', label: '活动总表', icon: Table, count: activities.length }] : []),
     ...(canPublish ? [{ key: 'review', label: '活动审核', icon: FileCheck, count: pendingSubmissions.length }] : []),
     ...(canScore ? [{ key: 'scoring', label: '活动赋分', icon: Award, count: scoringList.filter(s => s.scoring_status === '待赋分').length }] : []),
-    ...(canReviewLeave ? [{ key: 'leave', label: '请假审核', icon: UserCheck, count: pendingLeaveCount }] : []),
+    
     ...(isAdmin ? [{ key: 'users', label: '用户管理', icon: Users, count: 0 }] : []),
   ];
 
@@ -1639,7 +1651,8 @@ function AdminPage() {
                                     className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
                                   >
                                     <option value="admin">管理员</option>
-                                    <option value="leader">活动负责人</option>
+                                    <option value="leader">部门负责人</option>
+                                    <option value="class_leader">班级负责人</option>
                                     <option value="student">学生</option>
                                   </select>
                                   <button
@@ -1775,7 +1788,8 @@ function AdminPage() {
                                     className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
                                   >
                                     <option value="admin">管理员</option>
-                                    <option value="leader">活动负责人</option>
+                                    <option value="leader">部门负责人</option>
+                                    <option value="class_leader">班级负责人</option>
                                     <option value="student">学生</option>
                                   </select>
                                   <button
@@ -1911,7 +1925,8 @@ function AdminPage() {
                                     className="text-xs text-purple-600 border border-purple-200 rounded px-1.5 py-0.5 hover:bg-purple-50 focus:outline-none focus:ring-1 focus:ring-purple-500"
                                   >
                                     <option value="admin">管理员</option>
-                                    <option value="leader">活动负责人</option>
+                                    <option value="leader">部门负责人</option>
+                                    <option value="class_leader">班级负责人</option>
                                     <option value="student">学生</option>
                                   </select>
                                   <button
@@ -1986,23 +2001,28 @@ function UserManagement({
   const currentUserPage = Math.min(userPage, totalUserPages);
   const paginatedUsers = filteredUsers.slice((currentUserPage - 1) * userPageSize, currentUserPage * userPageSize);
   const permissions: Array<{ key: UserPermission; label: string }> = [
+    { key: 'canUploadLeave', label: '假条上传' },
+    { key: 'canReviewLeave', label: '假条查对' },
+    { key: 'canQueryLeave', label: '假条查询' },
+    { key: 'canManageOriginalLeave', label: '原假条维护' },
+    { key: 'canManageLeaveTemplate', label: '假条模板管理' },
     { key: 'canPublish', label: '活动审核' },
     { key: 'canScore', label: '活动赋分' },
     { key: 'canSubmitScoring', label: '赋分材料' },
-    { key: 'canReviewLeave', label: '请假审核' },
     { key: 'canViewEveningStudy', label: '晚自习查询' },
     { key: 'canSubmitActivity', label: '活动提交' },
     { key: 'canViewSubmissionStatus', label: '提交状态' },
-    { key: 'canStartGroupLeave', label: '班级集体请假发起' },
   ];
   const roleTextStyles: Record<string, string> = {
     admin: 'text-red-600',
     leader: 'text-emerald-600',
+    class_leader: 'text-sky-600',
     student: 'text-gray-600',
   };
   const roleTextColors: Record<string, string> = {
     admin: '#dc2626',
     leader: '#059669',
+    class_leader: '#0284c7',
     student: '#4b5563',
   };
 
@@ -2184,6 +2204,13 @@ function UserManagement({
       surface: 'border-emerald-200/80',
       text: 'text-emerald-600',
     },
+    class_leader: {
+      label: '班级负责人',
+      icon: UserRound,
+      badge: 'border-sky-200 bg-sky-50 text-sky-700',
+      surface: 'border-sky-200/80',
+      text: 'text-sky-600',
+    },
     student: {
       label: '学生',
       icon: UserRound,
@@ -2196,6 +2223,7 @@ function UserManagement({
   const roleCounts = {
     admin: users.filter((item) => item.role === 'admin').length,
     leader: users.filter((item) => item.role === 'leader').length,
+    class_leader: users.filter((item) => item.role === 'class_leader').length,
     student: users.filter((item) => item.role === 'student').length,
   };
   const rosterClassNames = [...new Set(rosterStudents.map((student) => student.class_name).filter(Boolean))];
@@ -2283,6 +2311,7 @@ function UserManagement({
                         >
                           <option value="admin" style={{ color: roleTextColors.admin }}>管理员</option>
                           <option value="leader" style={{ color: roleTextColors.leader }}>部门负责人</option>
+                          <option value="class_leader" style={{ color: roleTextColors.class_leader }}>班级负责人</option>
                           <option value="student" style={{ color: roleTextColors.student }}>学生</option>
                         </select>
                       </label>

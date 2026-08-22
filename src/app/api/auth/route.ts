@@ -14,7 +14,9 @@ import type { AuthUser } from '@/lib/auth';
 
 const PUBLIC_USER_FIELDS = `id, username, student_id, role, can_publish, can_score,
   can_submit_activity, can_view_submission_status, can_submit_scoring,
-  can_review_leave, can_view_evening_study, can_start_group_leave, department, class_name, contact_phone`;
+  can_review_leave, can_view_evening_study, can_start_group_leave,
+  can_upload_leave, can_query_leave, can_manage_original_leave, can_manage_leave_template,
+  department, class_name, contact_phone`;
 
 type StoredUser = AuthUser & { password: string };
 
@@ -101,9 +103,9 @@ export async function PATCH(request: NextRequest) {
     if (!userId) return NextResponse.json({ success: false, error: '缺少用户 ID' }, { status: 400 });
     const target = await queryOne('SELECT id,role FROM users WHERE id=$1', [userId]);
     if (!target) return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
-    const allowedRoles = new Set(['admin', 'leader', 'student']);
+    const allowedRoles = new Set(['admin', 'leader', 'class_leader', 'student']);
     if (body.role !== undefined && !allowedRoles.has(String(body.role))) {
-      return NextResponse.json({ success: false, error: '角色只能是管理员、部门负责人或学生' }, { status: 400 });
+      return NextResponse.json({ success: false, error: '角色只能是管理员、部门负责人、班级负责人或学生' }, { status: 400 });
     }
     if (body.password) {
       if (String(body.password).length < 6) return NextResponse.json({ success: false, error: '密码至少需要 6 位' }, { status: 400 });
@@ -118,6 +120,8 @@ export async function PATCH(request: NextRequest) {
       role: 'role', canPublish: 'can_publish', canScore: 'can_score', canSubmitActivity: 'can_submit_activity',
       canViewSubmissionStatus: 'can_view_submission_status', canSubmitScoring: 'can_submit_scoring',
       canReviewLeave: 'can_review_leave', canViewEveningStudy: 'can_view_evening_study', canStartGroupLeave: 'can_start_group_leave',
+      canUploadLeave: 'can_upload_leave', canQueryLeave: 'can_query_leave',
+      canManageOriginalLeave: 'can_manage_original_leave', canManageLeaveTemplate: 'can_manage_leave_template',
       department: 'department', className: 'class_name', contactPhone: 'contact_phone',
     };
     const updates: string[] = [];
