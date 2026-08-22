@@ -72,7 +72,7 @@ export default function LeavePage() {
   const selectedActivity = useMemo(() => activityList.find((activity) => activity.id === activityId) || null, [activityId, activityList]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || (user.role !== 'admin' && !user.canStartGroupLeave)) return;
     apiFetch('/api/class-roster').then((res) => res.json()).then((data: { success?: boolean; data?: RosterStudent[] }) => { if (data.success) setRoster(data.data || []); }).catch(() => alert('读取班级花名册失败，请稍后重试'));
   }, [user]);
 
