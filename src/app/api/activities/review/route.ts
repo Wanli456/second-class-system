@@ -31,7 +31,7 @@ export async function PUT(request: NextRequest) {
     const auth = await requirePermission(request, 'publish');
     if (auth.response) return auth.response;
     const { id, review_status, review_note } = await request.json();
-    if (!id || !['待审核', '已通过', '已驳回'].includes(review_status)) return NextResponse.json({ success: false, error: '缺少或无效的审核参数' }, { status: 400 });
+    if (!id || !['已通过', '已驳回'].includes(review_status)) return NextResponse.json({ success: false, error: '审核结果只能是已通过或已驳回' }, { status: 400 });
     const submission = await queryOne('SELECT * FROM activity_submissions WHERE id=$1', [id]);
     if (!submission) return NextResponse.json({ success: false, error: '提交记录不存在' }, { status: 404 });
     if (submission.review_status !== '待审核') return NextResponse.json({ success: false, error: '该提交已处理，不能重复审核' }, { status: 400 });
