@@ -16,13 +16,15 @@ export async function GET(request: NextRequest) {
       if (auth.response) return auth.response;
       const keyword = searchParams.get('keyword');
       const params: unknown[] = ['正常活动'];
-      let sql = 'SELECT id,full_name FROM activities WHERE status=$1';
+      let sql = 'SELECT id,full_name,scope_type,scope_name,scope_names FROM activities WHERE status=$1';
       if (keyword) {
         params.push(`%${keyword}%`);
         sql += ` AND full_name ILIKE $${params.length}`;
       }
       sql += ' ORDER BY created_at DESC';
-      return NextResponse.json({ success: true, data: await query(sql, params) });
+      const rows = await query(sql, params);
+      const visible = auth.user!.role === 'admin' ? rows : rows.filter((item) => scopeMatchesUser(auth.user!, getActivityScopes(item)));
+      return NextResponse.json({ success: true, data: visible.map(({ id, full_name }) => ({ id, full_name })) });
     }
 
     if (purpose === 'scoring') {
@@ -30,10 +32,14 @@ export async function GET(request: NextRequest) {
       if (auth.response) return auth.response;
       const id = searchParams.get('id');
       const keyword = searchParams.get('keyword');
-      const params: unknown[] = [];
-      const clauses = ['1=1'];
+      const status = searchParams.get('status');
+      const level = searchParams.get('level');
+      const params: unknown[] = ['正常活动'];
+      const clauses = ['status=$1'];
       if (id) { params.push(id); clauses.push(`id=$${params.length}`); }
       if (keyword) { params.push(`%${keyword}%`); clauses.push(`full_name ILIKE $${params.length}`); }
+      if (status) { params.push(status); clauses.push(`scoring_status=$${params.length}`); }
+      if (level) { params.push(level); clauses.push(`level=$${params.length}`); }
       const data = await query(
       `SELECT id,full_name,start_time,end_time,registration_start_time,registration_end_time,level,category,category_primary,category_secondary,leader_name,leader_phone,leader_ids,leader_details,scoring_status,scoring_table_url,scoring_table_file_name,record_file_url,record_file_name,record_photo_url,record_photo_file_name,scope_names,scope_type,scope_name,activity_submitter_name,activity_submitter_student_id,scoring_material_submitter_name,scoring_material_submitter_student_id FROM activities WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC`,
         params,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createNotification } from '@/app/api/notifications/route';
-import { requirePermission, requireUser } from '@/lib/auth';
-import { canResubmitGroupLeave, canStartGroupLeave, includeApplicantStudent, parseDateOnly } from '@/lib/business-rules';
+import { requirePermission, requireUser, type AuthUser } from '@/lib/auth';
+import { canResubmitGroupLeave, canStartGroupLeave, getActivityScopes, includeApplicantStudent, parseDateOnly, scopeMatchesUser } from '@/lib/business-rules';
 import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
 
 const REVIEW_STATUSES = ['待审核', '已通过', '已驳回'];
@@ -10,6 +10,13 @@ class SelfReviewLeaveError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'SelfReviewLeaveError';
+  }
+}
+
+class LeaveValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'LeaveValidationError';
   }
 }
 
@@ -36,12 +43,13 @@ function validTimes(startTime: unknown, endTime: unknown) {
   return !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end > start;
 }
 
-async function resolveActivity(activityId: unknown, leaveType: string) {
+async function resolveActivity(activityId: unknown, leaveType: string, user: AuthUser) {
   if (leaveType !== '活动公假') return { activityId: null, activityName: null };
   const id = String(activityId || '').trim();
-  if (!id) throw new Error('活动公假必须选择系统中的活动');
-  const activity = await queryOne<{ id: string; full_name: string }>("SELECT id,full_name FROM activities WHERE id=$1 AND status='正常活动'", [id]);
-  if (!activity) throw new Error('所选活动不存在或已取消，无法提交活动公假');
+  if (!id) throw new LeaveValidationError('活动公假必须选择系统中的活动');
+  const activity = await queryOne<{ id: string; full_name: string; scope_type?: string | null; scope_name?: string | null; scope_names?: string | null }>("SELECT id,full_name,scope_type,scope_name,scope_names FROM activities WHERE id=$1 AND status='正常活动'", [id]);
+  if (!activity) throw new LeaveValidationError('所选活动不存在或已取消，无法提交活动公假');
+  if (!scopeMatchesUser(user, getActivityScopes(activity))) throw new LeaveValidationError('只能选择本班或本部门范围内的活动');
   return { activityId: activity.id, activityName: activity.full_name };
 }
 
@@ -151,7 +159,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { leave_request_id, mode = 'individual', leave_type, leave_image_url, leave_image_name, activity_id, start_time, end_time } = body;
     if (!leave_type || !validTimes(start_time, end_time)) return NextResponse.json({ success: false, error: '请填写请假类型以及有效的开始、结束时间' }, { status: 400 });
-    const activity = await resolveActivity(activity_id, leave_type);
+    const activity = await resolveActivity(activity_id, leave_type, user);
 
     if (leave_request_id) {
       const existing = await queryOne<{ id: string; group_id?: string | null; applicant_user_id?: string | null; review_status: string; leave_image_url?: string | null; leave_image_name?: string | null }>('SELECT * FROM leave_requests WHERE id=$1', [leave_request_id]);
@@ -205,6 +213,7 @@ export async function POST(request: NextRequest) {
     const data = await queryOne(`INSERT INTO leave_requests (student_id,class_name,student_name,leave_type,leave_image_url,leave_image_name,activity_id,activity_name,applicant_user_id,applicant_name,applicant_student_id,start_time,end_time,review_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'待审核') RETURNING *`, [user.student_id, user.class_name || '未填写', user.username, leave_type, leave_image_url || null, leave_image_name || null, activity.activityId, activity.activityName, user.id, user.username, user.student_id, start_time, end_time]);
     return NextResponse.json({ success: true, data });
   } catch (error) {
+    if (error instanceof LeaveValidationError) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '提交请假失败' }, { status: 500 });
   }
 }

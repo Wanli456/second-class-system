@@ -330,7 +330,7 @@ function AdminPage() {
   }, []);
 
   const fetchScoring = useCallback(async () => {
-    const res = await apiFetch('/api/scoring');
+    const res = await apiFetch('/api/scoring?status=all');
     const data = await res.json();
     if (data.success) {
       setScoringList(data.data);
