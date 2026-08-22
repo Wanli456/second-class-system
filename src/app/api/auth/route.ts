@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, data: publicUser(auth.user!) });
     }
     if (searchParams.get('directory') === 'true') {
-      const auth = await requireUser(request);
+      const auth = await requirePermission(request, 'submitActivity');
       if (auth.response) return auth.response;
       const data = await query('SELECT id,username,student_id,role,can_submit_activity,can_submit_scoring,department,class_name FROM users ORDER BY username');
       return NextResponse.json({ success: true, data });

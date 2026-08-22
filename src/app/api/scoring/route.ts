@@ -37,6 +37,7 @@ export async function PUT(request: NextRequest) {
     if (!id) return NextResponse.json({ success: false, error: '缺少活动ID' }, { status: 400 });
     const activity = await queryOne('SELECT * FROM activities WHERE id=$1', [id]);
     if (!activity) return NextResponse.json({ success: false, error: '活动不存在' }, { status: 404 });
+    if (activity.status !== '正常活动') return NextResponse.json({ success: false, error: '仅正常活动可以进行赋分' }, { status: 400 });
     if (auth.user!.role !== 'admin') {
       const inScope = scopeMatchesUser(auth.user!, getActivityScopes(activity));
       if (!inScope) return NextResponse.json({ success: false, error: '你没有该活动的赋分权限' }, { status: 403 });

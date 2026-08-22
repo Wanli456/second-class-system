@@ -109,6 +109,7 @@ export async function PUT(request: NextRequest) {
     const activity = await queryOne('SELECT * FROM activities WHERE id=$1', [id]);
     if (!activity) return NextResponse.json({ success: false, error: '活动不存在' }, { status: 404 });
     if (isScoringMaterialSubmission) {
+      if (activity.status !== '正常活动') return NextResponse.json({ success: false, error: '仅正常活动可以提交赋分材料' }, { status: 400 });
       if (activity.scoring_status === '已赋分') return NextResponse.json({ success: false, error: '该活动已完成赋分，不能重新提交材料' }, { status: 400 });
       if (!hasAnyScopePermission(auth.user!, 'submitScoring', getActivityScopes(activity))) return NextResponse.json({ success: false, error: '你没有该活动所属部门或班级的赋分材料权限' }, { status: 403 });
       if (activity.level === '校级' && !updates.record_photo_url && !activity.record_photo_url) return NextResponse.json({ success: false, error: '校级活动提交赋分材料时必须上传备案表照片' }, { status: 400 });
