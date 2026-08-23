@@ -11,6 +11,7 @@ interface ClassAttendanceRow {
   expected_count: number;
   present_count: number;
   leave_count: number;
+  attendance_worker_count: number;
   present_source: 'recorded' | 'auto';
 }
 
@@ -65,8 +66,9 @@ export default function ClassAttendancePage() {
       expected: summary.expected + row.expected_count,
       present: summary.present + row.present_count,
       leave: summary.leave + row.leave_count,
+      workers: summary.workers + row.attendance_worker_count,
     }),
-    { expected: 0, present: 0, leave: 0 },
+    { expected: 0, present: 0, leave: 0, workers: 0 },
   );
 
   return (
@@ -96,10 +98,11 @@ export default function ClassAttendancePage() {
 
         {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
-        <section className="grid gap-3 sm:grid-cols-3">
+        <section className="grid gap-3 sm:grid-cols-4">
           <SummaryCard label="应到总人数" value={totals.expected} />
           <SummaryCard label="实到总人数" value={totals.present} />
           <SummaryCard label="请假总人数" value={totals.leave} />
+          <SummaryCard label="当天考勤人员" value={totals.workers} />
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -109,13 +112,14 @@ export default function ClassAttendancePage() {
           </div>
           {rows.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[620px] text-left text-sm">
+              <table className="w-full min-w-[720px] text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                   <tr>
                     <th className="px-5 py-3 font-semibold">班级</th>
                     <th className="px-5 py-3 font-semibold">应到</th>
                     <th className="px-5 py-3 font-semibold">实到</th>
                     <th className="px-5 py-3 font-semibold">请假</th>
+                    <th className="px-5 py-3 font-semibold">考勤人员</th>
                     <th className="px-5 py-3 font-semibold">实到来源</th>
                   </tr>
                 </thead>
@@ -126,6 +130,7 @@ export default function ClassAttendancePage() {
                       <td className="px-5 py-4">{row.expected_count}</td>
                       <td className="px-5 py-4 font-semibold text-emerald-700">{row.present_count}</td>
                       <td className="px-5 py-4 text-amber-700">{row.leave_count}</td>
+                      <td className="px-5 py-4 text-teal-700">{row.attendance_worker_count}</td>
                       <td className="px-5 py-4 text-slate-500">{row.present_source === 'recorded' ? '已录入考勤' : '自动计算（应到−请假）'}</td>
                     </tr>
                   ))}
@@ -139,7 +144,7 @@ export default function ClassAttendancePage() {
 
         <div className="flex items-start gap-2 rounded-lg border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-800">
           <Info className="mt-0.5 size-4 shrink-0" />
-          <p>“已录入考勤”表示当天已有考勤人员提交实到人数；“自动计算”仅在没有考勤记录时使用，应到人数减去已通过假条人数。</p>
+          <p>当天考勤人员会计入应到和实到人数；同一人员已在班级花名册中时会自动去重。“已录入考勤”表示当天已有考勤人员提交实到人数；“自动计算”仅在没有考勤记录时使用，应到人数减去已通过假条人数。</p>
         </div>
       </div>
     </DashboardLayout>

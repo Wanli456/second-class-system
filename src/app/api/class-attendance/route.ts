@@ -169,12 +169,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         || null;
     };
     const attendanceWorkers: ClassRosterStudent[] = [];
+    const attendanceWorkerIdsByClass = new Map<string, Set<string>>();
     const addWorker = (worker: ClassRosterStudent | null, fallbackClassName: string | null, fallbackId: string): void => {
-      if (worker?.class_name && worker.student_id) {
-        attendanceWorkers.push({ class_name: worker.class_name, student_id: worker.student_id });
-      } else if (fallbackClassName && fallbackId) {
-        attendanceWorkers.push({ class_name: fallbackClassName, student_id: fallbackId });
-      }
+      const className = worker?.class_name || fallbackClassName;
+      const studentId = worker?.student_id || fallbackId;
+      if (!className || !studentId) return;
+      attendanceWorkers.push({ class_name: className, student_id: studentId });
+      const workerIds = attendanceWorkerIdsByClass.get(className) ?? new Set<string>();
+      workerIds.add(studentId);
+      attendanceWorkerIdsByClass.set(className, workerIds);
     };
 
     workerNames.forEach((name) => {
@@ -195,7 +198,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       [...roster, ...users, ...attendanceWorkers],
       approvedLeaves,
       attendance as RecordedClassAttendance[],
-    );
+    ).map((row) => ({
+      ...row,
+      attendance_worker_count: attendanceWorkerIdsByClass.get(row.class_name)?.size ?? 0,
+    }));
 
     return NextResponse.json({ success: true, date: requestedDate, data });
   } catch (error) {
