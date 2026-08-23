@@ -30,20 +30,6 @@ interface Slip {
   created_at: string;
 }
 interface SlipStudent { id: string; slip_id: string; student_id: string; student_name: string; class_name: string; }
-interface OriginalSlip {
-  id: string;
-  activity_id: string | null;
-  activity_name: string | null;
-  class_names: string | null;
-  student_names: string | null;
-  start_time: string | null;
-  end_time: string | null;
-  image_url: string | null;
-  image_name: string | null;
-  notes: string | null;
-  created_at: string;
-}
-
 function parseJsonArray(value: string | null): string[] {
   if (!value) return [];
   try {
@@ -61,7 +47,6 @@ export default function LeaveSlipQueryPage() {
   const [className, setClassName] = useState('');
   const [slips, setSlips] = useState<Slip[]>([]);
   const [students, setStudents] = useState<SlipStudent[]>([]);
-  const [originals, setOriginals] = useState<OriginalSlip[]>([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -87,16 +72,11 @@ export default function LeaveSlipQueryPage() {
       if (status) params.set('status', status);
       if (className.trim()) params.set('class', className.trim());
 
-      const [slipRes, originalRes] = await Promise.all([
-        apiFetch(`/api/leave-slips?${params.toString()}`),
-        apiFetch(`/api/leave-slips/originals?${params.toString()}`),
-      ]);
+      const slipRes = await apiFetch(`/api/leave-slips?${params.toString()}`);
       const slipData = await slipRes.json();
-      const originalData = await originalRes.json();
-      if (!slipData.success || !originalData.success) throw new Error(slipData.error || originalData.error || '查询失败');
+      if (!slipData.success) throw new Error(slipData.error || '查询失败');
       setSlips(slipData.data || []);
       setStudents(slipData.students || []);
-      setOriginals(originalData.data || []);
     } catch (error) {
       alert(error instanceof Error ? error.message : '查询失败');
     } finally {
@@ -119,8 +99,8 @@ export default function LeaveSlipQueryPage() {
       <div className="mx-auto w-full max-w-6xl">
         <header className="mb-6">
           <p className="text-xs font-semibold uppercase text-teal-700">假条管理</p>
-          <h2 className="mt-2 text-2xl font-bold text-balance text-slate-950">查询与匹配原假条</h2>
-          <p className="mt-2 max-w-2xl text-sm text-pretty text-slate-600">按班级、姓名、学号、活动名称搜索，上传假条和活动方原假条一起对比核查。</p>
+          <h2 className="mt-2 text-2xl font-bold text-balance text-slate-950">查询上传假条</h2>
+          <p className="mt-2 max-w-2xl text-sm text-pretty text-slate-600">按班级、姓名、学号、活动名称搜索已上传假条；这里只显示原假条关联状态，原假条的查询、查看和维护请进入“维护原假条”。</p>
         </header>
 
         <div className="mb-6 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-[1fr_140px_140px_auto]">
@@ -138,7 +118,7 @@ export default function LeaveSlipQueryPage() {
           <Button type="button" onClick={() => void search()} disabled={loading} className="h-10 bg-slate-950 px-5 hover:bg-slate-800">{loading ? '查询中...' : '搜索'}</Button>
         </div>
 
-        <div className="grid items-start gap-6 xl:grid-cols-2">
+        <div className="items-start">
           <section aria-label="班级负责人上传的假条">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-950">
               <span className="flex size-6 items-center justify-center rounded-full bg-slate-950 text-xs text-white">1</span>
@@ -163,32 +143,6 @@ export default function LeaveSlipQueryPage() {
                       {rows.map((row) => <span key={row.id} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">{row.student_name}（{row.student_id}）</span>)}
                     </div>
                     {slip.leave_image_url && <div className="mt-3"><FilePreviewLink url={slip.leave_image_url} fileName={slip.leave_image_name} label="查看假条图片" className="text-xs text-teal-700" /></div>}
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-
-          <section aria-label="活动方原假条">
-            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-950">
-              <span className="flex size-6 items-center justify-center rounded-full bg-slate-950 text-xs text-white">2</span>
-              活动方原假条（{originals.length}）
-            </h3>
-            <div className="space-y-4">
-              {originals.length === 0 && searched ? <div className="rounded-xl border border-dashed border-slate-300 bg-white py-12 text-center text-sm text-slate-400">没有匹配的原假条</div> : null}
-              {originals.map((original) => {
-                const classNames = parseJsonArray(original.class_names);
-                const studentNames = parseJsonArray(original.student_names);
-                return (
-                  <article key={original.id} className="rounded-xl border border-sky-200 bg-sky-50/40 p-4 shadow-sm">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-md border border-sky-200 bg-white px-2 py-1 text-xs font-medium text-sky-700">原假条</span>
-                      {original.activity_name && <span className="text-sm font-semibold text-slate-900">{original.activity_name}</span>}
-                    </div>
-                    {classNames.length > 0 && <p className="mt-3 text-sm text-slate-700">涉及班级：{classNames.join('、')}</p>}
-                    {studentNames.length > 0 && <p className="mt-1 text-sm text-slate-700">涉及学生：{studentNames.join('、')}</p>}
-                    {original.notes && <p className="mt-1 text-sm text-slate-500">{original.notes}</p>}
-                    {original.image_url && <div className="mt-3"><FilePreviewLink url={original.image_url} fileName={original.image_name} label="查看原假条图片" className="text-xs text-sky-700" /></div>}
                   </article>
                 );
               })}
