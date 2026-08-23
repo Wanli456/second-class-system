@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, FileCheck2, Plus, ScanText, Search, Trash2, Upload } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileCheck2, Plus, ScanText, Search, Trash2, Upload } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch } from '@/lib/client-api';
@@ -53,8 +53,9 @@ function parseImageList(value: string | null): Array<{ url: string; name?: strin
   return [];
 }
 
-export default function LeaveSlipOriginalsPage() {
+export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: 'submit' | 'maintain' }) {
   const { user, initialized } = useUser();
+  const isSubmitMode = mode === 'submit';
   const [originals, setOriginals] = useState<OriginalSlip[]>([]);
   const [keyword, setKeyword] = useState('');
   const [activityName, setActivityName] = useState('');
@@ -72,6 +73,7 @@ export default function LeaveSlipOriginalsPage() {
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrError, setOcrError] = useState('');
   const [ocrLines, setOcrLines] = useState<Array<{ text: string; score?: number }>>([]);
+  const [submitSuccess, setSubmitSuccess] = useState('');
 
   const canAccess = hasPermission(user, 'canManageOriginalLeave');
 
@@ -95,7 +97,7 @@ export default function LeaveSlipOriginalsPage() {
     }
   };
 
-  useEffect(() => { if (initialized && user && canAccess) void load(); }, [initialized, user, canAccess]);
+  useEffect(() => { if (initialized && user && canAccess && !isSubmitMode) void load(); }, [initialized, user, canAccess, isSubmitMode]);
 
   useEffect(() => {
     if (!initialized || !user || !canAccess) return;
@@ -195,6 +197,7 @@ export default function LeaveSlipOriginalsPage() {
     if (!activityId || !activityName.trim()) { alert('原假条一次只能绑定一个活动，请先选择系统活动'); return; }
     if (!studentNamesText.trim() && !classNamesText.trim()) { alert('请至少填写班级或学生'); return; }
     setSaving(true);
+    setSubmitSuccess('');
     try {
       const uploaded = imageFiles.length ? await uploadFilesToUrls(imageFiles) : [];
       const res = await apiFetch('/api/leave-slips/originals', {
@@ -224,7 +227,9 @@ export default function LeaveSlipOriginalsPage() {
       setEndTime('');
       setNotes('');
       setImageFiles([]);
-      await load();
+      setOcrLines([]);
+      if (isSubmitMode) setSubmitSuccess('提交成功，原假条已归档，可在“维护原假条”中查看。');
+      else await load();
     } catch (error) {
       alert(error instanceof Error ? error.message : '保存失败');
     } finally {
@@ -252,16 +257,16 @@ export default function LeaveSlipOriginalsPage() {
   }
 
   return (
-    <DashboardLayout user={user} title="原假条维护" activeNavHref="/leave-slip/originals">
-      <div className="mx-auto w-full max-w-6xl">
+    <DashboardLayout user={user} title={isSubmitMode ? '提交原假条' : '原假条维护'} activeNavHref={isSubmitMode ? '/leave-slip/originals/submit' : '/leave-slip/originals'}>
+      <div className={isSubmitMode ? 'mx-auto w-full max-w-xl' : 'mx-auto w-full max-w-6xl'}>
         <header className="mb-6">
           <p className="text-xs font-semibold uppercase text-teal-700">假条管理</p>
-          <h2 className="mt-2 text-2xl font-bold text-balance text-slate-950">维护活动方原假条</h2>
-          <p className="mt-2 text-sm text-pretty text-slate-600">录入活动方提供的原始假条，供查询和人工匹配班级负责人上传的假条。</p>
+          <h2 className="mt-2 text-2xl font-bold text-balance text-slate-950">{isSubmitMode ? '提交原假条' : '维护活动方原假条'}</h2>
+          <p className="mt-2 text-sm text-pretty text-slate-600">{isSubmitMode ? '上传活动方提供的原始假条，OCR 识别结果请人工核对后再提交。' : '查询、查看和删除已提交的原假条。'}</p>
         </header>
 
-        <div className="grid items-start gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <aside className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className={isSubmitMode ? '' : 'grid items-start gap-6 xl:grid-cols-[320px_minmax(0,1fr)]'}>
+          {isSubmitMode && <aside className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-950"><FileCheck2 className="size-4 text-teal-700" />新增原假条</h3>
             <div className="mt-4 space-y-3">
               <input aria-label="活动名称" list="original-activity-options" placeholder="输入活动名称或ID，一次一种活动" value={activityName} onChange={(event) => { setActivityName(event.target.value); const match = activityOptions.find((item) => item.full_name === event.target.value || item.id === event.target.value); setActivityId(match?.id || ''); }} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-teal-600" />
@@ -280,6 +285,7 @@ export default function LeaveSlipOriginalsPage() {
               </label>
               <Button type="button" variant="outline" onClick={handleOcr} disabled={ocrLoading || !imageFiles.length} className="w-full bg-white disabled:opacity-50"><ScanText className="size-4" />{ocrLoading ? 'OCR 识别中...' : 'OCR 自动识别'}</Button>
               {ocrError && <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{ocrError}</p>}
+              {submitSuccess && <p className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"><CheckCircle2 className="size-4 shrink-0" />{submitSuccess}</p>}
               {ocrLines.length > 0 && (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <p className="mb-2 text-xs font-medium text-slate-600">识别结果（初稿，请人工核对后保存）</p>
@@ -288,11 +294,11 @@ export default function LeaveSlipOriginalsPage() {
                   </div>
                 </div>
               )}
-              <Button type="button" onClick={handleSubmit} disabled={saving} className="w-full bg-slate-950 hover:bg-slate-800"><Plus className="size-4" />{saving ? '保存中...' : '保存原假条'}</Button>
+              <Button type="button" onClick={handleSubmit} disabled={saving} className="w-full bg-slate-950 hover:bg-slate-800"><Plus className="size-4" />{saving ? '提交中...' : '提交原假条'}</Button>
             </div>
-          </aside>
+          </aside>}
 
-          <section>
+          {!isSubmitMode && <section>
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
               <label className="relative min-w-0 flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
@@ -331,7 +337,7 @@ export default function LeaveSlipOriginalsPage() {
                 );
               })}
             </div>
-          </section>
+          </section>}
         </div>
       </div>
 
