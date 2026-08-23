@@ -56,6 +56,7 @@ interface NavItem {
   label: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
+  public?: boolean;
   requiredRole?: string;
   requiredPermission?: keyof User;
   requiredAnyPermissions?: Array<keyof User>;
@@ -121,6 +122,7 @@ NavItemComponent.displayName = 'NavItemComponent';
 
 const NAV_ITEMS: NavItem[] = [
   { label: '首页', href: '/', icon: LayoutDashboard },
+  { label: '班级考勤统计', href: '/class-attendance', icon: Users, public: true },
   { label: '活动总表', href: '/admin?role=admin&tab=activities', icon: ClipboardList, requiredRole: 'admin' },
   { label: '活动审核', href: '/admin?role=admin&tab=review', icon: FileCheck, requiredPermission: 'canPublish' },
   { label: '活动赋分', href: '/admin?role=admin&tab=scoring', icon: Award, requiredPermission: 'canScore' },
@@ -168,7 +170,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
   const canAccessItem = React.useCallback((item: NavItem): boolean => {
     if (!user) {
       // 未登录时只保留首页，避免公开侧边栏展示权限敏感或需登录的项目。
-      return item.label === '首页';
+      return item.public === true || item.label === '首页';
     }
 
     const roleAllowed = !item.requiredRole || user.role === 'admin' || user.role === item.requiredRole;
