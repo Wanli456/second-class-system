@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
+import { isDepartmentUserManager } from '@/lib/department-user-management';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 
 interface User {
@@ -265,7 +266,7 @@ export default function Home() {
       show: true,
       group: user.department || '部门管理',
     };
-    const visibleEntriesWithDepartment = user.role === 'leader' && (user.department === '学习竞技部' || user.department === '第二课堂认证中心')
+    const visibleEntriesWithDepartment = isDepartmentUserManager(user)
       ? [...visibleEntries, departmentUserEntry]
       : visibleEntries;
 
