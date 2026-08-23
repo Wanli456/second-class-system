@@ -30,7 +30,7 @@ const PERMISSION_LABELS: Record<PermissionKey, string> = {
   canViewEveningStudy: '晚自习查询权限',
   canStartGroupLeave: '发起集体请假权限',
   canManageAttendanceWork: '考勤工作安排权限',
-  canUploadLeave: '上传请假权限',
+  canUploadLeave: '假条上传权限',
   canQueryLeave: '请假查询权限',
   canManageOriginalLeave: '原始假条管理权限',
 };
