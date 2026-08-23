@@ -44,7 +44,18 @@ export default function OtherCollegeRegistrationPage() {
     if (!scoringTable || !recordPhoto) { setError('请同时上传赋分表和备案表照片。'); return; }
     setSubmitting(true);
     try {
-      const [scoringUpload, recordUpload] = await Promise.all([uploadFile(scoringTable), uploadFile(recordPhoto)]);
+      let scoringUpload: UploadedFile;
+      let recordUpload: UploadedFile;
+      try {
+        scoringUpload = await uploadFile(scoringTable);
+      } catch (reason) {
+        throw new Error('赋分表上传失败：' + (reason instanceof Error ? reason.message : '请稍后重试'));
+      }
+      try {
+        recordUpload = await uploadFile(recordPhoto);
+      } catch (reason) {
+        throw new Error('备案表照片上传失败：' + (reason instanceof Error ? reason.message : '请稍后重试'));
+      }
       const response = await apiFetch('/api/other-college-registrations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fullName, organizer, category, startTime, endTime, contactPhone, scoringTableUrl: scoringUpload.url, scoringTableFileName: scoringUpload.fileName, recordPhotoUrl: recordUpload.url, recordPhotoFileName: recordUpload.fileName }) });
       const data = await response.json() as { success?: boolean; error?: string };
       if (!data.success) throw new Error(data.error || '登记失败');

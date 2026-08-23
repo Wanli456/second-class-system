@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { requireUser } from '@/lib/auth';
+import { getUploadContentType, getUploadFileKind, UPLOAD_FILE_FORMAT_HINT } from '@/lib/upload-file-validation';
 
 const getCloudStorageConfig = () => {
   // Coze injects these values for its managed Supabase-compatible storage.
@@ -14,7 +15,7 @@ const getCloudStorageConfig = () => {
   return { url, serviceRoleKey, bucket };
 };
 
-async function uploadToCloudStorage(fileName: string, file: File, buffer: Buffer) {
+async function uploadToCloudStorage(fileName: string, contentType: string, buffer: Buffer) {
   const config = getCloudStorageConfig();
   if (!config) return null;
 
@@ -22,7 +23,7 @@ async function uploadToCloudStorage(fileName: string, file: File, buffer: Buffer
   const headers = {
     Authorization: `Bearer ${config.serviceRoleKey}`,
     apikey: config.serviceRoleKey,
-    'Content-Type': file.type || 'application/octet-stream',
+    'Content-Type': contentType,
     'x-upsert': 'true',
   };
 
@@ -77,22 +78,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: '文件大小不能超过5MB' }, { status: 400 });
     }
 
-    // 只允许图片，避免任意文件上传 / 存储型 XSS
+    // 限制为业务需要的图片和常用文档，避免任意文件上传。
     const originalName = path.basename(file.name).replace(/[\\/]/g, '');
     const ext = (originalName.split('.').pop() || '').toLowerCase();
-    const allowedExtensions = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif']);
-    if (!allowedExtensions.has(ext)) {
-      return NextResponse.json({ success: false, error: '仅支持常见图片格式（jpg/jpeg/png/gif/webp/bmp/heic/heif）' }, { status: 400 });
-    }
-    if (!file.type.toLowerCase().startsWith('image/')) {
-      return NextResponse.json({ success: false, error: '仅支持上传图片文件' }, { status: 400 });
+    if (!getUploadFileKind(originalName)) {
+      return NextResponse.json({ success: false, error: '仅支持' + UPLOAD_FILE_FORMAT_HINT }, { status: 400 });
     }
 
     // 生成唯一文件名，杜绝路径穿越
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const cloudUrl = await uploadToCloudStorage(fileName, file, buffer);
+    const cloudUrl = await uploadToCloudStorage(fileName, getUploadContentType(originalName, file.type), buffer);
     if (cloudUrl) {
       return NextResponse.json({ success: true, url: cloudUrl, file_name: originalName });
     }
