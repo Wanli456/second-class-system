@@ -44,7 +44,7 @@ function normalizedDepartment(department: string | null | undefined) {
 }
 
 export function getManagedUserScope(user: DepartmentUserIdentity | null | undefined): ManagedUserScope | null {
-  if (!user || user.role !== 'leader') return null;
+  if (!user || (user.role !== 'leader' && user.role !== 'admin')) return null;
   const department = normalizedDepartment(user.department) as DepartmentUserManagementDepartment;
   if (!(department in DEPARTMENT_USER_MANAGEMENT)) return null;
   return { department };

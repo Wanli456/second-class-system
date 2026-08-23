@@ -114,7 +114,7 @@ export default function DepartmentUsersPage() {
   }
 
   return (
-    <main className="min-h-dvh bg-slate-50 px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
+    <main className="text-slate-950">
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">

@@ -23,6 +23,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useUser } from '@/contexts/UserContext';
 import { hasPermission, type PermissionKey } from '@/lib/department-permissions';
+import { isDepartmentUserManager } from '@/lib/department-user-management';
 import { NotificationBell } from '@/components/NotificationBell';
 
 const SIDEBAR_SCROLL_STORAGE_KEY = 'dashboard-sidebar-scroll-top';
@@ -65,6 +66,7 @@ interface NavItem {
   requiredRole?: string;
   requiredPermission?: PermissionKey;
   requiredAnyPermissions?: Array<PermissionKey>;
+  requiredDepartment?: '学习竞技部' | '第二课堂认证中心';
 }
 
 // 独立的导航项组件，使用 React.memo 避免不必要的重新渲染
@@ -132,6 +134,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: '活动审核', href: '/admin?role=admin&tab=review', icon: FileCheck, requiredPermission: 'canPublish' },
   { label: '活动赋分', href: '/admin?role=admin&tab=scoring', icon: Award, requiredPermission: 'canScore' },
   { label: '用户管理', href: '/admin?role=admin&tab=users', icon: Users, requiredRole: 'admin' },
+  { label: '学习竞技部用户管理', href: '/department-users/learning-competition', icon: Users, requiredDepartment: '学习竞技部' },
+  { label: '认证中心用户管理', href: '/department-users/certification-center', icon: Users, requiredDepartment: '第二课堂认证中心' },
   { label: '活动提交', href: '/submit', icon: Send, requiredPermission: 'canSubmitActivity' },
   { label: '提交状态', href: '/submit/status', icon: FileCheck, requiredPermission: 'canViewSubmissionStatus' },
   { label: '赋分材料', href: '/submit/scoring', icon: Award, requiredPermission: 'canSubmitScoring' },
@@ -182,6 +186,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
     const roleAllowed = !item.requiredRole || user.role === 'admin' || user.role === item.requiredRole;
     const permissionAllowed = !item.requiredPermission || hasPermission(user, item.requiredPermission);
     const anyPermissionAllowed = !item.requiredAnyPermissions?.length || item.requiredAnyPermissions.some((permission) => hasPermission(user, permission));
+    const departmentAllowed = !item.requiredDepartment || (isDepartmentUserManager(user) && user.department === item.requiredDepartment);
 
     // A role or its matching permission is enough. This lets an admin grant
     // a capability to a student without changing the student's base role.
@@ -189,7 +194,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
       return roleAllowed || permissionAllowed;
     }
 
-    return roleAllowed && permissionAllowed && anyPermissionAllowed;
+    return roleAllowed && permissionAllowed && anyPermissionAllowed && departmentAllowed;
   }, [user]);
 
   const visibleItems = React.useMemo(() => NAV_ITEMS.filter(canAccessItem), [canAccessItem]);
@@ -200,6 +205,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
     if (href.startsWith('/leave')) return '请假';
     if (href.startsWith('/submit')) return '活动';
     if (href.startsWith('/admin')) return '管理';
+    if (href.startsWith('/department-users')) return '管理';
     return '查询';
   };
 

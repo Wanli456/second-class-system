@@ -8,9 +8,13 @@ import {
 
 const learningManager = { id: 'learning-manager', role: 'leader', department: '学习竞技部' };
 const certificationManager = { id: 'certification-manager', role: 'leader', department: '第二课堂认证中心' };
+const learningAdmin = { id: 'learning-admin', role: 'admin', department: '学习竞技部' };
 
 assert.deepEqual(getManagedUserScope(learningManager), { department: '学习竞技部' });
 assert.equal(isDepartmentUserManager(certificationManager), true);
+assert.deepEqual(getManagedUserScope(learningAdmin), { department: '学习竞技部' });
+assert.equal(isDepartmentUserManager(learningAdmin), true);
+assert.equal(isDepartmentUserManager({ role: 'admin', department: '其他部门' }), false);
 assert.equal(isDepartmentUserManager({ role: 'leader', department: '其他部门' }), false);
 
 assert.equal(canManageTargetUser(learningManager, { id: 'class-leader', role: 'class_leader', department: '学习竞技部' }), true);
