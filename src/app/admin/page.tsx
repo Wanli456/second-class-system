@@ -733,9 +733,14 @@ function AdminPage() {
           aria-controls={`scoring-detail-${a.id}`}
         >
           <span className="min-w-0">
-            <span className="flex flex-wrap items-center gap-2">
-              <span className="truncate font-semibold text-slate-950">{a.full_name}</span>
-              <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', STATUS_COLORS[a.scoring_status] || 'bg-slate-100 text-slate-700')}>
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="truncate font-semibold text-slate-950">{a.full_name}</span>
+                {a.scope_type === 'other_college' && (
+                  <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">
+                    其他学院登记 · 主办：{a.scope_name || '未填写'}
+                  </span>
+                )}
+                <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', STATUS_COLORS[a.scoring_status] || 'bg-slate-100 text-slate-700')}>
                 {a.scoring_status}
               </span>
             </span>
