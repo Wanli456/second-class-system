@@ -15,6 +15,7 @@ interface AttendanceDateRow {
 
 interface UserRosterStudent extends ClassRosterStudent {
   username: string | null;
+  contact_phone: string | null;
 }
 
 interface NamedRosterStudent extends ClassRosterStudent {
@@ -26,6 +27,13 @@ interface AttendanceWorkRow {
   end_date: string | null;
   student_names: unknown;
   schedules: unknown;
+}
+
+interface AttendanceScheduleRow {
+  id: string | null;
+  class_name: string | null;
+  checker_name: string | null;
+  checker_phone: string | null;
 }
 
 function businessToday(): string {
@@ -71,6 +79,10 @@ function normalized(value: string | null): string {
   return value?.trim() || '';
 }
 
+function lookupKey(value: string | null): string {
+  return normalized(value).replace(/\s+/g, '');
+}
+
 function attendanceWorkerNames(rows: AttendanceWorkRow[], requestedDate: string): Set<string> {
   const names = new Set<string>();
 
@@ -104,12 +116,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   try {
     const followingDate = nextDate(requestedDate);
-    const [roster, users, approvedLeaves, attendance, attendanceWork] = await Promise.all([
+    const [roster, users, approvedLeaves, attendance, attendanceWork, attendanceSchedules] = await Promise.all([
       query<NamedRosterStudent>(
         'SELECT class_name, student_id, student_name FROM class_roster WHERE class_name IS NOT NULL AND class_name <> \'\' AND student_id IS NOT NULL AND student_id <> \'\'',
       ),
       query<UserRosterStudent>(
-        'SELECT class_name, student_id, username FROM users WHERE class_name IS NOT NULL AND class_name <> \'\' AND student_id IS NOT NULL AND student_id <> \'\'',
+        'SELECT class_name, student_id, username, contact_phone FROM users WHERE class_name IS NOT NULL AND class_name <> \'\' AND student_id IS NOT NULL AND student_id <> \'\'',
       ),
       query<ApprovedLeaveStudent>(
         'SELECT students.class_name, students.student_id FROM leave_slip_students students INNER JOIN leave_slips slips ON slips.id = students.slip_id WHERE slips.review_status = \'已通过\' AND COALESCE(slips.start_time, slips.created_at) < $2 AND COALESCE(slips.end_time, slips.start_time, slips.created_at) >= $1',
@@ -123,18 +135,61 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         "SELECT start_date, end_date, student_names, schedules FROM attendance_work_arrangements WHERE review_status = '已通过' AND start_date <= $1 AND end_date >= $1",
         [requestedDate],
       ),
+      query<AttendanceScheduleRow>(
+        'SELECT id, class_name, checker_name, checker_phone FROM evening_study_schedules WHERE date = $1',
+        [requestedDate],
+      ),
     ]);
 
     const workerNames = attendanceWorkerNames(attendanceWork, requestedDate);
-    const workerNameKeys = new Set([...workerNames].map((name) => name.trim()));
-    const attendanceWorkers = [
-      ...roster.filter(
-        (student) => workerNameKeys.has(normalized(student.student_name)) || workerNameKeys.has(normalized(student.student_id)),
-      ),
-      ...users.filter(
-        (user) => workerNameKeys.has(normalized(user.username)) || workerNameKeys.has(normalized(user.student_id)),
-      ),
-    ];
+    const workerNameKeys = new Set([...workerNames].map(lookupKey).filter(Boolean));
+    const usersByName = new Map<string, UserRosterStudent>();
+    const usersByPhone = new Map<string, UserRosterStudent>();
+    const usersByStudentId = new Map<string, UserRosterStudent>();
+    const rosterByName = new Map<string, NamedRosterStudent>();
+    const rosterByStudentId = new Map<string, NamedRosterStudent>();
+    users.forEach((user) => {
+      if (lookupKey(user.username)) usersByName.set(lookupKey(user.username), user);
+      if (lookupKey(user.contact_phone)) usersByPhone.set(lookupKey(user.contact_phone), user);
+      if (lookupKey(user.student_id)) usersByStudentId.set(lookupKey(user.student_id), user);
+    });
+    roster.forEach((student) => {
+      if (lookupKey(student.student_name)) rosterByName.set(lookupKey(student.student_name), student);
+      if (lookupKey(student.student_id)) rosterByStudentId.set(lookupKey(student.student_id), student);
+    });
+
+    const findWorker = (name: string | null, phone: string | null): ClassRosterStudent | null => {
+      const nameKey = lookupKey(name);
+      const phoneKey = lookupKey(phone);
+      return usersByName.get(nameKey)
+        || usersByPhone.get(phoneKey)
+        || usersByStudentId.get(nameKey)
+        || rosterByName.get(nameKey)
+        || rosterByStudentId.get(nameKey)
+        || null;
+    };
+    const attendanceWorkers: ClassRosterStudent[] = [];
+    const addWorker = (worker: ClassRosterStudent | null, fallbackClassName: string | null, fallbackId: string): void => {
+      if (worker?.class_name && worker.student_id) {
+        attendanceWorkers.push({ class_name: worker.class_name, student_id: worker.student_id });
+      } else if (fallbackClassName && fallbackId) {
+        attendanceWorkers.push({ class_name: fallbackClassName, student_id: fallbackId });
+      }
+    };
+
+    workerNames.forEach((name) => {
+      const worker = findWorker(name, null);
+      addWorker(worker, null, '');
+    });
+    attendanceSchedules.forEach((schedule) => {
+      const checkerKey = lookupKey(schedule.checker_name) || lookupKey(schedule.checker_phone);
+      if (!checkerKey) return;
+      addWorker(
+        findWorker(schedule.checker_name, schedule.checker_phone),
+        schedule.class_name,
+        'attendance-schedule:' + (schedule.id || checkerKey),
+      );
+    });
 
     const data = summarizeClassAttendance(
       [...roster, ...users, ...attendanceWorkers],
