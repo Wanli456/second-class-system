@@ -100,11 +100,11 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
   useEffect(() => { if (initialized && user && canAccess && !isSubmitMode) void load(); }, [initialized, user, canAccess, isSubmitMode]);
 
   useEffect(() => {
-    if (!initialized || !user || !canAccess) return;
+    if (!initialized || !user || !canAccess || !isSubmitMode) return;
     apiFetch('/api/activities?purpose=leave').then((res) => res.json()).then((data) => {
       if (data.success) setActivityOptions(data.data || []);
     }).catch(() => {});
-  }, [initialized, user, canAccess]);
+  }, [initialized, user, canAccess, isSubmitMode]);
 
   const uploadFilesToUrls = async (files: File[]) => {
     const uploaded: Array<{ url: string; name: string }> = [];
@@ -258,32 +258,33 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
 
   return (
     <DashboardLayout user={user} title={isSubmitMode ? '提交原假条' : '原假条维护'} activeNavHref={isSubmitMode ? '/leave-slip/originals/submit' : '/leave-slip/originals'}>
-      <div className={isSubmitMode ? 'mx-auto w-full max-w-xl' : 'mx-auto w-full max-w-6xl'}>
-        <header className="mb-6">
-          <p className="text-xs font-semibold uppercase text-teal-700">假条管理</p>
-          <h2 className="mt-2 text-2xl font-bold text-balance text-slate-950">{isSubmitMode ? '提交原假条' : '维护活动方原假条'}</h2>
-          <p className="mt-2 text-sm text-pretty text-slate-600">{isSubmitMode ? '上传活动方提供的原始假条，OCR 识别结果请人工核对后再提交。' : '查询、查看和删除已提交的原假条。'}</p>
+      <div className={isSubmitMode ? 'mx-auto w-full max-w-2xl' : 'mx-auto w-full max-w-6xl'}>
+        <header className={isSubmitMode ? 'mb-6 rounded-2xl border border-slate-200 bg-white px-5 py-6 shadow-sm sm:px-7' : 'mb-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-6 shadow-sm sm:flex-row sm:items-end sm:justify-between sm:px-7'}>
+          <div className={isSubmitMode ? 'flex items-start gap-4' : ''}>
+            {isSubmitMode && <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><FileCheck2 className="size-5" /></span>}
+            <div><p className="text-sm font-medium text-teal-700">假条管理</p><h2 className="mt-1 text-2xl font-bold text-balance text-slate-950">{isSubmitMode ? '提交原假条' : '维护原假条'}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-pretty text-slate-600">{isSubmitMode ? '上传活动方提供的原始假条。系统会自动识别图片内容，请在提交前人工核对。' : '集中查询、核对和维护已归档的活动方原假条。'}</p></div>
+          </div>
+          {!isSubmitMode && <Link href="/leave-slip/originals/submit" className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-medium text-white transition-colors hover:bg-teal-800"><Plus className="size-4" />提交原假条</Link>}
         </header>
 
         <div className={isSubmitMode ? '' : 'grid items-start gap-6 xl:grid-cols-[320px_minmax(0,1fr)]'}>
-          {isSubmitMode && <aside className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-950"><FileCheck2 className="size-4 text-teal-700" />新增原假条</h3>
-            <div className="mt-4 space-y-3">
-              <input aria-label="活动名称" list="original-activity-options" placeholder="输入活动名称或ID，一次一种活动" value={activityName} onChange={(event) => { setActivityName(event.target.value); const match = activityOptions.find((item) => item.full_name === event.target.value || item.id === event.target.value); setActivityId(match?.id || ''); }} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-teal-600" />
+          {isSubmitMode && <aside className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-5 py-4 sm:px-7"><h3 className="text-base font-semibold text-slate-950">原假条信息</h3><p className="mt-1 text-sm text-pretty text-slate-500">一张原假条只能关联一个系统活动。</p></div><div className="space-y-4 px-5 py-6 sm:px-7">
+              <label className="block space-y-2"><span className="text-sm font-medium text-slate-800">关联活动</span>
+              <input aria-label="活动名称" list="original-activity-options" placeholder="输入活动名称或活动 ID" value={activityName} onChange={(event) => { setActivityName(event.target.value); const match = activityOptions.find((item) => item.full_name === event.target.value || item.id === event.target.value); setActivityId(match?.id || ''); }} className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-100" />
+              </label>
               <datalist id="original-activity-options">{activityOptions.map((activity) => <option key={activity.id} value={activity.full_name}>{activity.id}</option>)}</datalist>
-              <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs tabular-nums text-slate-600">已绑定活动ID：{activityId || '未选择'}（一次只能绑一个活动）</div>
-              <textarea aria-label="涉及班级" placeholder="涉及班级，逗号分隔" value={classNamesText} onChange={(event) => setClassNamesText(event.target.value)} className="min-h-16 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600" />
-              <textarea aria-label="涉及学生" placeholder="姓名(班级)，如：刘玉(应化2532)、宣锐(应急2531)" value={studentNamesText} onChange={(event) => setStudentNamesText(event.target.value)} className="min-h-16 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600" />
+              <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs tabular-nums text-slate-600">已绑定活动 ID：<span className="font-medium text-slate-800">{activityId || '未选择'}</span></div>
+              <div className="grid gap-4 sm:grid-cols-2"><label className="block space-y-2"><span className="text-sm font-medium text-slate-800">涉及班级</span><textarea aria-label="涉及班级" placeholder="多个班级用逗号分隔" value={classNamesText} onChange={(event) => setClassNamesText(event.target.value)} className="min-h-28 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label><label className="block space-y-2"><span className="text-sm font-medium text-slate-800">涉及学生</span><textarea aria-label="涉及学生" placeholder="姓名(班级)，如：刘玉(应化2532)" value={studentNamesText} onChange={(event) => setStudentNamesText(event.target.value)} className="min-h-28 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label></div>
               <div className="grid grid-cols-2 gap-2">
                 <input aria-label="开始时间" type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-teal-600" />
                 <input aria-label="结束时间" type="datetime-local" value={endTime} onChange={(event) => setEndTime(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-teal-600" />
               </div>
-              <textarea aria-label="备注" placeholder="备注（可选）" value={notes} onChange={(event) => setNotes(event.target.value)} className="min-h-16 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600" />
-              <label className="relative block cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 transition-colors hover:border-teal-400">
-                <span className="flex items-center gap-2"><Upload className="size-4 text-teal-700" /><span className="min-w-0 flex-1 truncate text-xs text-slate-600">{imageFiles.length ? `已选 ${imageFiles.length} 张截图` : '上传原假条图片（多张截图可一次全选）'}</span></span>
+              <label className="block space-y-2"><span className="text-sm font-medium text-slate-800">备注 <span className="font-normal text-slate-400">（可选）</span></span><textarea aria-label="备注" placeholder="补充说明" value={notes} onChange={(event) => setNotes(event.target.value)} className="min-h-20 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label>
+              <label className="relative block cursor-pointer rounded-xl border border-dashed border-teal-200 bg-teal-50/40 px-4 py-5 transition-colors hover:bg-teal-50">
+                <span className="flex items-center gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white text-teal-700 shadow-sm"><Upload className="size-4" /></span><span className="min-w-0 flex-1"><span className="block text-sm font-medium text-slate-800">选择原假条图片</span><span className="mt-1 block truncate text-xs text-slate-500">{imageFiles.length ? `已选择 ${imageFiles.length} 张图片` : '支持一次选择多张截图'}</span></span></span>
                 <input type="file" accept="image/*" multiple className="sr-only" onChange={handleImageChange} />
               </label>
-              <Button type="button" variant="outline" onClick={handleOcr} disabled={ocrLoading || !imageFiles.length} className="w-full bg-white disabled:opacity-50"><ScanText className="size-4" />{ocrLoading ? 'OCR 识别中...' : 'OCR 自动识别'}</Button>
+              <div className="grid gap-3 sm:grid-cols-2"><Button type="button" variant="outline" onClick={handleOcr} disabled={ocrLoading || !imageFiles.length} className="h-11 border-slate-300 bg-white disabled:opacity-50"><ScanText className="size-4" />{ocrLoading ? 'OCR 识别中...' : 'OCR 自动识别'}</Button><Button type="button" onClick={handleSubmit} disabled={saving} className="h-11 bg-teal-700 hover:bg-teal-800"><Plus className="size-4" />{saving ? '提交中...' : '提交原假条'}</Button></div>
               {ocrError && <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{ocrError}</p>}
               {submitSuccess && <p className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"><CheckCircle2 className="size-4 shrink-0" />{submitSuccess}</p>}
               {ocrLines.length > 0 && (
@@ -294,11 +295,10 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
                   </div>
                 </div>
               )}
-              <Button type="button" onClick={handleSubmit} disabled={saving} className="w-full bg-slate-950 hover:bg-slate-800"><Plus className="size-4" />{saving ? '提交中...' : '提交原假条'}</Button>
             </div>
           </aside>}
 
-          {!isSubmitMode && <section>
+          {!isSubmitMode && <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
               <label className="relative min-w-0 flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
@@ -308,12 +308,12 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
             </div>
 
             <div className="space-y-4">
-              {filtered.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 bg-white py-12 text-center text-sm text-slate-400">暂无原假条</div> : null}
+              {filtered.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-12 text-center"><FileCheck2 className="mx-auto size-7 text-slate-400" /><h3 className="mt-3 text-base font-semibold text-slate-800">暂无归档原假条</h3><p className="mt-1 text-sm text-pretty text-slate-500">提交原假条后，记录会显示在这里。</p><Link href="/leave-slip/originals/submit" className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-medium text-white hover:bg-teal-800"><Plus className="size-4" />提交原假条</Link></div> : null}
               {filtered.map((original) => {
                 const classNames = parseJsonArray(original.class_names);
                 const studentNames = parseJsonArray(original.student_names);
                 return (
-                  <article key={original.id} className="rounded-xl border border-sky-200 bg-sky-50/40 p-4 shadow-sm">
+                  <article key={original.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         {original.activity_name && <h3 className="font-semibold text-slate-950">{original.activity_name}</h3>}
