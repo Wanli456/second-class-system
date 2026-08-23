@@ -151,7 +151,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
         body: JSON.stringify({ imageUrls: uploaded.map((item) => item.url) }),
       });
       const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'OCR 识别失败');
+      if (!data.success) throw new Error(data.error || '自动识别失败');
 
       const fields = data.data.fields || {};
       const classStudents = Array.isArray(fields.class_students)
@@ -186,7 +186,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
       if (fields.suggested_notes) setNotes((previous) => previous || String(fields.suggested_notes));
       setOcrLines(Array.isArray(data.data.lines) ? data.data.lines : []);
     } catch (error) {
-      setOcrError(error instanceof Error ? error.message : 'OCR 识别失败');
+      setOcrError(error instanceof Error ? error.message : '自动识别失败');
     } finally {
       setOcrLoading(false);
     }

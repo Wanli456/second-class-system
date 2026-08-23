@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, FileCheck2, Minus, Plus, ScanText, Send, Trash2, Upload, X } from 'lucide-react';
+import { AlertCircle, FileCheck2, Minus, Plus, Send, Trash2, Upload, X } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { PageErrorDialog } from '@/components/PageErrorDialog';
@@ -178,7 +178,7 @@ export default function LeaveSlipUploadPage() {
         body: JSON.stringify({ imageUrls: uploaded.map((item) => item.url) }),
       });
       const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'OCR 识别失败');
+      if (!data.success) throw new Error(data.error || '自动识别失败');
 
       const fields = data.data.fields || {};
       const names: string[] = Array.isArray(fields.students) ? fields.students.map(String) : [];
@@ -229,16 +229,27 @@ export default function LeaveSlipUploadPage() {
       setOcrLines(Array.isArray(data.data.lines) ? data.data.lines : []);
       setError(null);
     } catch (ocrSubmitError) {
-      setOcrError(ocrSubmitError instanceof Error ? ocrSubmitError.message : 'OCR 识别失败');
+      setOcrError(ocrSubmitError instanceof Error ? ocrSubmitError.message : '自动识别失败');
     } finally {
       setOcrLoading(false);
     }
   };
 
-  const handleOcr = async () => {
-    if (!imageFiles.length) { setError('请先上传假条图片'); return; }
-    await runOcrForFiles(imageFiles);
-  };
+
+
+  if (!initialized) return <AuthLoadingScreen />;
+  if (!user) return <div className="flex min-h-dvh items-center justify-center bg-slate-50 p-4"><div className="rounded-xl border bg-white p-6 text-center"><h2 className="font-semibold">请先登录</h2><p className="mt-2 text-sm text-slate-500">登录后才能上传假条。</p><Link href="/login?redirect=/leave-slip/upload" className="mt-4 inline-block rounded-md bg-slate-950 px-4 py-2 text-sm text-white">登录/注册</Link></div></div>;
+  if (!canAccess) {
+    return (
+      <DashboardLayout user={user} title="假条上传" activeNavHref="/leave-slip/upload">
+        <div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
+          <AlertCircle className="mx-auto size-6 text-amber-600" />
+          <h2 className="mt-3 font-semibold text-amber-900">当前账号没有假条上传权限</h2>
+          <p className="mt-2 text-sm text-amber-800">请联系系统管理员授予 `canUploadLeave` 权限。</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   const handleSubmit = async () => {
     setSuccess(null);
@@ -312,20 +323,6 @@ export default function LeaveSlipUploadPage() {
       setSubmitting(false);
     }
   };
-
-  if (!initialized) return <AuthLoadingScreen />;
-  if (!user) return <div className="flex min-h-dvh items-center justify-center bg-slate-50 p-4"><div className="rounded-xl border bg-white p-6 text-center"><h2 className="font-semibold">请先登录</h2><p className="mt-2 text-sm text-slate-500">登录后才能上传假条。</p><Link href="/login?redirect=/leave-slip/upload" className="mt-4 inline-block rounded-md bg-slate-950 px-4 py-2 text-sm text-white">登录/注册</Link></div></div>;
-  if (!canAccess) {
-    return (
-      <DashboardLayout user={user} title="假条上传" activeNavHref="/leave-slip/upload">
-        <div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
-          <AlertCircle className="mx-auto size-6 text-amber-600" />
-          <h2 className="mt-3 font-semibold text-amber-900">当前账号没有假条上传权限</h2>
-          <p className="mt-2 text-sm text-amber-800">请联系系统管理员授予 `canUploadLeave` 权限。</p>
-        </div>
-      </DashboardLayout>
-    );
-  }
 
   return (
     <DashboardLayout user={user} title="假条上传" activeNavHref="/leave-slip/upload">
@@ -449,7 +446,7 @@ export default function LeaveSlipUploadPage() {
               </div>
             )}
             <>
-              <Button type="button" variant="outline" onClick={handleOcr} disabled={ocrLoading || !imageFiles.length} className="mt-3 w-full bg-white disabled:opacity-50"><ScanText className="size-4" />{ocrLoading ? '自动识别中...' : '自动识别假条内容（也可点击重试）'}</Button>
+              {ocrLoading && <p className="mt-3 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-700">图片自动识别中，请稍候…</p>}
               {ocrError && <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{ocrError}（识别失败可手动填写，不影响提交）</p>}
               {ocrLines.length > 0 && (
                 <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -464,7 +461,7 @@ export default function LeaveSlipUploadPage() {
 
             {slipType === '手写假条' ? (
               <div className="mt-4">
-                <p className="mb-2 text-xs text-slate-500">以下为人工核对后手动勾选，OCR 识别结果仅供参考。</p>
+                <p className="mb-2 text-xs text-slate-500">以下为人工核对后手动勾选，自动识别结果仅供参考。</p>
                 <label className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
                   <input type="checkbox" checked={counselorSignature} onChange={(event) => setCounselorSignature(event.target.checked)} className="size-4 rounded border-slate-300 text-teal-700 accent-teal-700" />
                   <span className="text-sm text-slate-700">已核对：假条上<strong className="text-slate-950">辅导员签字</strong>齐全且格式按照模板填写</span>
@@ -472,7 +469,7 @@ export default function LeaveSlipUploadPage() {
               </div>
             ) : (
               <div className="mt-4">
-                <p className="mb-2 text-xs text-slate-500">以下为人工核对后手动勾选，OCR 识别结果仅供参考。</p>
+                <p className="mb-2 text-xs text-slate-500">以下为人工核对后手动勾选，自动识别结果仅供参考。</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                 <label className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
                   <input type="checkbox" checked={officialSeal} onChange={(event) => setOfficialSeal(event.target.checked)} className="size-4 rounded border-slate-300 text-teal-700 accent-teal-700" />

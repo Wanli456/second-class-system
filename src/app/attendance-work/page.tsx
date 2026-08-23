@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, Plus, ScanText, Upload } from 'lucide-react';
+import { AlertCircle, Plus, Upload } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { PageErrorDialog } from '@/components/PageErrorDialog';
@@ -180,6 +180,7 @@ export default function AttendanceWorkPage() {
       return;
     }
     setImageFiles((previous) => [...previous, ...files]);
+    if (files.length) void runOcr(files);
     files.forEach((file) => {
       const reader = new FileReader();
       reader.onload = () => setPreviews((previous) => [...previous, String(reader.result)]);
@@ -187,14 +188,14 @@ export default function AttendanceWorkPage() {
     });
   };
 
-  const runOcr = async () => {
-    if (!imageFiles.length) { setError('请先上传考勤表图片'); return; }
+  const runOcr = async (selectedFiles: File[] = imageFiles) => {
+    if (!selectedFiles.length) { setError('请先上传考勤表图片'); return; }
     setError(null);
     setOcrLoading(true);
     setOcrLines([]);
     try {
       const uploaded: Array<{ url: string; name: string }> = [];
-      for (const file of imageFiles) {
+      for (const file of selectedFiles) {
         const body = new FormData();
         body.append('file', file);
         const uploadRes = await apiFetch('/api/upload', { method: 'POST', body });
@@ -380,7 +381,7 @@ export default function AttendanceWorkPage() {
             {previews.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{previews.map((preview, index) => <img key={`${preview.slice(0, 32)}-${index}`} src={preview} alt={`预览 ${index + 1}`} className="size-24 rounded-md border border-slate-200 object-contain" />)}</div>}
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
-              <Button type="button" variant="outline" onClick={() => void runOcr()} disabled={ocrLoading || !imageFiles.length} className="bg-white disabled:opacity-50"><ScanText className="size-4" />{ocrLoading ? '识别中...' : '自动识别“星期+姓名”（可手动改）'}</Button>
+              {ocrLoading && <p className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-700">图片自动识别中，请稍候…</p>}
               <Button type="button" onClick={() => void submit()} disabled={submitting} className="bg-slate-950 hover:bg-slate-800"><Plus className="size-4" />{submitting ? '提交中...' : (editingId ? '保存修改' : '提交安排')}</Button>
             </div>
             {ocrLines.length > 0 && (

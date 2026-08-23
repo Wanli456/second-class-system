@@ -13,7 +13,7 @@ function runPythonOcr(pythonPath: string, args: string[]) {
     const child = spawn(pythonPath, args, { windowsHide: true, stdio: 'ignore' });
     const timer = setTimeout(() => {
       child.kill();
-      reject(new Error('OCR 识别超时'));
+      reject(new Error('自动识别超时'));
     }, 120000);
     child.once('error', (error) => {
       clearTimeout(timer);
@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
         await runPythonOcr(pythonPath, [scriptPath, inputPath, outputPath]);
         const raw = await readFile(outputPath, 'utf8');
         const result = JSON.parse(raw);
-        if (!result?.ok) throw new Error(result?.error || 'OCR 识别失败');
+        if (!result?.ok) throw new Error(result?.error || '自动识别失败');
         perImage.push({ image: index, url: imageUrl, lines: result.lines || [], fields: result.fields || {} });
       }
 
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
       await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
     }
   } catch (error) {
-    console.error('OCR 识别失败:', error);
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'OCR 识别失败' }, { status: 500 });
+    console.error('自动识别失败:', error);
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '自动识别失败' }, { status: 500 });
   }
 }
