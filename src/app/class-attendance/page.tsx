@@ -14,7 +14,6 @@ interface ClassAttendanceRow {
   attendance_worker_count: number;
   present_source: 'recorded' | 'auto';
 }
-
 interface ClassAttendanceResponse {
   success?: boolean;
   data?: ClassAttendanceRow[];
@@ -131,7 +130,7 @@ export default function ClassAttendancePage() {
                       <td className="px-5 py-4 font-semibold text-emerald-700">{row.present_count}</td>
                       <td className="px-5 py-4 text-amber-700">{row.leave_count}</td>
                       <td className="px-5 py-4 text-teal-700">{row.attendance_worker_count}</td>
-                      <td className="px-5 py-4 text-slate-500">{row.present_source === 'recorded' ? '已录入考勤' : '自动计算（应到−请假）'}</td>
+                      <td className="px-5 py-4 text-slate-500">{row.present_source === 'recorded' ? '已录入考勤' : '自动计算（应到−请假−考勤）'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -144,7 +143,7 @@ export default function ClassAttendancePage() {
 
         <div className="flex items-start gap-2 rounded-lg border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-800">
           <Info className="mt-0.5 size-4 shrink-0" />
-          <p>当天考勤人员会计入应到和实到人数；同一人员已在班级花名册中时会自动去重。“已录入考勤”表示当天已有考勤人员提交实到人数；“自动计算”仅在没有考勤记录时使用，应到人数减去已通过假条人数。</p>
+              <p>应到为班级花名册人数；普通请假为已通过的请假人数；考勤为当天被安排执行考勤且属于本班花名册的学生；自动计算的实到为应到减去普通请假和考勤。</p>
         </div>
       </div>
     </DashboardLayout>

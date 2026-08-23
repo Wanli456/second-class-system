@@ -12,7 +12,6 @@ interface AttendanceDateRow {
   total_count: number | null;
   present_count: number | null;
 }
-
 interface UserRosterStudent extends ClassRosterStudent {
   username: string | null;
   contact_phone: string | null;
@@ -148,6 +147,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const usersByStudentId = new Map<string, UserRosterStudent>();
     const rosterByName = new Map<string, NamedRosterStudent>();
     const rosterByStudentId = new Map<string, NamedRosterStudent>();
+    const rosterKeys = new Set<string>();
+    roster.forEach((student) => {
+      const classKey = lookupKey(student.class_name);
+      const studentKey = lookupKey(student.student_id);
+      if (classKey && studentKey) rosterKeys.add(`${classKey}:${studentKey}`);
+    });
     users.forEach((user) => {
       if (lookupKey(user.username)) usersByName.set(lookupKey(user.username), user);
       if (lookupKey(user.contact_phone)) usersByPhone.set(lookupKey(user.contact_phone), user);
@@ -173,7 +178,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const addWorker = (worker: ClassRosterStudent | null, fallbackClassName: string | null, fallbackId: string): void => {
       const className = worker?.class_name || fallbackClassName;
       const studentId = worker?.student_id || fallbackId;
-      if (!className || !studentId) return;
+      if (!className || !studentId || !rosterKeys.has(`${lookupKey(className)}:${lookupKey(studentId)}`)) return;
       attendanceWorkers.push({ class_name: className, student_id: studentId });
       const workerIds = attendanceWorkerIdsByClass.get(className) ?? new Set<string>();
       workerIds.add(studentId);
@@ -195,9 +200,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
 
     const data = summarizeClassAttendance(
-      [...roster, ...users, ...attendanceWorkers],
+      roster,
       approvedLeaves,
       attendance as RecordedClassAttendance[],
+      attendanceWorkers,
     ).map((row) => ({
       ...row,
       attendance_worker_count: attendanceWorkerIdsByClass.get(row.class_name)?.size ?? 0,

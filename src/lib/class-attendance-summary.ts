@@ -2,7 +2,6 @@ export interface ClassRosterStudent {
   class_name: string | null;
   student_id: string | null;
 }
-
 export interface ApprovedLeaveStudent {
   class_name: string | null;
   student_id: string | null;
@@ -50,12 +49,16 @@ export function summarizeClassAttendance(
   roster: ClassRosterStudent[],
   approvedLeaves: ApprovedLeaveStudent[],
   recordedAttendance: RecordedClassAttendance[],
+  attendanceWorkers: ClassRosterStudent[] = [],
 ): ClassAttendanceSummary[] {
   const rosterByClass = new Map<string, Set<string>>();
   roster.forEach((student) => addStudent(rosterByClass, student.class_name, student.student_id));
 
   const leaveByClass = new Map<string, Set<string>>();
   approvedLeaves.forEach((student) => addStudent(leaveByClass, student.class_name, student.student_id));
+
+  const workerByClass = new Map<string, Set<string>>();
+  attendanceWorkers.forEach((student) => addStudent(workerByClass, student.class_name, student.student_id));
 
   const recordedByClass = new Map<string, RecordedClassAttendance>();
   recordedAttendance.forEach((attendance) => {
@@ -71,7 +74,9 @@ export function summarizeClassAttendance(
 
   return [...classNames].sort((left, right) => left.localeCompare(right, 'zh-CN')).map((className) => {
     const expectedCount = rosterByClass.get(className)?.size ?? 0;
+    const rosterIds = rosterByClass.get(className) ?? new Set<string>();
     const leaveCount = leaveByClass.get(className)?.size ?? 0;
+    const attendanceWorkerCount = [...(workerByClass.get(className) ?? new Set<string>())].filter((studentId) => rosterIds.has(studentId)).length;
     const recorded = recordedByClass.get(className);
 
     if (recorded) {
@@ -87,7 +92,7 @@ export function summarizeClassAttendance(
     return {
       class_name: className,
       expected_count: expectedCount,
-      present_count: Math.max(0, expectedCount - leaveCount),
+      present_count: Math.max(0, expectedCount - leaveCount - attendanceWorkerCount),
       leave_count: leaveCount,
       present_source: 'auto' as const,
     };
