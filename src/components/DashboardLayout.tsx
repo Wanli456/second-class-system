@@ -135,7 +135,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: '活动赋分', href: '/admin?role=admin&tab=scoring', icon: Award, requiredPermission: 'canScore' },
   { label: '用户管理', href: '/admin?role=admin&tab=users', icon: Users, requiredRole: 'admin' },
   { label: '学习竞技部用户管理', href: '/department-users/learning-competition', icon: Users, requiredDepartment: '学习竞技部' },
-  { label: '认证中心用户管理', href: '/department-users/certification-center', icon: Users, requiredDepartment: '第二课堂认证中心' },
+  { label: '第二课堂认证中心用户管理', href: '/department-users/certification-center', icon: Users, requiredDepartment: '第二课堂认证中心' },
   { label: '活动提交', href: '/submit', icon: Send, requiredPermission: 'canSubmitActivity' },
   { label: '提交状态', href: '/submit/status', icon: FileCheck, requiredPermission: 'canViewSubmissionStatus' },
   { label: '赋分材料', href: '/submit/scoring', icon: Award, requiredPermission: 'canSubmitScoring' },
