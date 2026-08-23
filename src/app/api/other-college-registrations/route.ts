@@ -10,6 +10,7 @@ type RegistrationBody = {
   category?: unknown;
   startTime?: unknown;
   endTime?: unknown;
+  leaderName?: unknown;
   contactPhone?: unknown;
   scoringTableUrl?: unknown;
   scoringTableFileName?: unknown;
@@ -43,14 +44,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const category = requiredText(body.category);
   const startTime = requiredText(body.startTime);
   const endTime = requiredText(body.endTime);
+  const leaderName = requiredText(body.leaderName);
   const contactPhone = requiredText(body.contactPhone);
   const scoringTableUrl = requiredText(body.scoringTableUrl);
   const scoringTableFileName = requiredText(body.scoringTableFileName);
   const recordPhotoUrl = requiredText(body.recordPhotoUrl);
   const recordPhotoFileName = requiredText(body.recordPhotoFileName);
 
-  if (!fullName || !organizer || !category || !startTime || !endTime || !contactPhone || !scoringTableUrl || !scoringTableFileName || !recordPhotoUrl || !recordPhotoFileName) {
-    return NextResponse.json({ success: false, error: '请完整填写活动信息并上传赋分表、备案表照片' }, { status: 400 });
+  if (!fullName || !organizer || !category || !startTime || !endTime || !leaderName || !contactPhone || !scoringTableUrl || !scoringTableFileName || !recordPhotoUrl || !recordPhotoFileName) {
+    return NextResponse.json({ success: false, error: '请完整填写活动、负责人信息并上传赋分表、备案表照片' }, { status: 400 });
   }
   if (!isOtherCollege(organizer)) {
     return NextResponse.json({ success: false, error: '主办学院只能选择指定的四个学院' }, { status: 400 });
@@ -67,7 +69,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     "VALUES ($1,$2,$3,$4,$5,'校级',NULL,NULL,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'正常活动','待赋分') RETURNING *",
     [
       createOtherCollegeActivityId(), fullName, startTime, endTime, category, recordPhotoUrl, recordPhotoFileName,
-      auth.user!.username, contactPhone, 'other_college', organizer, JSON.stringify([{ type: 'other_college', name: organizer }]),
+      leaderName, contactPhone, 'other_college', organizer, JSON.stringify([{ type: 'other_college', name: organizer }]),
       auth.user!.id, auth.user!.username, auth.user!.student_id, scoringTableUrl, scoringTableFileName,
     ],
   );
