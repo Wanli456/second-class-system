@@ -257,8 +257,11 @@ export default function Home() {
     ];
 
     // 常用入口：按当前角色权限挑选最常用的功能。
+    const departmentUsersHref = user.department === '学习竞技部'
+      ? '/department-users/learning-competition'
+      : '/department-users/certification-center';
     const departmentUserEntry: EntryWithGroup = {
-      href: '/department-users',
+      href: departmentUsersHref,
       label: '部门用户管理',
       detail: '设置本部门成员与业务权限',
       icon: Users,
