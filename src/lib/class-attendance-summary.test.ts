@@ -6,6 +6,7 @@ const result = summarizeClassAttendance(
     { class_name: '计算机2101', student_id: '1' },
     { class_name: '计算机2101', student_id: '1' },
     { class_name: '计算机2101', student_id: '2' },
+    { class_name: '计算机2101', student_id: 'attendance-worker-1' },
     { class_name: '计算机2102', student_id: '3' },
   ],
   [
@@ -21,8 +22,8 @@ const result = summarizeClassAttendance(
 assert.deepEqual(result, [
   {
     class_name: '计算机2101',
-    expected_count: 2,
-    present_count: 0,
+    expected_count: 3,
+    present_count: 1,
     leave_count: 2,
     present_source: 'auto',
   },

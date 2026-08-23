@@ -13,6 +13,21 @@ interface AttendanceDateRow {
   present_count: number | null;
 }
 
+interface UserRosterStudent extends ClassRosterStudent {
+  username: string | null;
+}
+
+interface NamedRosterStudent extends ClassRosterStudent {
+  student_name: string | null;
+}
+
+interface AttendanceWorkRow {
+  start_date: string | null;
+  end_date: string | null;
+  student_names: unknown;
+  schedules: unknown;
+}
+
 function businessToday(): string {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Shanghai',
@@ -36,6 +51,51 @@ function nextDate(value: string): string {
   return parsed.toISOString().slice(0, 10);
 }
 
+function parseJson(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function parseNames(value: unknown): string[] {
+  const parsed = parseJson(value);
+  if (Array.isArray(parsed)) return parsed.map(String).map((item) => item.trim()).filter(Boolean);
+  if (typeof parsed === 'string') return parsed.split(/[,，、\r\n]/).map((item) => item.trim()).filter(Boolean);
+  return [];
+}
+
+function normalized(value: string | null): string {
+  return value?.trim() || '';
+}
+
+function attendanceWorkerNames(rows: AttendanceWorkRow[], requestedDate: string): Set<string> {
+  const names = new Set<string>();
+
+  for (const row of rows) {
+    const schedules = parseJson(row.schedules);
+    const scheduleItems = Array.isArray(schedules) ? schedules : [];
+    let matchedDate = false;
+
+    for (const item of scheduleItems) {
+      if (!item || typeof item !== 'object') continue;
+      const candidate = item as { date?: unknown; students?: unknown; student_names?: unknown };
+      if (String(candidate.date || '').trim() !== requestedDate) continue;
+      matchedDate = true;
+      parseNames(candidate.students ?? candidate.student_names).forEach((name) => names.add(name));
+    }
+
+    // 兼容旧版“整周统一名单”：安排只有周一起始日，但起止日期覆盖整周。
+    if (!matchedDate && scheduleItems.length === 1 && row.start_date && row.end_date && row.start_date !== row.end_date && row.start_date <= requestedDate && row.end_date >= requestedDate) {
+      parseNames(row.student_names).forEach((name) => names.add(name));
+    }
+  }
+
+  return names;
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const requestedDate = new URL(request.url).searchParams.get('date')?.trim() || businessToday();
   if (!isValidDate(requestedDate)) {
@@ -44,11 +104,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   try {
     const followingDate = nextDate(requestedDate);
-    const [roster, users, approvedLeaves, attendance] = await Promise.all([
-      query<ClassRosterStudent>(
-        'SELECT class_name, student_id FROM class_roster WHERE class_name IS NOT NULL AND class_name <> \'\' AND student_id IS NOT NULL AND student_id <> \'\'',
+    const [roster, users, approvedLeaves, attendance, attendanceWork] = await Promise.all([
+      query<NamedRosterStudent>(
+        'SELECT class_name, student_id, student_name FROM class_roster WHERE class_name IS NOT NULL AND class_name <> \'\' AND student_id IS NOT NULL AND student_id <> \'\'',
       ),
-      query<ClassRosterStudent>(
+      query<UserRosterStudent>(
         'SELECT class_name, student_id FROM users WHERE class_name IS NOT NULL AND class_name <> \'\' AND student_id IS NOT NULL AND student_id <> \'\'',
       ),
       query<ApprovedLeaveStudent>(
@@ -59,10 +119,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         'SELECT class_name, total_count, present_count FROM evening_study_attendance WHERE date = $1 ORDER BY class_name, created_at DESC',
         [requestedDate],
       ),
+      query<AttendanceWorkRow>(
+        "SELECT start_date, end_date, student_names, schedules FROM attendance_work_arrangements WHERE review_status = '已通过' AND start_date <= $1 AND end_date >= $1",
+        [requestedDate],
+      ),
     ]);
 
+    const workerNames = attendanceWorkerNames(attendanceWork, requestedDate);
+    const workerNameKeys = new Set([...workerNames].map((name) => name.trim()));
+    const attendanceWorkers = [
+      ...roster.filter(
+        (student) => workerNameKeys.has(normalized(student.student_name)) || workerNameKeys.has(normalized(student.student_id)),
+      ),
+      ...users.filter(
+        (user) => workerNameKeys.has(normalized(user.username)) || workerNameKeys.has(normalized(user.student_id)),
+      ),
+    ];
+
     const data = summarizeClassAttendance(
-      [...roster, ...users],
+      [...roster, ...users, ...attendanceWorkers],
       approvedLeaves,
       attendance as RecordedClassAttendance[],
     );
