@@ -7,6 +7,7 @@ import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { PageErrorDialog } from '@/components/PageErrorDialog';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
+import { hasPermission } from '@/lib/department-permissions';
 import { Button } from '@/components/ui/button';
 
 type ParsedStudent = { student_id: string; student_name: string; class_name: string };
@@ -37,7 +38,7 @@ export default function TemporaryLeavePage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canStart = Boolean(user && (user.role === 'admin' || user.canStartGroupLeave === true));
+  const canStart = Boolean(user && (user.role === 'admin' || hasPermission(user, 'canStartGroupLeave')));
   const canChooseClass = Boolean(user && (user.role === 'admin' || user.role === 'leader'));
 
   useEffect(() => {

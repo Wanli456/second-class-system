@@ -8,6 +8,7 @@ import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { PageErrorDialog } from '@/components/PageErrorDialog';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
+import { hasPermission } from '@/lib/department-permissions';
 
 interface SlipRecord {
   id: string;
@@ -63,7 +64,7 @@ export default function EveningStudyPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState<'approved' | 'pending' | 'rejected' | 'duty' | null>(null);
-  const canView = Boolean(user && (user.role === 'admin' || user.canViewEveningStudy || user.canQueryLeave));
+  const canView = hasPermission(user, 'canViewEveningStudy') || hasPermission(user, 'canQueryLeave');
 
   useEffect(() => { if (user?.className) setClassName(user.className); }, [user?.className]);
 

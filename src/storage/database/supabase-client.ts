@@ -58,6 +58,7 @@ if (localDb && shouldInitializeLocalDb) {
       department TEXT,
       class_name TEXT,
       contact_phone TEXT,
+      permission_overrides TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
 
@@ -250,7 +251,9 @@ if (localDb && shouldInitializeLocalDb) {
       ('local-scorer', '本地活动赋分员', 'test123', '9000000003', 'student', false, true, false, false, false, false, false, false, '学生会', '计算机2101'),
       ('local-leave-reviewer', '本地请假审核员', 'test123', '9000000004', 'student', false, false, true, false, false, false, false, false, '学生会', '计算机2101'),
       ('local-leader', '本地负责人', 'test123', '9000000005', 'leader', false, false, false, true, true, true, true, true, '学生会', '计算机2101'),
-      ('local-student', '本地学生', 'test123', '9000000006', 'student', false, false, false, false, false, false, false, false, '学生会', '计算机2101');
+      ('local-student', '本地学生', 'test123', '9000000006', 'student', false, false, false, false, false, false, false, false, '学生会', '计算机2101'),
+      ('local-sports-leader', '本地竞技部负责人', 'test123', '9000000008', 'leader', false, false, false, false, false, false, false, false, '学习竞技部', '计算机2101'),
+      ('local-certification-leader', '本地认证中心负责人', 'test123', '9000000009', 'leader', false, false, false, false, false, false, false, false, '第二课堂认证中心', '计算机2101');
 
     INSERT INTO class_roster (class_name, student_id, student_name) VALUES
       ('计算机2101', '9000000001', '本地管理员'),
@@ -259,9 +262,15 @@ if (localDb && shouldInitializeLocalDb) {
       ('计算机2101', '9000000004', '本地请假审核员'),
       ('计算机2101', '9000000005', '本地负责人'),
       ('计算机2101', '9000000006', '本地学生'),
-      ('计算机2101', '9000000007', '本地未注册学生');
+      ('计算机2101', '9000000007', '本地未注册学生'),
+      ('计算机2101', '9000000008', '本地竞技部负责人'),
+      ('计算机2101', '9000000009', '本地认证中心负责人');
 
-    INSERT INTO departments (name) VALUES ('学生会') ON CONFLICT (name) DO NOTHING;
+    INSERT INTO departments (name) VALUES
+      ('学生会'),
+      ('学习竞技部'),
+      ('第二课堂认证中心')
+    ON CONFLICT (name) DO NOTHING;
   `);
 
   localDb.public.none(LOCAL_TEST_DATA_SQL);
@@ -274,6 +283,8 @@ if (localDb && shouldInitializeLocalDb) {
   console.log('   - 请假审核权限：学号 9000000004 / 密码 test123');
   console.log('   - 部门负责人：学号 9000000005 / 密码 test123');
   console.log('   - 学生：学号 9000000006 / 密码 test123');
+  console.log('   - 学习竞技部负责人：学号 9000000008 / 密码 test123（自动获得假条/考勤/晚自习权限）');
+  console.log('   - 第二课堂认证中心负责人：学号 9000000009 / 密码 test123（自动获得活动提交/审核/赋分/状态权限）');
   console.log('💡 如需持久化数据，请配置 PGDATABASE_URL 环境变量');
 }
 
@@ -329,6 +340,7 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_phone TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS permission_overrides TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS scope_type TEXT DEFAULT 'department';
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS category_primary TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS category_secondary TEXT;

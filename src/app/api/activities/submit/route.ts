@@ -26,8 +26,9 @@ async function resolveLeaders(ids: string[], fallbackName: string, fallbackPhone
     role: string;
     can_submit_activity: boolean;
     can_submit_scoring: boolean;
+    permission_overrides: string | null;
     contact_phone: string | null;
-  }>(`SELECT id, username, student_id, department, class_name, role, can_submit_activity, can_submit_scoring, contact_phone FROM users WHERE id IN (${placeholders})`, leaderIds);
+  }>(`SELECT id, username, student_id, department, class_name, role, can_submit_activity, can_submit_scoring, permission_overrides, contact_phone FROM users WHERE id IN (${placeholders})`, leaderIds);
   if (users.length !== leaderIds.length || users.some((leader) => !canSelectActivityLeader(leader, scopes))) {
     throw new ActivityLeaderValidationError(scopes[0]?.type === 'department'
       ? '部门活动负责人必须是所属部门的部门负责人或管理员'

@@ -2,6 +2,7 @@ import { createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual } fr
 import { promisify } from 'util';
 import { NextRequest, NextResponse } from 'next/server';
 import { queryOne } from '@/storage/database/supabase-client';
+import { DEPARTMENT_AUTO_PERMISSIONS, parsePermissionOverrides } from '@/lib/department-permissions';
 
 const scrypt = promisify(scryptCallback);
 const SESSION_COOKIE = 'second_class_session';
@@ -40,6 +41,7 @@ export type AuthUser = {
   contact_phone?: string | null;
   department?: string | null;
   class_name?: string | null;
+  permission_overrides?: string | null;
 };
 
 export type BaseRole = 'admin' | 'leader' | 'class_leader' | 'student';
@@ -109,11 +111,26 @@ export async function verifyPassword(password: string, stored: string) {
  * 权限规则：
  * 1. admin角色拥有所有权限
  * 2. 业务能力由独立权限字段控制，基础角色不再绑定审核、赋分或请假权限
- * 3. 管理员拥有全部权限，其余用户由管理员逐项授予
+ * 3. 部门负责人（leader）按所属部门自动获得该部门的默认权限组
+ * 4. 其余用户由管理员逐项授予；管理员拥有全部权限
  */
 function calculateUserPermissions(user: AuthUser) {
   const role = normalizeRole(user.role);
   const isAdmin = role === 'admin';
+  const isLeader = role === 'leader';
+  const department = (user.department || '').trim();
+  const autoPerms = (isLeader && DEPARTMENT_AUTO_PERMISSIONS[department]) || {};
+  const overrides = parsePermissionOverrides(user.permission_overrides);
+
+  const permission = (
+    key: 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave' | 'canManageAttendanceWork' | 'canUploadLeave' | 'canQueryLeave' | 'canManageOriginalLeave',
+    raw: boolean,
+    fallback: boolean,
+  ) => {
+    if (isAdmin) return true;
+    if (typeof overrides[key] === 'boolean') return overrides[key]!;
+    return fallback || raw || autoPerms[key] === true;
+  };
 
   return {
     id: user.id,
@@ -123,21 +140,20 @@ function calculateUserPermissions(user: AuthUser) {
     department: user.department || null,
     className: user.class_name || null,
     contactPhone: user.contact_phone || null,
-    // 权限计算：admin OR 勾选权限
-    canPublish: isAdmin || user.can_publish,
-    canScore: isAdmin || user.can_score,
-    canReviewLeave: isAdmin || user.can_review_leave,
-
-    // 普通权限：仅通过勾选控制
-    canSubmitActivity: isAdmin || user.can_submit_activity,
-    canViewSubmissionStatus: isAdmin || user.can_view_submission_status,
-    canSubmitScoring: isAdmin || user.can_submit_scoring,
-    canViewEveningStudy: isAdmin || user.can_view_evening_study,
-    canStartGroupLeave: isAdmin || user.can_start_group_leave,
-    canManageAttendanceWork: isAdmin || user.can_manage_attendance_work,
-    canUploadLeave: isAdmin || user.can_upload_leave,
-    canQueryLeave: isAdmin || user.can_query_leave,
-    canManageOriginalLeave: isAdmin || user.can_manage_original_leave,
+    permissionOverrides: user.permission_overrides || null,
+    // 权限计算：admin OR 管理员手动覆盖 OR 部门自动权限 OR 手动勾选权限
+    canPublish: permission('canPublish', user.can_publish, false),
+    canScore: permission('canScore', user.can_score, false),
+    canReviewLeave: permission('canReviewLeave', user.can_review_leave, false),
+    canSubmitActivity: permission('canSubmitActivity', user.can_submit_activity, false),
+    canViewSubmissionStatus: permission('canViewSubmissionStatus', user.can_view_submission_status, false),
+    canSubmitScoring: permission('canSubmitScoring', user.can_submit_scoring, false),
+    canViewEveningStudy: permission('canViewEveningStudy', user.can_view_evening_study, false),
+    canStartGroupLeave: permission('canStartGroupLeave', user.can_start_group_leave, false),
+    canManageAttendanceWork: permission('canManageAttendanceWork', user.can_manage_attendance_work, false),
+    canUploadLeave: permission('canUploadLeave', user.can_upload_leave, false),
+    canQueryLeave: permission('canQueryLeave', user.can_query_leave, false),
+    canManageOriginalLeave: permission('canManageOriginalLeave', user.can_manage_original_leave, false),
   };
 }
 
@@ -154,7 +170,7 @@ export async function getSessionUser(request: NextRequest): Promise<AuthUser | n
   const userId = readSession(request.cookies.get(SESSION_COOKIE)?.value) || readSession(bearerToken);
   if (!userId) return null;
   return queryOne(
-    `SELECT id, username, student_id, role, can_publish, can_score, can_submit_activity, can_view_submission_status, can_submit_scoring, can_review_leave, can_view_evening_study, can_start_group_leave, can_manage_attendance_work, can_upload_leave, can_query_leave, can_manage_original_leave, department, class_name, contact_phone
+    `SELECT id, username, student_id, role, can_publish, can_score, can_submit_activity, can_view_submission_status, can_submit_scoring, can_review_leave, can_view_evening_study, can_start_group_leave, can_manage_attendance_work, can_upload_leave, can_query_leave, can_manage_original_leave, department, class_name, contact_phone, permission_overrides
      FROM users WHERE id = $1`,
     [userId],
   );

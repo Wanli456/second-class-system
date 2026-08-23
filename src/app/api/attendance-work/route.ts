@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
-import { requirePermission, requireUser } from '@/lib/auth';
+import { calculateUserPermissions, requirePermission, requireUser } from '@/lib/auth';
 import { query, queryOne } from '@/storage/database/supabase-client';
 
 const REVIEW_STATUSES = ['待查对', '已通过', '已驳回'] as const;
@@ -56,7 +56,8 @@ export async function GET(request: NextRequest) {
   const auth = await requireUser(request);
   if (auth.response) return auth.response;
   const user = auth.user!;
-  const canList = user.role === 'admin' || user.can_manage_attendance_work === true || user.can_review_leave === true || user.can_view_evening_study === true || user.can_query_leave === true;
+  const permissions = calculateUserPermissions(user);
+  const canList = permissions.canManageAttendanceWork || permissions.canReviewLeave || permissions.canViewEveningStudy || permissions.canQueryLeave;
   if (!canList) return NextResponse.json({ success: false, error: '暂无权限查看考勤工作安排' }, { status: 403 });
 
   const { searchParams } = new URL(request.url);
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
   if (reviewStatus && REVIEW_STATUSES.includes(reviewStatus as (typeof REVIEW_STATUSES)[number])) {
     conditions.push(`review_status = $${index}`);
     values.push(reviewStatus);
-  } else if (!reviewStatus && user.role !== 'admin' && user.can_review_leave !== true && user.can_manage_attendance_work !== true) {
+  } else if (!reviewStatus && !permissions.canReviewLeave && !permissions.canManageAttendanceWork) {
     // 普通查询/晚自习用户默认只看已通过，避免看到待查对/已驳回内容。
     conditions.push(`review_status = $${index}`);
     values.push('已通过');

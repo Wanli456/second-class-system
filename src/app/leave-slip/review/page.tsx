@@ -7,6 +7,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
+import { hasPermission } from '@/lib/department-permissions';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -62,7 +63,7 @@ export default function LeaveSlipReviewPage() {
   const [loading, setLoading] = useState(false);
   const [reviewNote, setReviewNote] = useState('');
 
-  const canAccess = user?.role === 'admin' || user?.canReviewLeave === true;
+  const canAccess = hasPermission(user, 'canReviewLeave');
 
   const load = async () => {
     setLoading(true);
@@ -138,6 +139,7 @@ export default function LeaveSlipReviewPage() {
           <p className="text-xs font-semibold uppercase text-teal-700">假条管理</p>
           <h2 className="mt-2 text-2xl font-bold text-balance text-slate-950">查对班级负责人上传的假条</h2>
           <p className="mt-2 text-sm text-pretty text-slate-600">核查时间、格式、签字、公章，并核准假条覆盖的学生名单。</p>
+          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">签字、公章标签是上传人提交时的人工勾选结果；绿色仅表示“已勾选”，不代表系统已识别或确认图片中存在该内容。请以假条图片为准逐项核对。</p>
         </header>
 
         <div className="mb-6 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center">
@@ -182,9 +184,9 @@ export default function LeaveSlipReviewPage() {
                     <p className="mt-1 text-sm text-slate-600">上传：{slip.applicant_name || '-'}（{slip.applicant_student_id || '-'}） · {slip.start_time ? new Date(slip.start_time).toLocaleString('zh-CN') : '-'} 至 {slip.end_time ? new Date(slip.end_time).toLocaleString('zh-CN') : '-'}</p>
                     {slip.activity_name && <p className="mt-1 text-sm text-slate-600">活动：{slip.activity_name}</p>}
                     <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                      <span className={cn('rounded-md border px-2 py-1', slip.counselor_signature ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-400')}>辅导员签字</span>
-                      <span className={cn('rounded-md border px-2 py-1', slip.official_seal ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-400')}>公章</span>
-                      <span className={cn('rounded-md border px-2 py-1', slip.teacher_signature ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-400')}>老师签字</span>
+                      <span className={cn('rounded-md border px-2 py-1', slip.counselor_signature ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-400')}>辅导员签字·{slip.counselor_signature ? '已勾选' : '未勾选'}</span>
+                      <span className={cn('rounded-md border px-2 py-1', slip.official_seal ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-400')}>公章·{slip.official_seal ? '已勾选' : '未勾选'}</span>
+                      <span className={cn('rounded-md border px-2 py-1', slip.teacher_signature ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-400')}>老师签字·{slip.teacher_signature ? '已勾选' : '未勾选'}</span>
                     </div>
                     <div className="mt-3 rounded-lg bg-slate-50 p-3">
                       <p className="mb-2 text-xs font-medium text-slate-600">覆盖学生（{rows.length} 人）</p>

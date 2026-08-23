@@ -8,6 +8,7 @@ import { GraduationCap, Upload, FileText, Search, CheckCircle2, AlertCircle, Log
 import { LEVELS, SCORING_STATUSES } from '@/lib/types';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
+import { hasPermission } from '@/lib/department-permissions';
 import { formatActivityScopes } from '@/lib/business-rules';
 import { formatCategoryPath } from '@/lib/types';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
@@ -55,7 +56,7 @@ export default function SubmitScoringPage() {
   const [targetActivityId, setTargetActivityId] = useState<string | null>(null);
   const [submittedActivityId, setSubmittedActivityId] = useState<string | null>(null);
   const [showResubmit, setShowResubmit] = useState(false);
-  const canAccessScoringMaterials = user?.role === 'admin' || user?.canSubmitScoring === true;
+  const canAccessScoringMaterials = hasPermission(user, 'canSubmitScoring');
 
   useEffect(() => {
     if (!initialized || !user || !canAccessScoringMaterials) return;
@@ -204,7 +205,7 @@ export default function SubmitScoringPage() {
     );
   }
 
-  if (user.role !== 'admin' && user.canSubmitScoring !== true) {
+  if (!hasPermission(user, 'canSubmitScoring')) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
         <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center">

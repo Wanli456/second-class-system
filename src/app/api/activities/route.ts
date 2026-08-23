@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/storage/database/supabase-client';
-import { requirePermission, requireUser } from '@/lib/auth';
+import { calculateUserPermissions, requirePermission, requireUser } from '@/lib/auth';
 import { getActivityScopes, hasAnyScopePermission, newActivityId, normalizeIds, normalizeScopes, serializeScopes, scopeMatchesUser, validateScopes } from '@/lib/business-rules';
 import { isValidCategoryPath } from '@/lib/types';
 import { hydrateActivityLeaderDetails } from '@/lib/hydrate-activity-leaders';
@@ -67,7 +67,8 @@ export async function GET(request: NextRequest) {
     if (keyword) add('full_name ILIKE', `%${keyword}%`);
     sql += ' ORDER BY created_at DESC';
     const data = await query(sql, params);
-    const visible = auth.user!.role === 'admin' || !auth.user!.can_submit_scoring
+    const canSubmitScoring = calculateUserPermissions(auth.user!).canSubmitScoring;
+    const visible = auth.user!.role === 'admin' || !canSubmitScoring
       ? data
       : data.filter((item) => scopeMatchesUser(auth.user!, getActivityScopes(item)));
     return NextResponse.json({ success: true, data: await hydrateActivityLeaderDetails(visible) });

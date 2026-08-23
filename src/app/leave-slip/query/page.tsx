@@ -7,6 +7,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
+import { hasPermission } from '@/lib/department-permissions';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -64,7 +65,7 @@ export default function LeaveSlipQueryPage() {
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const canAccess = user?.role === 'admin' || user?.canQueryLeave === true;
+  const canAccess = hasPermission(user, 'canQueryLeave');
 
   const studentsBySlip = useMemo(() => {
     const map = new Map<string, SlipStudent[]>();

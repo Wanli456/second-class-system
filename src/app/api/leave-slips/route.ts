@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission, requireUser, type AuthUser } from '@/lib/auth';
+import { calculateUserPermissions, requirePermission, requireUser, type AuthUser } from '@/lib/auth';
 import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
 import { compareSlipWithOriginals } from '@/lib/leave-slip-matching';
 import { computeImageHashes } from '@/lib/image-hash';
@@ -11,6 +11,19 @@ const OTHER_LEAVE_TYPES = ['社团', '比赛', '培训', '虚拟工作室', '临
 const REVIEW_STATUSES = ['待查对', '已通过', '已驳回'] as const;
 
 type StudentInput = { student_id: string; student_name: string; class_name: string };
+
+function withoutInternalReviewFields(slip: Record<string, unknown>): Record<string, unknown> {
+  const {
+    image_hashes: _imageHashes,
+    duplicate_of_slip_id: _duplicateOfSlipId,
+    duplicate_score: _duplicateScore,
+    duplicate_warning: _duplicateWarning,
+    original_image_similarity: _originalImageSimilarity,
+    original_image_difference_warning: _originalImageDifferenceWarning,
+    ...visibleSlip
+  } = slip;
+  return visibleSlip;
+}
 
 class LeaveSlipValidationError extends Error {
   constructor(message: string) {
@@ -77,7 +90,8 @@ export async function POST(request: NextRequest) {
     const defaultLeaveType = (slipType === '其他请假' ? '社团' : slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条' ? '活动公假' : '事假');
     const leaveType = String(body.leave_type || defaultLeaveType);
     const isTemporaryLeave = slipType === '其他请假' && leaveType === '临时请假';
-    if (user.role !== 'admin' && (isTemporaryLeave ? !user.can_start_group_leave : !user.can_upload_leave)) {
+    const permissions = calculateUserPermissions(user);
+    if (!(isTemporaryLeave ? permissions.canStartGroupLeave : permissions.canUploadLeave)) {
       return NextResponse.json(
         { success: false, error: isTemporaryLeave ? '暂无临时请假提交权限' : '暂无假条上传权限' },
         { status: 403 },
@@ -197,14 +211,10 @@ export async function POST(request: NextRequest) {
 
     const warnings = isLate ? ['上传时间已超过 18:30，已标记为迟到假条'] : [];
     if (autoApprove) warnings.push('临时请假已自动审核通过');
-    if (duplicateCheck?.found && duplicateCheck.warning) warnings.push(duplicateCheck.warning);
-    if (autoMatch?.image_consistency?.warning) warnings.push(autoMatch.image_consistency.warning);
 
     return NextResponse.json({
       success: true,
       data: result,
-      auto_match: autoMatch,
-      duplicate_check: duplicateCheck,
       warnings,
     });
   } catch (error) {
@@ -234,6 +244,7 @@ export async function GET(request: NextRequest) {
       }
     }
     const user = auth.user!;
+    const canReviewInternalSignals = calculateUserPermissions(user).canReviewLeave;
 
     const id = searchParams.get('id');
     const keyword = searchParams.get('keyword')?.trim();
@@ -256,7 +267,7 @@ export async function GET(request: NextRequest) {
           );
       if (!slip) return NextResponse.json({ success: false, error: selfOnly ? '没有找到与你相关的假条' : '假条不存在' }, { status: 404 });
       const students = await query('SELECT * FROM leave_slip_students WHERE slip_id=$1 ORDER BY student_id', [id]);
-      return NextResponse.json({ success: true, data: [slip], students });
+      return NextResponse.json({ success: true, data: [canReviewInternalSignals ? slip : withoutInternalReviewFields(slip)], students });
     }
 
     const where: string[] = [];
@@ -312,7 +323,8 @@ export async function GET(request: NextRequest) {
       ? await query(`SELECT * FROM leave_slip_students WHERE slip_id IN (${slipIds.map((_, index) => `$${index + 1}`).join(',')}) ORDER BY slip_id, student_id`, slipIds)
       : [];
 
-    return NextResponse.json({ success: true, data: slips, students, count: slips.length });
+    const visibleSlips = canReviewInternalSignals ? slips : slips.map(withoutInternalReviewFields);
+    return NextResponse.json({ success: true, data: visibleSlips, students, count: slips.length });
   } catch (error) {
     console.error('查询假条失败:', error);
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '查询假条失败' }, { status: 500 });

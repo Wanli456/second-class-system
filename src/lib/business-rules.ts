@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { AuthUser } from '@/lib/auth';
+import { computeDepartmentAutoPerms, parsePermissionOverrides, type PermissionKey } from '@/lib/department-permissions';
 
 export type ActivityScope = 'department' | 'class';
 
@@ -95,23 +96,65 @@ export function validateHostingScope(user: ScopedUser, scopes: ActivityScopeAssi
   return { valid: true, error: null };
 }
 
-export function canStartGroupLeave(user: Pick<AuthUser, 'role' | 'can_start_group_leave' | 'class_name'>) {
-  return Boolean(user.class_name) && (user.role === 'admin' || user.can_start_group_leave);
+type RawPermissionUser = Pick<AuthUser,
+  | 'role'
+  | 'department'
+  | 'permission_overrides'
+  | 'can_publish'
+  | 'can_score'
+  | 'can_submit_activity'
+  | 'can_view_submission_status'
+  | 'can_submit_scoring'
+  | 'can_review_leave'
+  | 'can_view_evening_study'
+  | 'can_start_group_leave'
+  | 'can_manage_attendance_work'
+  | 'can_upload_leave'
+  | 'can_query_leave'
+  | 'can_manage_original_leave'
+>;
+
+const RAW_PERMISSION_FIELD: Record<PermissionKey, keyof RawPermissionUser> = {
+  canPublish: 'can_publish',
+  canScore: 'can_score',
+  canSubmitActivity: 'can_submit_activity',
+  canViewSubmissionStatus: 'can_view_submission_status',
+  canSubmitScoring: 'can_submit_scoring',
+  canReviewLeave: 'can_review_leave',
+  canViewEveningStudy: 'can_view_evening_study',
+  canStartGroupLeave: 'can_start_group_leave',
+  canManageAttendanceWork: 'can_manage_attendance_work',
+  canUploadLeave: 'can_upload_leave',
+  canQueryLeave: 'can_query_leave',
+  canManageOriginalLeave: 'can_manage_original_leave',
+};
+
+function hasEffectivePermission(user: Partial<RawPermissionUser>, key: PermissionKey): boolean {
+  if (user.role === 'admin') return true;
+  const overrides = parsePermissionOverrides(user.permission_overrides);
+  if (typeof overrides[key] === 'boolean') return overrides[key]!;
+  const auto = computeDepartmentAutoPerms(user.role, user.department);
+  if (auto[key]) return true;
+  return Boolean(user[RAW_PERMISSION_FIELD[key]]);
 }
 
-export function canManageAttendanceWork(user: Pick<AuthUser, 'role' | 'can_manage_attendance_work'>) {
-  return user.role === 'admin' || user.can_manage_attendance_work;
+export function canStartGroupLeave(user: Pick<AuthUser, 'role' | 'department' | 'can_start_group_leave' | 'class_name'>) {
+  return Boolean(user.class_name) && hasEffectivePermission(user, 'canStartGroupLeave');
+}
+
+export function canManageAttendanceWork(user: Pick<AuthUser, 'role' | 'department' | 'can_manage_attendance_work'>) {
+  return hasEffectivePermission(user, 'canManageAttendanceWork');
 }
 
 export function canOpenAdminTab(
-  user: Pick<AuthUser, 'role' | 'can_publish' | 'can_score' | 'can_review_leave'>,
+  user: Pick<AuthUser, 'role' | 'department' | 'can_publish' | 'can_score' | 'can_review_leave'>,
   tab: string | null | undefined,
 ) {
   if (user.role === 'admin') return true;
   switch (tab) {
-    case 'review': return user.can_publish;
-    case 'scoring': return user.can_score;
-    case 'leave': return user.can_review_leave;
+    case 'review': return hasEffectivePermission(user, 'canPublish');
+    case 'scoring': return hasEffectivePermission(user, 'canScore');
+    case 'leave': return hasEffectivePermission(user, 'canReviewLeave');
     default: return false;
   }
 }
@@ -129,8 +172,8 @@ export function scopeMatchesUser(user: ScopedUser, scopes: ActivityScopeAssignme
 }
 
 export function hasAnyScopePermission(user: AuthUser, permission: 'submitActivity' | 'submitScoring', scopes: ActivityScopeAssignment[]) {
-  const allowed = permission === 'submitActivity' ? user.can_submit_activity : user.can_submit_scoring;
-  return (user.role === 'admin' || allowed) && scopeMatchesUser(user, scopes);
+  const key = permission === 'submitActivity' ? 'canSubmitActivity' : 'canSubmitScoring';
+  return hasEffectivePermission(user, key) && scopeMatchesUser(user, scopes);
 }
 
 function dedupeScopes(scopes: ActivityScopeAssignment[]) {
@@ -159,8 +202,8 @@ export function userScope(user: ScopedUser, scopeType: ActivityScope, scopeName:
 }
 
 export function hasScopePermission(user: AuthUser, permission: 'submitActivity' | 'submitScoring', scopeType: ActivityScope, scopeName: string | null | undefined) {
-  const allowed = permission === 'submitActivity' ? user.can_submit_activity : user.can_submit_scoring;
-  return (user.role === 'admin' || allowed) && userScope(user, scopeType, scopeName);
+  const key = permission === 'submitActivity' ? 'canSubmitActivity' : 'canSubmitScoring';
+  return hasEffectivePermission(user, key) && userScope(user, scopeType, scopeName);
 }
 
 export function parseDateOnly(value: string | null) {

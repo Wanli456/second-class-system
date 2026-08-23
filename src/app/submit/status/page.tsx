@@ -8,6 +8,7 @@ import { Search, RefreshCw, Pencil } from 'lucide-react';
 import { CATEGORIES, LEVELS, REVIEW_STATUSES, STATUS_COLORS, CATEGORY_COLORS, formatCategoryPathWithMissing } from '@/lib/types';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
+import { hasPermission } from '@/lib/department-permissions';
 import { formatActivityScopes } from '@/lib/business-rules';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
 import { ActivityLeaderDetails } from '@/components/ActivityLeaderDetails';
@@ -54,7 +55,7 @@ export default function SubmitStatusPage() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [targetId, setTargetId] = useState<string | null>(null);
-  const canView = user && (user.role === 'admin' || user.canViewSubmissionStatus === true);
+  const canView = hasPermission(user, 'canViewSubmissionStatus');
 
   useEffect(() => {
     if (!initialized || !user || !canView) return;

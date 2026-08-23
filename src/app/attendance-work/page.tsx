@@ -7,6 +7,7 @@ import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { PageErrorDialog } from '@/components/PageErrorDialog';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
+import { hasPermission } from '@/lib/department-permissions';
 import { Button } from '@/components/ui/button';
 
 interface ScheduleItem { date: string; weekday: string; students: string[] }
@@ -111,8 +112,8 @@ export default function AttendanceWorkPage() {
   const [listLoading, setListLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const canUpload = Boolean(user && (user.role === 'admin' || user.canManageAttendanceWork === true));
-  const canReview = Boolean(user && (user.role === 'admin' || user.canReviewLeave === true));
+  const canUpload = Boolean(user && (user.role === 'admin' || hasPermission(user, 'canManageAttendanceWork')));
+  const canReview = Boolean(user && (user.role === 'admin' || hasPermission(user, 'canReviewLeave')));
 
   const loadList = useCallback(async () => {
     setListLoading(true);

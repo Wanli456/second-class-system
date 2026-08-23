@@ -22,7 +22,10 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useUser } from '@/contexts/UserContext';
+import { hasPermission, type PermissionKey } from '@/lib/department-permissions';
 import { NotificationBell } from '@/components/NotificationBell';
+
+const SIDEBAR_SCROLL_STORAGE_KEY = 'dashboard-sidebar-scroll-top';
 
 interface User {
   id: string;
@@ -42,6 +45,8 @@ interface User {
   canUploadLeave?: boolean;
   canQueryLeave?: boolean;
   canManageOriginalLeave?: boolean;
+  department?: string | null;
+  permissionOverrides?: string | null;
 }
 
 interface DashboardLayoutProps {
@@ -58,8 +63,8 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   public?: boolean;
   requiredRole?: string;
-  requiredPermission?: keyof User;
-  requiredAnyPermissions?: Array<keyof User>;
+  requiredPermission?: PermissionKey;
+  requiredAnyPermissions?: Array<PermissionKey>;
 }
 
 // 独立的导航项组件，使用 React.memo 避免不必要的重新渲染
@@ -148,6 +153,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [collapsed, setCollapsed] = React.useState(false);
   const [pendingNavHref, setPendingNavHref] = React.useState<string | null>(null);
+  const sidebarNavRef = React.useRef<HTMLElement | null>(null);
   const [, startTransition] = React.useTransition();
 
   // 使用全局用户状态，避免重复API调用和跨页面卡顿
@@ -169,13 +175,13 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
 
   const canAccessItem = React.useCallback((item: NavItem): boolean => {
     if (!user) {
-      // 未登录时只保留首页，避免公开侧边栏展示权限敏感或需登录的项目。
+      // 未登录时只显示首页和明确标记为公开的页面。
       return item.public === true || item.label === '首页';
     }
 
     const roleAllowed = !item.requiredRole || user.role === 'admin' || user.role === item.requiredRole;
-    const permissionAllowed = !item.requiredPermission || user.role === 'admin' || user[item.requiredPermission] === true;
-    const anyPermissionAllowed = !item.requiredAnyPermissions?.length || user.role === 'admin' || item.requiredAnyPermissions.some((permission) => user[permission] === true);
+    const permissionAllowed = !item.requiredPermission || hasPermission(user, item.requiredPermission);
+    const anyPermissionAllowed = !item.requiredAnyPermissions?.length || item.requiredAnyPermissions.some((permission) => hasPermission(user, permission));
 
     // A role or its matching permission is enough. This lets an admin grant
     // a capability to a student without changing the student's base role.
@@ -246,6 +252,26 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
     startTransition(() => router.push(href));
   }, [router, setRouteChanging, startTransition]);
 
+  const handleSidebarScroll = React.useCallback((event: React.UIEvent<HTMLElement>) => {
+    window.sessionStorage.setItem(
+      SIDEBAR_SCROLL_STORAGE_KEY,
+      String(event.currentTarget.scrollTop),
+    );
+  }, []);
+
+  React.useEffect(() => {
+    const nav = sidebarNavRef.current;
+    const savedScrollTop = window.sessionStorage.getItem(SIDEBAR_SCROLL_STORAGE_KEY);
+
+    if (!nav || savedScrollTop === null) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      nav.scrollTop = Number(savedScrollTop) || 0;
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [currentRoute, isMobile, mobileOpen, visibleItems.length]);
+
   const handleLogout = () => {
     localStorage.removeItem('user');
     if (onLogout) {
@@ -284,7 +310,11 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 py-5">
+      <nav
+        ref={sidebarNavRef}
+        onScroll={handleSidebarScroll}
+        className="flex-1 overflow-y-auto px-3 py-5"
+      >
         <div className="mb-3 px-3 text-[10px] font-bold uppercase text-slate-400">
           工作区
         </div>

@@ -10,7 +10,7 @@ import {
   KeyRound, ShieldCheck, UserRound, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import {
-  Activity, ActivitySubmission, LeaveRequest,
+  Activity, ActivitySubmission,
   CATEGORIES, CATEGORY_DETAILS, LEVELS, REVIEW_STATUSES, LEAVE_TYPES,
   type Category,
   STATUS_COLORS,
@@ -20,6 +20,7 @@ import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch, refreshCurrentUser } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { canOpenAdminTab, formatActivityScopes } from '@/lib/business-rules';
+import { getDepartmentAutoPermissionKeys, hasPermission, hasPermissionOverride, isDepartmentAutoPermission, type PermissionKey } from '@/lib/department-permissions';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
 import { CategoryBadge } from '@/components/CategoryBadge';
 import { ActivityLeaderDetails } from '@/components/ActivityLeaderDetails';
@@ -35,10 +36,9 @@ import {
 } from '@/components/ui/alert-dialog';
 
 type ReviewStatus = '待审核' | '已通过' | '已驳回';
-type LeaveStatus = '待审核' | '已通过' | '已驳回';
 type ScoringStatus = '待赋分' | '已赋分';
 type AdminRole = 'admin' | 'leader' | 'class_leader' | 'student';
-type AdminTab = 'activities' | 'review' | 'scoring' | 'leave' | 'users';
+type AdminTab = 'activities' | 'review' | 'scoring' | 'users';
 type UserPermission = 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave' | 'canManageAttendanceWork' | 'canUploadLeave' | 'canQueryLeave' | 'canManageOriginalLeave';
 
 const USER_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
@@ -52,21 +52,21 @@ const ROLE_LABELS: Record<AdminRole, string> = {
 
 const normalizeTab = (tab: string | null) => {
   if (tab === 'submissions') return 'review';
-  if (tab === 'leaves') return 'leave';
   return tab || '';
 };
 
 function canAccessAdminWorkspace(userData: UserData, requestedTab: string) {
   if (userData.role === 'admin') return true;
-  if (requestedTab) {
+  if (requestedTab && requestedTab !== 'leave' && requestedTab !== 'leaves') {
     return canOpenAdminTab({
       role: userData.role,
+      department: userData.department || null,
       can_publish: userData.canPublish,
       can_score: userData.canScore,
       can_review_leave: userData.canReviewLeave,
     }, requestedTab);
   }
-  return userData.canPublish || userData.canScore;
+  return hasPermission(userData, 'canPublish') || hasPermission(userData, 'canScore');
 }
 
 const formatDateTime = (value?: string | null) => value
@@ -129,23 +129,8 @@ interface UserData {
   department?: string | null;
   className?: string | null;
   contactPhone?: string | null;
+  permissionOverrides?: string | null;
   createdAt?: string;
-}
-
-interface LeaveGroup {
-  id: string;
-  class_name: string;
-  applicant_user_id: string;
-  applicant_name?: string | null;
-  applicant_student_id?: string | null;
-  leave_type: string;
-  activity_id?: string | null;
-  activity_name?: string | null;
-  start_time: string;
-  end_time: string;
-  review_status: LeaveStatus;
-  review_note?: string | null;
-  member_count: number;
 }
 
 interface RosterStudent {
@@ -193,20 +178,16 @@ function AdminPage() {
 
   const [activities, setActivities] = useState<Activity[]>([]);
   const [submissions, setSubmissions] = useState<ActivitySubmission[]>([]);
-  const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
-  const [leaveGroups, setLeaveGroups] = useState<LeaveGroup[]>([]);
   const [scoringList, setScoringList] = useState<ScoringActivity[]>([]);
   const [users, setUsers] = useState<UserData[]>([]);
   const [userSearch, setUserSearch] = useState('');
   const [reviewSearch, setReviewSearch] = useState('');
   const [scoringSearch, setScoringSearch] = useState('');
-  const [leaveSearch, setLeaveSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [tabLoadingStates, setTabLoadingStates] = useState<Record<AdminTab, boolean>>({
     activities: false,
     review: false,
     scoring: false,
-    leave: false,
     users: false,
   });
   const [dataError, setDataError] = useState('');
@@ -221,17 +202,13 @@ function AdminPage() {
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
   const [expandedSubmission, setExpandedSubmission] = useState<string | null>(null);
   const [expandedScoring, setExpandedScoring] = useState<string | null>(null);
-  const [expandedLeaveRequest, setExpandedLeaveRequest] = useState<string | null>(null);
   const [scoringFile, setScoringFile] = useState<File | null>(null);
   const [scoringInProgress, setScoringInProgress] = useState(false);
-  const [expandedLeaveGroup, setExpandedLeaveGroup] = useState<string | null>(null);
-  const [leaveGroupMembers, setLeaveGroupMembers] = useState<Record<string, LeaveRequest[]>>({});
 
   // 权限计算必须与后端 auth.ts 中的 calculateUserPermissions 逻辑完全一致
   const isAdmin = user?.role === 'admin';
-  const canPublish = isAdmin || user?.canPublish === true;
-  const canScore = isAdmin || user?.canScore === true;
-  const canReviewLeave = isAdmin || user?.canReviewLeave === true;
+  const canPublish = hasPermission(user, 'canPublish');
+  const canScore = hasPermission(user, 'canScore');
 
   useEffect(() => {
     if (roleParam && roleParam === 'admin') {
@@ -270,6 +247,7 @@ function AdminPage() {
       department: globalUser.department || null,
       className: globalUser.className || null,
       contactPhone: globalUser.contactPhone || null,
+      permissionOverrides: globalUser.permissionOverrides || null,
     };
 
     setUser(userData);
@@ -304,7 +282,7 @@ function AdminPage() {
         ? requestedTab
         : availableTabs[0] || '',
     );
-  }, [authenticated, role, tabParam, isAdmin, canPublish, canScore, canReviewLeave]);
+  }, [authenticated, role, tabParam, isAdmin, canPublish, canScore]);
 
   const fetchActivities = useCallback(async () => {
     const res = await apiFetch('/api/activities');
@@ -324,17 +302,6 @@ function AdminPage() {
       return;
     }
     setDataError(data.error || `活动审核数据加载失败（HTTP ${res.status}）`);
-  }, []);
-
-  const fetchLeaves = useCallback(async () => {
-    const res = await apiFetch('/api/leave?role=admin');
-    const data = await res.json();
-    if (data.success) {
-      setLeaves(data.data || []);
-      setLeaveGroups(data.groups || []);
-      return;
-    }
-    setDataError(data.error || `请假审核数据加载失败（HTTP ${res.status}）`);
   }, []);
 
   const fetchScoring = useCallback(async () => {
@@ -368,7 +335,6 @@ function AdminPage() {
         switch (activeTab) {
           case 'activities': return activities.length > 0;
           case 'review': return submissions.length > 0;
-          case 'leave': return leaves.length > 0 || leaveGroups.length > 0;
           case 'scoring': return scoringList.length > 0;
           case 'users': return users.length > 0;
           default: return false;
@@ -389,9 +355,6 @@ function AdminPage() {
           case 'review':
             if (canPublish && submissions.length === 0) await fetchSubmissions();
             break;
-          case 'leave':
-            if (canReviewLeave && leaves.length === 0 && leaveGroups.length === 0) await fetchLeaves();
-            break;
           case 'scoring':
             if (canScore && scoringList.length === 0) await fetchScoring();
             break;
@@ -409,7 +372,7 @@ function AdminPage() {
     };
 
     loadCurrentTabData();
-  }, [authenticated, role, activeTab, isAdmin, canPublish, canScore, canReviewLeave, activities.length, submissions.length, leaves.length, leaveGroups.length, scoringList.length, users.length, fetchActivities, fetchSubmissions, fetchLeaves, fetchScoring, fetchUsers]);
+  }, [authenticated, role, activeTab, isAdmin, canPublish, canScore, activities.length, submissions.length, scoringList.length, users.length, fetchActivities, fetchSubmissions, fetchScoring, fetchUsers]);
 
   const retryCurrentTab = useCallback(async () => {
     if (!authenticated || !role || !activeTab) return;
@@ -425,9 +388,6 @@ function AdminPage() {
         case 'review':
           if (canPublish) await fetchSubmissions();
           break;
-        case 'leave':
-          if (canReviewLeave) await fetchLeaves();
-          break;
         case 'scoring':
           if (canScore) await fetchScoring();
           break;
@@ -442,7 +402,7 @@ function AdminPage() {
       setLoading(false);
       setTabLoadingStates(previous => ({ ...previous, [activeTab]: false }));
     }
-  }, [activeTab, authenticated, canPublish, canReviewLeave, canScore, fetchActivities, fetchLeaves, fetchScoring, fetchSubmissions, fetchUsers, isAdmin, role]);
+  }, [activeTab, authenticated, canPublish, canScore, fetchActivities, fetchScoring, fetchSubmissions, fetchUsers, isAdmin, role]);
 
   const handleLoginSuccess = (userData: UserData) => {
     setUser(userData);
@@ -570,11 +530,15 @@ function AdminPage() {
       canManageOriginalLeave: 'canManageOriginalLeave',
     };
     const apiField = apiFieldMap[permission];
+    const targetUser = users.find((item) => item.id === userId);
+    const isAutoPermission = targetUser ? isDepartmentAutoPermission(targetUser, permission as PermissionKey) : false;
     try {
       const res = await apiFetch('/api/auth', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, [apiField]: value }),
+        body: JSON.stringify(isAutoPermission
+          ? { userId, permissionOverrides: { [apiField]: value } }
+          : { userId, [apiField]: value }),
       });
       const data = await res.json();
       if (data.success) {
@@ -653,21 +617,6 @@ function AdminPage() {
     }
   };
 
-  const handleReviewLeave = async (id: string, status: LeaveStatus, isGroup = false) => {
-    const res = await apiFetch('/api/leave', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...(isGroup ? { group_id: id } : { id }), review_status: status, review_note: reviewNote || null }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      setReviewNote('');
-      fetchLeaves();
-    } else {
-      alert(data.error);
-    }
-  };
-
   const handleUpdateDepartment = async (userId: string, department: string | null) => {
     try {
       const res = await apiFetch('/api/auth', {
@@ -699,21 +648,6 @@ function AdminPage() {
     setUsers((previous) => previous.map((item) => item.id === userId ? { ...item, contactPhone } : item));
   };
 
-  const loadLeaveGroupMembers = async (groupId: string) => {
-    if (leaveGroupMembers[groupId]) {
-      setExpandedLeaveGroup(expandedLeaveGroup === groupId ? null : groupId);
-      return;
-    }
-    const res = await apiFetch(`/api/leave?group_id=${encodeURIComponent(groupId)}`);
-    const data = await res.json();
-    if (!data.success) {
-      alert(data.error || '加载集体请假成员失败');
-      return;
-    }
-    setLeaveGroupMembers(prev => ({ ...prev, [groupId]: data.data || [] }));
-    setExpandedLeaveGroup(groupId);
-  };
-
   const handleDeleteActivity = async (id: string) => {
     if (!confirm('确认删除该活动？')) return;
     const res = await apiFetch(`/api/activities?id=${id}`, { method: 'DELETE' });
@@ -730,9 +664,6 @@ function AdminPage() {
   });
 
   const pendingSubmissions = submissions.filter(s => s.review_status === '待审核');
-  const pendingLeaves = leaves.filter(l => l.review_status === '待审核');
-  const pendingLeaveGroups = leaveGroups.filter(group => group.review_status === '待审核');
-  const pendingLeaveCount = pendingLeaves.length + pendingLeaveGroups.length;
   const filteredPendingSubmissions = pendingSubmissions.filter(s => matchesSearch(reviewSearch, [
     s.id,
     s.activity_id,
@@ -764,50 +695,6 @@ function AdminPage() {
     s.scope_name,
     s.scope_names,
     s.review_status,
-  ]));
-  const filteredPendingLeaveGroups = pendingLeaveGroups.filter(group => matchesSearch(leaveSearch, [
-    group.id,
-    group.class_name,
-    group.applicant_name,
-    group.applicant_student_id,
-    group.leave_type,
-    group.activity_id,
-    group.activity_name,
-    group.review_status,
-  ]));
-  const filteredPendingLeaves = pendingLeaves.filter(leave => matchesSearch(leaveSearch, [
-    leave.id,
-    leave.student_name,
-    leave.student_id,
-    leave.class_name,
-    leave.applicant_name,
-    leave.applicant_student_id,
-    leave.leave_type,
-    leave.activity_id,
-    leave.activity_name,
-    leave.review_status,
-  ]));
-  const filteredProcessedLeaves = leaves.filter(leave => leave.review_status !== '待审核' && matchesSearch(leaveSearch, [
-    leave.id,
-    leave.student_name,
-    leave.student_id,
-    leave.class_name,
-    leave.applicant_name,
-    leave.applicant_student_id,
-    leave.leave_type,
-    leave.activity_id,
-    leave.activity_name,
-    leave.review_status,
-  ]));
-  const filteredProcessedLeaveGroups = leaveGroups.filter(group => group.review_status !== '待审核' && matchesSearch(leaveSearch, [
-    group.id,
-    group.class_name,
-    group.applicant_name,
-    group.applicant_student_id,
-    group.leave_type,
-    group.activity_id,
-    group.activity_name,
-    group.review_status,
   ]));
   const filteredScoringList = scoringList.filter(activity => matchesSearch(scoringSearch, [
     activity.id,
@@ -1033,7 +920,6 @@ function AdminPage() {
           switch (activeTab) {
             case 'activities': return activities.length === 0;
             case 'review': return submissions.length === 0;
-            case 'leave': return leaves.length === 0;
             case 'scoring': return scoringList.length === 0;
             case 'users': return users.length === 0;
             default: return true;
@@ -1304,153 +1190,6 @@ function AdminPage() {
                   <div className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-12 text-center text-slate-500"><p className="font-medium text-slate-700">暂无提交记录</p><p className="mt-1 text-sm">新的活动提交会出现在这里。</p></div>
                 ) : filteredPendingSubmissions.length === 0 && filteredProcessedSubmissions.length === 0 ? (
                   <div className="rounded-lg border border-gray-200 bg-white px-3 py-8 text-center text-gray-500">没有匹配的活动审核记录</div>
-                ) : null}
-              </section>
-            )}
-
-            {/* ===== 请假审核 ===== */}
-            {activeTab === 'leave' && canReviewLeave && (
-              <section id="admin-panel-leave" role="tabpanel" aria-label="请假审核" className="space-y-5">
-                <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-end sm:justify-between sm:p-5">
-                  <div>
-                    <p className="text-sm font-medium text-teal-700">请假申请</p>
-                    <h2 className="mt-1 text-balance text-xl font-semibold text-slate-950">请假审核</h2>
-                    <p className="mt-2 text-sm text-slate-500">支持个人与集体请假审核，展开记录查看附件和成员详情。</p>
-                  </div>
-                  <div className="relative w-full sm:max-w-md">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                    <Input
-                      type="search"
-                      aria-label="搜索请假审核记录"
-                      placeholder="搜索姓名、学号、班级或活动"
-                      value={leaveSearch}
-                      onChange={event => setLeaveSearch(event.target.value)}
-                      className="pl-9"
-                    />
-                  </div>
-                </div>
-
-                {filteredPendingLeaveGroups.length > 0 && (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 sm:p-5">
-                    <div className="mb-4 flex items-center justify-between gap-3"><div><h3 className="text-base font-semibold text-slate-950">待审核集体请假</h3><p className="mt-1 text-sm text-slate-500">整组处理，展开后核对成员</p></div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-sm font-semibold tabular-nums text-amber-800">{filteredPendingLeaveGroups.length}</span></div>
-                    <div className="space-y-3">
-                      {filteredPendingLeaveGroups.map(group => {
-                        const isExpanded = expandedLeaveGroup === group.id;
-                        return (
-                          <div key={group.id} className="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm">
-                            <button type="button" onClick={() => void loadLeaveGroupMembers(group.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-amber-50" aria-expanded={isExpanded}>
-                              <span className="min-w-0">
-                                <span className="block truncate font-medium text-gray-900">{group.class_name}集体请假</span>
-                                <span className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-gray-500"><span>{group.member_count} 人</span><span>发起人：{group.applicant_name || '-'}{group.applicant_student_id ? `（${group.applicant_student_id}）` : ''}</span><span>{group.leave_type}</span>{group.activity_name && <span>活动：{group.activity_name}</span>}</span>
-                              </span>
-                              <span className="flex shrink-0 items-center gap-2 text-xs text-amber-700"><span>待审核</span>{isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}</span>
-                            </button>
-                            {isExpanded && (
-                              <div className="border-t border-amber-200 px-3 pb-3 pt-3">
-                                <p className="text-sm text-gray-600">请假时间：{formatDateTime(group.start_time)} 至 {formatDateTime(group.end_time)}</p>
-                                <div className="mt-3 rounded-md border border-amber-100 bg-white p-3">
-                                  <div className="flex flex-wrap gap-2">{(leaveGroupMembers[group.id] || []).map(member => <span key={member.id} className="rounded border px-2 py-1 text-xs text-gray-600">{member.student_name}（{member.student_id}）</span>)}</div>
-                                  {leaveGroupMembers[group.id]?.[0]?.leave_image_url && <div className="mt-3"><FilePreviewLink url={leaveGroupMembers[group.id][0].leave_image_url} fileName={leaveGroupMembers[group.id][0].leave_image_name} label="查看请假条" className="text-xs text-[#1e3a5f]" /></div>}
-                                </div>
-                                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-amber-200 pt-3">
-                                  <input type="text" placeholder="审核备注（可选）" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} className="min-w-48 flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-[#1e3a5f] focus:outline-none" />
-                                  <button onClick={() => handleReviewLeave(group.id, '已通过', true)} className="flex items-center gap-1 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"><Check className="h-3 w-3" />整组通过</button>
-                                  <button onClick={() => handleReviewLeave(group.id, '已驳回', true)} className="flex items-center gap-1 rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"><X className="h-3 w-3" />整组驳回</button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {filteredPendingLeaves.length > 0 && (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 sm:p-5">
-                    <div className="mb-4 flex items-center justify-between gap-3"><div><h3 className="text-base font-semibold text-slate-950">待审核个人请假</h3><p className="mt-1 text-sm text-slate-500">需要你处理的个人申请</p></div><span className="rounded-full bg-amber-100 px-2.5 py-1 text-sm font-semibold tabular-nums text-amber-800">{filteredPendingLeaves.length}</span></div>
-                    <div className="space-y-3">
-                      {filteredPendingLeaves.map(l => {
-                        const isExpanded = expandedLeaveRequest === l.id;
-                        return (
-                          <div key={l.id} className="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm">
-                            <button type="button" onClick={() => setExpandedLeaveRequest(isExpanded ? null : l.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-amber-50" aria-expanded={isExpanded}>
-                              <span className="min-w-0">
-                                <span className="block truncate font-medium text-gray-900">{l.student_name}（{l.student_id}）</span>
-                                <span className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-gray-500"><span>{l.class_name}</span><span>{l.leave_type}</span><span>提交人：{l.applicant_name || '-'}{l.applicant_student_id ? `（${l.applicant_student_id}）` : ''}</span>{l.activity_name && <span>活动：{l.activity_name}</span>}</span>
-                              </span>
-                              <span className="flex shrink-0 items-center gap-2 text-xs text-amber-700"><span>待审核</span>{isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}</span>
-                            </button>
-                            {isExpanded && (
-                              <div className="border-t border-amber-200 px-3 pb-3 pt-3">
-                                <p className="text-sm text-gray-600">请假时间：{formatDateTime(l.start_time)} 至 {formatDateTime(l.end_time)}</p>
-                                {l.leave_image_url && <div className="mt-3"><span className="text-xs text-gray-500">请假条截图：{l.leave_image_name || '已上传'}</span><div className="mt-1"><FilePreviewLink url={l.leave_image_url} fileName={l.leave_image_name} label="查看请假条" className="text-xs text-[#1e3a5f]" /></div></div>}
-                                <div className="mt-3 flex flex-wrap items-center gap-2">
-                                  <input type="text" placeholder="审核备注（可选）" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} className="min-w-48 flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-[#1e3a5f] focus:outline-none" />
-                                  <button onClick={() => handleReviewLeave(l.id, '已通过')} className="flex items-center gap-1 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"><Check className="h-3 w-3" />通过</button>
-                                  <button onClick={() => handleReviewLeave(l.id, '已驳回')} className="flex items-center gap-1 rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"><X className="h-3 w-3" />驳回</button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {filteredProcessedLeaves.length > 0 && (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
-                    <div className="mb-4 flex items-center justify-between gap-3"><div><h3 className="text-base font-semibold text-slate-950">已处理个人请假</h3><p className="mt-1 text-sm text-slate-500">历史审核结果</p></div><span className="rounded-full bg-slate-200 px-2.5 py-1 text-sm font-semibold tabular-nums text-slate-700">{filteredProcessedLeaves.length}</span></div>
-                    <div className="space-y-2">
-                      {filteredProcessedLeaves.map(l => {
-                        const isExpanded = expandedLeaveRequest === l.id;
-                        return (
-                          <div key={l.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                            <button type="button" onClick={() => setExpandedLeaveRequest(isExpanded ? null : l.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-gray-50" aria-expanded={isExpanded}>
-                              <span className="min-w-0">
-                                <span className="block truncate font-medium text-gray-900">{l.student_name}（{l.student_id}）</span>
-                                <span className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-gray-500"><span>{l.class_name}</span><span>{l.leave_type}</span><span>活动：{l.activity_name || '-'}</span><span>提交人：{l.applicant_name || '-'}</span></span>
-                              </span>
-                              <span className="flex shrink-0 items-center gap-2"><span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[l.review_status as LeaveStatus]}`}>{l.review_status}</span>{isExpanded ? <ChevronUp className="size-4 text-gray-400" /> : <ChevronDown className="size-4 text-gray-400" />}</span>
-                            </button>
-                            {isExpanded && (
-                              <div className="border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-3 text-sm text-gray-600">
-                                <div className="grid gap-2 sm:grid-cols-2"><span>申请人：{l.applicant_name || '-'}{l.applicant_student_id ? `（${l.applicant_student_id}）` : ''}</span><span>班级：{l.class_name}</span><span>请假时间：{formatDateTime(l.start_time)} 至 {formatDateTime(l.end_time)}</span><span>活动：{l.activity_name || '-'}</span><span>审核备注：{l.review_note || '-'}</span></div>
-                                {l.leave_image_url && <div className="mt-3"><FilePreviewLink url={l.leave_image_url} fileName={l.leave_image_name} label="查看请假条" className="text-[#1e3a5f]" /></div>}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {filteredProcessedLeaveGroups.length > 0 && (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 sm:p-5">
-                    <div className="mb-4 flex items-center justify-between gap-3"><div><h3 className="text-base font-semibold text-slate-950">已处理集体请假</h3><p className="mt-1 text-sm text-slate-500">历史集体申请</p></div><span className="rounded-full bg-slate-200 px-2.5 py-1 text-sm font-semibold tabular-nums text-slate-700">{filteredProcessedLeaveGroups.length}</span></div>
-                    <div className="space-y-2">
-                      {filteredProcessedLeaveGroups.map(group => {
-                        const isExpanded = expandedLeaveGroup === group.id;
-                        return (
-                          <div key={group.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                            <button type="button" onClick={() => void loadLeaveGroupMembers(group.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-gray-50" aria-expanded={isExpanded}>
-                              <span className="min-w-0"><span className="block truncate font-medium text-gray-900">{group.class_name}集体请假</span><span className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-gray-500"><span>{group.member_count} 人</span><span>发起人：{group.applicant_name || '-'}</span><span>{group.leave_type}</span>{group.activity_name && <span>活动：{group.activity_name}</span>}</span></span>
-                              <span className="flex shrink-0 items-center gap-2"><span className={`rounded px-1.5 py-0.5 text-xs font-medium ${STATUS_COLORS[group.review_status]}`}>{group.review_status}</span>{isExpanded ? <ChevronUp className="size-4 text-gray-400" /> : <ChevronDown className="size-4 text-gray-400" />}</span>
-                            </button>
-                            {isExpanded && <div className="border-t border-gray-100 bg-gray-50/60 px-3 pb-3 pt-3 text-sm text-gray-600"><p>请假时间：{formatDateTime(group.start_time)} 至 {formatDateTime(group.end_time)}</p><p className="mt-1">审核备注：{group.review_note || '-'}</p><div className="mt-3 flex flex-wrap gap-2">{(leaveGroupMembers[group.id] || []).map(member => <span key={member.id} className="rounded border bg-white px-2 py-1">{member.student_name}（{member.student_id}）</span>)}</div>{leaveGroupMembers[group.id]?.[0]?.leave_image_url && <div className="mt-3"><FilePreviewLink url={leaveGroupMembers[group.id][0].leave_image_url} fileName={leaveGroupMembers[group.id][0].leave_image_name} label="查看请假条" className="text-[#1e3a5f]" /></div>}</div>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {leaves.length === 0 && leaveGroups.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-12 text-center text-slate-500"><p className="font-medium text-slate-700">暂无请假记录</p><p className="mt-1 text-sm">新的请假申请会出现在这里。</p></div>
-                ) : filteredPendingLeaveGroups.length === 0 && filteredPendingLeaves.length === 0 && filteredProcessedLeaves.length === 0 && filteredProcessedLeaveGroups.length === 0 ? (
-                  <div className="rounded-lg border border-gray-200 bg-white px-3 py-8 text-center text-gray-500">没有匹配的请假审核记录</div>
                 ) : null}
               </section>
             )}
@@ -2031,8 +1770,21 @@ function UserManagement({
 
   const getPermissionSummary = (item: UserData) => {
     if (item.role === 'admin') return '全部权限';
-    const enabled = getEnabledPermissions(item).map((permission) => permission.label);
-    return enabled.length ? enabled.join('、') : '未开通功能权限';
+    const autoKeys = new Set(getDepartmentAutoPermissionKeys(item));
+    const overrideLabels = permissions
+      .filter((permission) => hasPermissionOverride(item, permission.key as PermissionKey))
+      .map((permission) => `${permission.label}${item[permission.key] ? '开' : '关'}`);
+    const autoLabels = permissions
+      .filter((permission) => autoKeys.has(permission.key as PermissionKey) && !hasPermissionOverride(item, permission.key as PermissionKey))
+      .map((permission) => permission.label);
+    const manualLabels = permissions
+      .filter((permission) => !autoKeys.has(permission.key as PermissionKey) && !hasPermissionOverride(item, permission.key as PermissionKey) && item[permission.key])
+      .map((permission) => permission.label);
+    const parts: string[] = [];
+    if (overrideLabels.length) parts.push(`手动覆盖：${overrideLabels.join('、')}`);
+    if (autoLabels.length) parts.push(`部门自动：${autoLabels.join('、')}`);
+    if (manualLabels.length) parts.push(`手动：${manualLabels.join('、')}`);
+    return parts.length ? parts.join('；') : '未开通功能权限';
   };
 
   const loadRoster = async () => {
@@ -2276,6 +2028,7 @@ function UserManagement({
                 const meta = roleMeta[item.role] || roleMeta.student;
                 const RoleIcon = meta.icon;
                 const enabledCount = getEnabledPermissions(item).length;
+                const autoPermissionKeys = new Set(getDepartmentAutoPermissionKeys(item));
                 return (
                   <article key={item.id} className={cn('rounded-xl border bg-white p-4 shadow-sm', meta.surface)}>
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -2346,19 +2099,27 @@ function UserManagement({
                           <h4 className="text-sm font-semibold text-slate-800">功能权限</h4>
                         </div>
                         <span className={cn('text-xs tabular-nums', item.role === 'admin' ? 'text-red-600' : 'text-slate-500')}>
-                          {item.role === 'admin' ? '管理员默认全部开启' : `已开启 ${enabledCount}/${permissions.length} 项`}
+                          {item.role === 'admin' ? '管理员默认全部开启' : `已开启 ${enabledCount}/${permissions.length} 项${autoPermissionKeys.size ? `（含部门自动 ${autoPermissionKeys.size} 项）` : ''}`}
                         </span>
                       </div>
                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
                         {permissions.map((permission) => {
                           const checked = item.role === 'admin' || Boolean(item[permission.key]);
+                          const isAuto = isDepartmentAutoPermission(item, permission.key as PermissionKey);
+                          const isOverride = hasPermissionOverride(item, permission.key as PermissionKey);
+                          const isDisabled = item.role === 'admin';
                           return (
                             <label key={permission.key} className="flex min-h-9 items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-2.5 py-2">
-                              <span className={cn('min-w-0 text-xs', checked ? 'font-medium text-slate-700' : 'text-slate-500')}>{permission.label}</span>
+                              <span className={cn('min-w-0 text-xs', checked ? 'font-medium text-slate-700' : 'text-slate-500')}>
+                                {permission.label}
+                                {isOverride
+                                  ? <span className="ml-1 text-[10px] text-orange-600">覆盖</span>
+                                  : isAuto && <span className="ml-1 text-[10px] text-emerald-600">自动</span>}
+                              </span>
                               <Switch
                                 aria-label={`${item.name}的${permission.label}权限`}
                                 checked={checked}
-                                disabled={item.role === 'admin'}
+                                disabled={isDisabled}
                                 onCheckedChange={(value) => void onUpdatePermission(item.id, permission.key, value)}
                               />
                             </label>

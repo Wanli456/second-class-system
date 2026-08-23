@@ -7,6 +7,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
+import { hasPermission } from '@/lib/department-permissions';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -72,7 +73,7 @@ export default function LeaveSlipOriginalsPage() {
   const [ocrError, setOcrError] = useState('');
   const [ocrLines, setOcrLines] = useState<Array<{ text: string; score?: number }>>([]);
 
-  const canAccess = user?.role === 'admin' || user?.canManageOriginalLeave === true;
+  const canAccess = hasPermission(user, 'canManageOriginalLeave');
 
   const filtered = useMemo(() => {
     if (!keyword.trim()) return originals;

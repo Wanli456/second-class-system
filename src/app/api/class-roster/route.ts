@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission, requireUser } from '@/lib/auth';
+import { calculateUserPermissions, requirePermission, requireUser } from '@/lib/auth';
 import { ensureDatabaseSchema, query, queryOne } from '@/storage/database/supabase-client';
 
 type NormalizedRosterStudent = { className: string; studentId: string; studentName: string };
@@ -26,8 +26,9 @@ export async function GET(request: NextRequest) {
   const auth = await requireUser(request);
   if (auth.response) return auth.response;
   const searchParams = new URL(request.url).searchParams;
+  const permissions = calculateUserPermissions(auth.user!);
   if (searchParams.get('classes') === 'true') {
-    if (auth.user!.role !== 'admin' && !auth.user!.can_submit_activity) return NextResponse.json({ success: false, error: 'Permission denied' }, { status: 403 });
+    if (!permissions.canSubmitActivity) return NextResponse.json({ success: false, error: 'Permission denied' }, { status: 403 });
     const rows = await query<{ class_name: string }>(
       `SELECT class_name FROM class_roster WHERE class_name <> ''
        UNION
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
     );
     return NextResponse.json({ success: true, data: rows.map((row) => row.class_name) });
   }
-  if (auth.user!.role !== 'admin' && !auth.user!.can_start_group_leave) return NextResponse.json({ success: false, error: 'Permission denied' }, { status: 403 });
+  if (!permissions.canStartGroupLeave) return NextResponse.json({ success: false, error: 'Permission denied' }, { status: 403 });
   const requestedClass = searchParams.get('class');
   const className = auth.user!.role === 'admin' && requestedClass ? requestedClass : auth.user!.class_name;
   if (!className) return NextResponse.json({ success: true, data: [] });

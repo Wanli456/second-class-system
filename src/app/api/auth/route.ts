@@ -11,12 +11,13 @@ import {
   verifyPassword,
 } from '@/lib/auth';
 import type { AuthUser } from '@/lib/auth';
+import { parsePermissionOverrides, type PermissionKey } from '@/lib/department-permissions';
 
 const PUBLIC_USER_FIELDS = `id, username, student_id, role, can_publish, can_score,
   can_submit_activity, can_view_submission_status, can_submit_scoring,
   can_review_leave, can_view_evening_study, can_start_group_leave, can_manage_attendance_work,
   can_upload_leave, can_query_leave, can_manage_original_leave,
-  department, class_name, contact_phone`;
+  department, class_name, contact_phone, permission_overrides`;
 
 type StoredUser = AuthUser & { password: string };
 
@@ -101,7 +102,7 @@ export async function PATCH(request: NextRequest) {
     if (auth.response) return auth.response;
     const userId = String(body.userId || body.id || '').trim();
     if (!userId) return NextResponse.json({ success: false, error: '缺少用户 ID' }, { status: 400 });
-    const target = await queryOne('SELECT id,role FROM users WHERE id=$1', [userId]);
+    const target = await queryOne('SELECT id,role,permission_overrides FROM users WHERE id=$1', [userId]);
     if (!target) return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
     const allowedRoles = new Set(['admin', 'leader', 'class_leader', 'student']);
     if (body.role !== undefined && !allowedRoles.has(String(body.role))) {
@@ -138,6 +139,19 @@ export async function PATCH(request: NextRequest) {
     for (const [key, column] of Object.entries(fields)) {
       if (body[key] !== undefined) { params.push(body[key]); updates.push(`${column}=$${params.length}`); }
     }
+
+    // 管理端对部门负责人的手动覆盖：显式写入 permission_overrides JSON，
+    // 优先级高于“部门自动权限”，允许管理员关闭某个自动权限或额外开启。
+    if (body.permissionOverrides && typeof body.permissionOverrides === 'object' && !Array.isArray(body.permissionOverrides)) {
+      const currentOverrides = parsePermissionOverrides(target?.permission_overrides);
+      const merged: Partial<Record<PermissionKey, boolean>> = { ...currentOverrides };
+      for (const [key, value] of Object.entries(body.permissionOverrides as Record<string, unknown>)) {
+        if (typeof value === 'boolean') merged[key as PermissionKey] = value;
+      }
+      params.push(JSON.stringify(merged));
+      updates.push(`permission_overrides=$${params.length}`);
+    }
+
     if (!updates.length) return NextResponse.json({ success: false, error: '没有可更新的内容' }, { status: 400 });
     params.push(userId);
     const user = await queryOne<AuthUser>(`UPDATE users SET ${updates.join(',')} WHERE id=$${params.length} RETURNING ${PUBLIC_USER_FIELDS}`, params);

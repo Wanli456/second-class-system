@@ -8,6 +8,7 @@ import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { PageErrorDialog } from '@/components/PageErrorDialog';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
+import { hasPermission } from '@/lib/department-permissions';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
@@ -88,7 +89,7 @@ export default function LeaveSlipUploadPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canAccess = user?.role === 'admin' || user?.canUploadLeave === true;
+  const canAccess = hasPermission(user, 'canUploadLeave');
   const canChooseClass = Boolean(user && (user.role === 'admin' || user.role === 'leader'));
 
   useEffect(() => {
@@ -240,6 +241,7 @@ export default function LeaveSlipUploadPage() {
   };
 
   const handleSubmit = async () => {
+    setSuccess(null);
     setError(null);
     const cleanedStudents = students.filter((student) => student.student_id.trim() && student.student_name.trim() && student.class_name.trim());
     if (!cleanedStudents.length) { setError('请至少填写一名学生的学号、姓名和班级'); return; }
@@ -284,14 +286,16 @@ export default function LeaveSlipUploadPage() {
           teacher_signature: teacherSignature,
         }),
       });
-      const data = await response.json();
-      if (!data.success) throw new Error(data.error || '提交失败');
-      const autoMessage = data.auto_match?.action === 'rejected'
-        ? '，系统已自动驳回'
-        : data.auto_match?.action === 'manual'
-          ? '，文字名单与原假条一致，待人工核对照片'
-          : '';
-      setSuccess(`${data.warnings?.length ? data.warnings.join('；') : '假条已提交'}${autoMessage}`);
+      let data: { success?: boolean; error?: unknown };
+      try {
+        data = await response.json() as { success?: boolean; error?: unknown };
+      } catch {
+        throw new Error(response.ok ? '服务器返回异常，请稍后重试' : `服务器响应异常（HTTP ${response.status}）`);
+      }
+      if (!response.ok || !data.success) {
+        throw new Error(typeof data.error === 'string' && data.error ? data.error : `提交失败（HTTP ${response.status}）`);
+      }
+      setSuccess('假条提交成功，当前状态：待查对');
       setImageFiles([]);
       setImagePreviews([]);
       setStartTime('');
@@ -301,7 +305,9 @@ export default function LeaveSlipUploadPage() {
       setOfficialSeal(false);
       setTeacherSignature(false);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : '提交失败');
+      const message = submitError instanceof Error && submitError.message ? submitError.message : '未知原因，请稍后重试';
+      const isNetworkError = submitError instanceof TypeError && /network|fetch|load/i.test(message);
+      setError(isNetworkError ? '假条提交失败：网络连接异常，请检查网络后重试' : `假条提交失败：${message}`);
     } finally {
       setSubmitting(false);
     }
@@ -518,7 +524,7 @@ export default function LeaveSlipUploadPage() {
       </div>
 
       <PageErrorDialog open={Boolean(error)} message={error} onClose={() => setError(null)} />
-      <PageErrorDialog open={Boolean(success)} message={success} tone={success?.includes('疑似') ? 'warning' : 'success'} onClose={() => setSuccess(null)} />
+      <PageErrorDialog open={Boolean(success)} message={success} tone="success" onClose={() => setSuccess(null)} />
     </DashboardLayout>
   );
 }

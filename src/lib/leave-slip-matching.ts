@@ -90,18 +90,19 @@ export async function compareSlipWithOriginals(slipId: string): Promise<AutoMatc
   const missing = uploadNames.filter((name) => !originalNames.includes(name));
 
   if (missing.length > 0) {
-    // 只有二课活动请假会要求与原假条名单完全一致；手写假条没有匹配原假条时不能自动驳回。
+    // 只有二课活动请假会要求与原假条名单完全一致；但不自动驳回，
+    // 改为“待查对”并写明建议驳回原因，由有权限的人在假条查对里人工确认。
     if (slip.slip_type === '二课活动请假' && best) {
       await query(
         `UPDATE leave_slips
-         SET review_status='已驳回',
+         SET review_status='待查对',
              review_note=$1,
              original_slip_id=$2,
              updated_at=NOW()
          WHERE id=$3`,
-        [`自动识别到原假条中没有的同学：${missing.join('、')}，已自动驳回`, best.id, slipId],
+        [`系统建议驳回：原假条中没有这些同学——${missing.join('、')}，请人工核实后决定是否驳回`, best.id, slipId],
       );
-      return { action: 'rejected', missing, matched };
+      return { action: 'manual', missing, matched };
     }
     // 手写假条等：列为缺失，但保持待查对，交给人工判断。
     if (best) {
