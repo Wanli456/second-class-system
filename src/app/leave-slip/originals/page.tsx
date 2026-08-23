@@ -53,6 +53,21 @@ function parseImageList(value: string | null): Array<{ url: string; name?: strin
   return [];
 }
 
+function parseStudentEntries(value: string): string[] {
+  const entries = value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+  return entries.map((entry, index) => {
+    const fields = entry.split('｜').map((item) => item.trim());
+    if (fields.length !== 3 || fields.some((item) => !item)) {
+      throw new Error('第 ' + (index + 1) + ' 名学生信息不完整，请按“学号｜班级｜姓名”填写');
+    }
+    return fields.join('｜');
+  });
+}
+
+function formatStudentEntry(studentId: string, className: string, name: string): string {
+  return [studentId.trim(), className.trim(), name.trim()].join('｜');
+}
+
 export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: 'submit' | 'maintain' }) {
   const { user, initialized } = useUser();
   const isSubmitMode = mode === 'submit';
@@ -152,13 +167,12 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
         for (const item of classStudents) {
           const className = String(item.class_name || '');
           const classStudentNames = Array.isArray(item.students) ? item.students.map(String).filter(Boolean) : [];
-          classStudentNames.forEach((name) => entries.push(className ? `${name}(${className})` : name));
+          const classStudentIds = Array.isArray(item.student_ids) ? item.student_ids.map(String) : [];
+          classStudentNames.forEach((name, index) => entries.push(formatStudentEntry(classStudentIds[index] || '', className, name)));
         }
-        studentText = entries.join('、');
+        studentText = entries.join('\n');
       } else if (rawStudents.length) {
-        studentText = rawStudents.map((name, index) => (
-          rawIds.length === rawStudents.length ? `${name} ${rawIds[index]}`.trim() : name
-        )).join('、');
+        studentText = rawStudents.map((name, index) => formatStudentEntry(rawIds[index] || '', '', name)).join('\n');
       }
 
       if (fields.activity_name) {
@@ -196,6 +210,13 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
   const handleSubmit = async () => {
     if (!activityId || !activityName.trim()) { alert('原假条一次只能绑定一个活动，请先选择系统活动'); return; }
     if (!studentNamesText.trim() && !classNamesText.trim()) { alert('请至少填写班级或学生'); return; }
+    let studentEntries: string[] = [];
+    try {
+      studentEntries = studentNamesText.trim() ? parseStudentEntries(studentNamesText) : [];
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '学生信息格式不正确');
+      return;
+    }
     setSaving(true);
     setSubmitSuccess('');
     try {
@@ -207,13 +228,13 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
           activity_id: activityId.trim() || null,
           activity_name: activityName.trim() || null,
           class_names: classNamesText.split(/[,，、\n]/).map((item) => item.trim()).filter(Boolean),
-          student_names: studentNamesText.split(/[,，、\n]/).map((item) => item.trim()).filter(Boolean),
+          student_names: studentEntries,
           start_time: startTime ? new Date(startTime).toISOString() : null,
           end_time: endTime ? new Date(endTime).toISOString() : null,
           images: uploaded,
           image_url: uploaded[0]?.url || null,
           image_name: uploaded[0]?.name || null,
-          ocr_names: studentNamesText.split(/[,，、\n]/).map((item) => item.trim()).filter(Boolean),
+          ocr_names: studentEntries,
           notes: notes.trim() || null,
         }),
       });
@@ -274,7 +295,8 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
               </label>
               <datalist id="original-activity-options">{activityOptions.map((activity) => <option key={activity.id} value={activity.full_name}>{activity.id}</option>)}</datalist>
               <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs tabular-nums text-slate-600">已绑定活动 ID：<span className="font-medium text-slate-800">{activityId || '未选择'}</span></div>
-              <div className="grid gap-4 sm:grid-cols-2"><label className="block space-y-2"><span className="text-sm font-medium text-slate-800">涉及班级</span><textarea aria-label="涉及班级" placeholder="多个班级用逗号分隔" value={classNamesText} onChange={(event) => setClassNamesText(event.target.value)} className="min-h-28 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label><label className="block space-y-2"><span className="text-sm font-medium text-slate-800">涉及学生</span><textarea aria-label="涉及学生" placeholder="姓名(班级)，如：刘玉(应化2532)" value={studentNamesText} onChange={(event) => setStudentNamesText(event.target.value)} className="min-h-28 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label></div>
+              <div className="grid gap-4 sm:grid-cols-2"><label className="block space-y-2"><span className="text-sm font-medium text-slate-800">涉及班级</span><textarea aria-label="涉及班级" placeholder="多个班级用逗号分隔" value={classNamesText} onChange={(event) => setClassNamesText(event.target.value)} className="min-h-28 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label><label className="block space-y-2"><span className="text-sm font-medium text-slate-800">涉及学生（学号｜班级｜姓名）</span><textarea aria-label="涉及学生的学号、班级和姓名" placeholder={'每行一名学生，例如：\n20250001｜应化2532｜刘玉\n20250002｜应急2531｜宣锐'} value={studentNamesText} onChange={(event) => setStudentNamesText(event.target.value)} className="min-h-28 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label></div>
+              <p className="-mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">每行只填写一名学生，按 <span className="font-medium text-slate-800">学号｜班级｜姓名</span> 顺序使用竖线分隔。三项信息会按同一行一一对应保存，缺少任一项不能提交；OCR 识别后也会按此顺序回填。</p>
               <div className="grid grid-cols-2 gap-2">
                 <input aria-label="开始时间" type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-teal-600" />
                 <input aria-label="结束时间" type="datetime-local" value={endTime} onChange={(event) => setEndTime(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-teal-600" />
