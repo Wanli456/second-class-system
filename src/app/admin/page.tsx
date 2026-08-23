@@ -1746,18 +1746,18 @@ function UserManagement({
   const currentUserPage = Math.min(userPage, totalUserPages);
   const paginatedUsers = filteredUsers.slice((currentUserPage - 1) * userPageSize, currentUserPage * userPageSize);
   const permissions: Array<{ key: UserPermission; label: string }> = [
-    { key: 'canUploadLeave', label: '假条上传' },
-    { key: 'canStartGroupLeave', label: '临时请假' },
-    { key: 'canManageAttendanceWork', label: '考勤工作安排' },
-    { key: 'canReviewLeave', label: '假条查对' },
-    { key: 'canQueryLeave', label: '假条查询' },
-    { key: 'canManageOriginalLeave', label: '原假条维护' },
-    { key: 'canPublish', label: '活动审核' },
-    { key: 'canScore', label: '活动赋分' },
-    { key: 'canSubmitScoring', label: '赋分材料' },
-    { key: 'canViewEveningStudy', label: '晚自习查询' },
-    { key: 'canSubmitActivity', label: '活动提交' },
-    { key: 'canViewSubmissionStatus', label: '提交状态' },
+    { key: 'canUploadLeave', label: '假条上传权限' },
+    { key: 'canStartGroupLeave', label: '临时请假权限' },
+    { key: 'canManageAttendanceWork', label: '考勤工作安排权限' },
+    { key: 'canReviewLeave', label: '假条查对权限' },
+    { key: 'canQueryLeave', label: '假条查询权限' },
+    { key: 'canManageOriginalLeave', label: '原假条维护权限' },
+    { key: 'canPublish', label: '活动审核权限' },
+    { key: 'canScore', label: '活动赋分权限' },
+    { key: 'canSubmitScoring', label: '赋分材料权限' },
+    { key: 'canViewEveningStudy', label: '晚自习查询权限' },
+    { key: 'canSubmitActivity', label: '活动提交权限' },
+    { key: 'canViewSubmissionStatus', label: '提交状态权限' },
   ];
   const roleTextStyles: Record<string, string> = {
     admin: 'text-red-600',
