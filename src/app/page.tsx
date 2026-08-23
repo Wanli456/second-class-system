@@ -56,8 +56,6 @@ interface PortalEntry {
   show: boolean;
 }
 
-const ICON_BOX = 'flex size-10 items-center justify-center rounded-lg bg-teal-50 text-teal-700';
-
 export default function Home() {
   const { user: globalUser, initialized, setUser: setGlobalUser } = useUser();
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -258,6 +256,19 @@ export default function Home() {
     ];
 
     // 常用入口：按当前角色权限挑选最常用的功能。
+    const departmentUserEntry: EntryWithGroup = {
+      href: '/department-users',
+      label: '部门用户管理',
+      detail: '设置本部门成员与业务权限',
+      icon: Users,
+      tone: 'bg-indigo-50 text-indigo-700',
+      show: true,
+      group: user.department || '部门管理',
+    };
+    const visibleEntriesWithDepartment = user.role === 'leader' && (user.department === '学习竞技部' || user.department === '第二课堂认证中心')
+      ? [...visibleEntries, departmentUserEntry]
+      : visibleEntries;
+
     const quickHrefs = Array.from(new Set([
       '/leave-slip/mine',
       ...(hasPermission(user, 'canUploadLeave') ? ['/leave-slip/upload'] : []),
@@ -275,10 +286,10 @@ export default function Home() {
     ]));
 
     const quickEntries: EntryWithGroup[] = quickHrefs
-      .map((href) => visibleEntries.find((entry) => entry.href === href))
+      .map((href) => visibleEntriesWithDepartment.find((entry) => entry.href === href))
       .filter((entry): entry is EntryWithGroup => Boolean(entry))
       .slice(0, 6);
-    const restEntries = visibleEntries.filter((entry) => !quickEntries.some((quick) => quick.href === entry.href));
+    const restEntries = visibleEntriesWithDepartment.filter((entry) => !quickEntries.some((quick) => quick.href === entry.href));
 
     const renderEntryCard = (entry: EntryWithGroup) => (
       <Link key={entry.href} href={entry.href} className="group flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-colors hover:border-teal-600 hover:bg-teal-50/20 sm:p-5">
