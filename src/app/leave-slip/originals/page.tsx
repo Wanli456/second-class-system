@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, CheckCircle2, FileCheck2, Plus, ScanText, Search, Trash2, Upload } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileCheck2, Plus, Search, Trash2, Upload } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch } from '@/lib/client-api';
@@ -192,11 +192,6 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
     }
   };
 
-  const handleOcr = async () => {
-    if (!imageFiles.length) { alert('请先选择原假条图片'); return; }
-    await runOcrForFiles(imageFiles);
-  };
-
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     event.target.value = '';
@@ -293,7 +288,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
               <datalist id="original-activity-options">{activityOptions.map((activity) => <option key={activity.id} value={activity.full_name}>{activity.id}</option>)}</datalist>
               <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs tabular-nums text-slate-600">已绑定活动 ID：<span className="font-medium text-slate-800">{activityId || '未选择'}</span></div>
               <label className="block space-y-2"><span className="text-sm font-medium text-slate-800">涉及学生（学号｜班级｜姓名）</span><textarea aria-label="涉及学生的学号、班级和姓名" placeholder={'每行一名学生，例如：\n20250001｜应化2532｜刘玉\n20250002｜应急2531｜宣锐'} value={studentNamesText} onChange={(event) => setStudentNamesText(event.target.value)} className="min-h-32 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label>
-              <p className="-mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">每行只填写一名学生，按 <span className="font-medium text-slate-800">学号｜班级｜姓名</span> 顺序使用竖线分隔。三项信息会按同一行一一对应保存，缺少任一项不能提交；系统会从每行学生信息自动汇总涉及班级，OCR 识别后也会按此顺序回填。</p>
+              <p className="-mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">每行只填写一名学生，按 <span className="font-medium text-slate-800">学号｜班级｜姓名</span> 顺序使用竖线分隔。三项信息会按同一行一一对应保存，缺少任一项不能提交；系统会从每行学生信息自动汇总涉及班级，选图后会自动识别并按此顺序回填。</p>
               <div className="grid grid-cols-2 gap-2">
                 <input aria-label="开始时间" type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-teal-600" />
                 <input aria-label="结束时间" type="datetime-local" value={endTime} onChange={(event) => setEndTime(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-teal-600" />
@@ -303,12 +298,12 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
                 <span className="flex items-center gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white text-teal-700 shadow-sm"><Upload className="size-4" /></span><span className="min-w-0 flex-1"><span className="block text-sm font-medium text-slate-800">选择原假条图片</span><span className="mt-1 block truncate text-xs text-slate-500">{imageFiles.length ? `已选择 ${imageFiles.length} 张图片` : '支持一次选择多张截图'}</span></span></span>
                 <input type="file" accept="image/*" multiple className="sr-only" onChange={handleImageChange} />
               </label>
-              <div className="grid gap-3 sm:grid-cols-2"><Button type="button" variant="outline" onClick={handleOcr} disabled={ocrLoading || !imageFiles.length} className="h-11 border-slate-300 bg-white disabled:opacity-50"><ScanText className="size-4" />{ocrLoading ? 'OCR 识别中...' : 'OCR 自动识别'}</Button><Button type="button" onClick={handleSubmit} disabled={saving} className="h-11 bg-teal-700 hover:bg-teal-800"><Plus className="size-4" />{saving ? '提交中...' : '提交原假条'}</Button></div>
+              <div className="grid gap-3"><Button type="button" onClick={handleSubmit} disabled={saving || ocrLoading} className="h-11 bg-teal-700 hover:bg-teal-800"><Plus className="size-4" />{ocrLoading ? '自动识别中...' : saving ? '提交中...' : '提交原假条'}</Button></div>
               {ocrError && <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{ocrError}</p>}
               {submitSuccess && <p className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"><CheckCircle2 className="size-4 shrink-0" />{submitSuccess}</p>}
               {ocrLines.length > 0 && (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <p className="mb-2 text-xs font-medium text-slate-600">识别结果（初稿，请人工核对后保存）</p>
+                  <p className="mb-2 text-xs font-medium text-slate-600">自动识别结果（初稿，请人工核对后保存）</p>
                   <div className="max-h-40 space-y-1 overflow-auto">
                     {ocrLines.map((line, index) => <p key={`${line.text}-${index}`} className="text-xs leading-5 text-slate-700">{line.text}</p>)}
                   </div>
