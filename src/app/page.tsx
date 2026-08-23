@@ -245,7 +245,8 @@ export default function Home() {
       { href: '/leave-slip/temporary', label: '临时请假', detail: '提交临时请假，自动审核通过', icon: Send, tone: 'bg-emerald-50 text-emerald-700', show: hasPermission(user, 'canStartGroupLeave') },
       { href: '/leave-slip/review', label: '假条查对', detail: '人工查对请假条', icon: UserCheck, tone: 'bg-amber-50 text-amber-700', show: hasPermission(user, 'canReviewLeave') },
       { href: '/leave-slip/query', label: '假条查询', detail: '按班级/姓名/日期搜索', icon: Moon, tone: 'bg-slate-100 text-slate-700', show: hasPermission(user, 'canQueryLeave') },
-      { href: '/leave-slip/originals', label: '原假条', detail: '管理活动原假条', icon: FileCheck, tone: 'bg-slate-100 text-slate-700', show: hasPermission(user, 'canManageOriginalLeave') },
+      { href: '/leave-slip/originals/submit', label: '提交原假条', detail: '提交需要归档的原始假条', icon: FileCheck, tone: 'bg-slate-100 text-slate-700', show: hasPermission(user, 'canManageOriginalLeave') },
+      { href: '/leave-slip/originals', label: '维护原假条', detail: '查询和维护已归档的原始假条', icon: ClipboardList, tone: 'bg-slate-100 text-slate-700', show: hasPermission(user, 'canManageOriginalLeave') },
       { href: '/attendance-work', label: '考勤工作安排', detail: '按周提交和查对考勤工作安排', icon: ClipboardList, tone: 'bg-teal-50 text-teal-700', show: hasPermission(user, 'canManageAttendanceWork') || hasPermission(user, 'canReviewLeave') },
       { href: '/evening-study', label: '晚自习查询', detail: '查看晚自习请假与考勤安排', icon: Moon, tone: 'bg-indigo-50 text-indigo-700', show: hasPermission(user, 'canViewEveningStudy') || hasPermission(user, 'canQueryLeave') },
     ].filter((entry) => entry.show);
@@ -280,6 +281,7 @@ export default function Home() {
       ...(hasPermission(user, 'canManageAttendanceWork') || hasPermission(user, 'canReviewLeave') ? ['/attendance-work'] : []),
       ...(hasPermission(user, 'canReviewLeave') ? ['/leave-slip/review'] : []),
       ...(hasPermission(user, 'canQueryLeave') ? ['/leave-slip/query'] : []),
+      ...(hasPermission(user, 'canManageOriginalLeave') ? ['/leave-slip/originals/submit', '/leave-slip/originals'] : []),
       ...(hasPermission(user, 'canViewEveningStudy') || hasPermission(user, 'canQueryLeave') ? ['/evening-study'] : []),
       ...(hasPermission(user, 'canSubmitActivity') ? ['/submit'] : []),
       ...(hasPermission(user, 'canViewSubmissionStatus') ? ['/submit/status'] : []),

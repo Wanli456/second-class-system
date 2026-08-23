@@ -144,7 +144,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: '临时请假', href: '/leave-slip/temporary', icon: Send, requiredPermission: 'canStartGroupLeave' },
   { label: '假条查对', href: '/leave-slip/review', icon: UserCheck, requiredPermission: 'canReviewLeave' },
   { label: '假条查询', href: '/leave-slip/query', icon: Moon, requiredPermission: 'canQueryLeave' },
-  { label: '原假条', href: '/leave-slip/originals', icon: FileCheck, requiredPermission: 'canManageOriginalLeave' },
+  { label: '提交原假条', href: '/leave-slip/originals/submit', icon: FileCheck, requiredPermission: 'canManageOriginalLeave' },
+  { label: '维护原假条', href: '/leave-slip/originals', icon: ClipboardList, requiredPermission: 'canManageOriginalLeave' },
   { label: '考勤工作安排', href: '/attendance-work', icon: ClipboardList, requiredAnyPermissions: ['canManageAttendanceWork', 'canReviewLeave'] },
   { label: '晚自习查询', href: '/evening-study', icon: Moon, requiredAnyPermissions: ['canViewEveningStudy', 'canQueryLeave'] },
 ];
