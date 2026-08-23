@@ -18,7 +18,7 @@ export function DepartmentUsersScopedPage({ department, title }: DepartmentUsers
 
   if (!initialized) return <AuthLoadingScreen />;
 
-  const canAccess = isDepartmentUserManager(user) && user?.department === department;
+  const canAccess = user?.role === 'admin' || (isDepartmentUserManager(user) && user?.department === department);
   const handleLogout = () => {
     localStorage.removeItem('user');
     setUser(null);
@@ -27,7 +27,7 @@ export function DepartmentUsersScopedPage({ department, title }: DepartmentUsers
   return (
     <DashboardLayout user={user} onLogout={handleLogout} title={title}>
       {canAccess ? (
-        <DepartmentUsersPage />
+        <DepartmentUsersPage managedDepartment={department} />
       ) : (
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-balance text-lg font-semibold text-slate-950">无权访问该部门页面</h2>

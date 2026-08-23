@@ -43,11 +43,18 @@ function normalizedDepartment(department: string | null | undefined) {
   return (department || '').trim();
 }
 
-export function getManagedUserScope(user: DepartmentUserIdentity | null | undefined): ManagedUserScope | null {
+export function getManagedUserScope(
+  user: DepartmentUserIdentity | null | undefined,
+  managedDepartment?: DepartmentUserManagementDepartment,
+): ManagedUserScope | null {
   if (!user || (user.role !== 'leader' && user.role !== 'admin')) return null;
-  const department = normalizedDepartment(user.department) as DepartmentUserManagementDepartment;
+
+  const userDepartment = normalizedDepartment(user.department) as DepartmentUserManagementDepartment;
+  const department = managedDepartment || userDepartment;
   if (!(department in DEPARTMENT_USER_MANAGEMENT)) return null;
-  return { department };
+
+  if (user.role === 'admin') return { department };
+  return userDepartment === department ? { department } : null;
 }
 
 export function isDepartmentUserManager(user: DepartmentUserIdentity | null | undefined) {
@@ -57,8 +64,9 @@ export function isDepartmentUserManager(user: DepartmentUserIdentity | null | un
 export function canManageTargetUser(
   manager: DepartmentUserIdentity | null | undefined,
   target: DepartmentUserTarget | null | undefined,
+  managedDepartment?: DepartmentUserManagementDepartment,
 ) {
-  const scope = getManagedUserScope(manager);
+  const scope = getManagedUserScope(manager, managedDepartment);
   if (!scope || !target || !target.id || target.id === manager?.id || target.role === 'admin') return false;
 
   const targetDepartment = normalizedDepartment(target.department);
@@ -76,8 +84,9 @@ export function canManageTargetUser(
 export function getEditablePermissionKeys(
   manager: DepartmentUserIdentity | null | undefined,
   target?: DepartmentUserTarget | null,
+  managedDepartment?: DepartmentUserManagementDepartment,
 ): PermissionKey[] {
-  const scope = getManagedUserScope(manager);
-  if (!scope || (target && !canManageTargetUser(manager, target))) return [];
+  const scope = getManagedUserScope(manager, managedDepartment);
+  if (!scope || (target && !canManageTargetUser(manager, target, managedDepartment))) return [];
   return [...DEPARTMENT_USER_MANAGEMENT[scope.department].permissionKeys];
 }

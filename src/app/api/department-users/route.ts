@@ -4,7 +4,8 @@ import { PermissionKey } from '@/lib/department-permissions';
 import {
   canManageTargetUser,
   getEditablePermissionKeys,
-  isDepartmentUserManager,
+  getManagedUserScope,
+  type DepartmentUserManagementDepartment,
 } from '@/lib/department-user-management';
 import { query, queryOne } from '@/storage/database/supabase-client';
 
@@ -62,24 +63,30 @@ function badRequest(error: string) {
   return NextResponse.json({ success: false, error }, { status: 400 });
 }
 
+function parseManagedDepartment(value: unknown): DepartmentUserManagementDepartment | null {
+  return value === '学习竞技部' || value === '第二课堂认证中心' ? value : null;
+}
+
 export async function GET(request: NextRequest) {
   const { user, response } = await requireUser(request);
   if (response) return response;
-  if (!isDepartmentUserManager(user)) {
+  const managedDepartment = parseManagedDepartment(request.nextUrl.searchParams.get('department'));
+  const scope = getManagedUserScope(user, managedDepartment || undefined);
+  if (!scope) {
     return NextResponse.json({ success: false, error: '只有指定部门负责人可以管理部门用户' }, { status: 403 });
   }
 
   const rows = await query(USER_SELECT, []) as DepartmentUserRow[];
   const users = rows
-    .filter((target) => canManageTargetUser(user, target))
+    .filter((target) => canManageTargetUser(user, target, scope.department))
     .sort((a, b) => (a.class_name || '').localeCompare(b.class_name || '') || a.username.localeCompare(b.username))
-    .map((target) => serializeUser(target, getEditablePermissionKeys(user, target)));
+    .map((target) => serializeUser(target, getEditablePermissionKeys(user, target, scope.department)));
 
   return NextResponse.json({
     success: true,
     data: {
-      department: user.department,
-      permissionKeys: getEditablePermissionKeys(user),
+      department: scope.department,
+      permissionKeys: getEditablePermissionKeys(user, undefined, scope.department),
       users,
     },
   });
@@ -88,9 +95,6 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const { user, response } = await requireUser(request);
   if (response) return response;
-  if (!isDepartmentUserManager(user)) {
-    return NextResponse.json({ success: false, error: '只有指定部门负责人可以管理部门用户' }, { status: 403 });
-  }
 
   let body: unknown;
   try {
@@ -100,20 +104,25 @@ export async function PATCH(request: NextRequest) {
   }
 
   if (!body || typeof body !== 'object') return badRequest('请求数据格式错误');
-  const payload = body as { userId?: unknown; permissions?: unknown };
+  const payload = body as { userId?: unknown; permissions?: unknown; department?: unknown };
   const userId = typeof payload.userId === 'string' ? payload.userId.trim() : '';
   if (!userId) return badRequest('缺少用户 ID');
+  const managedDepartment = parseManagedDepartment(payload.department);
+  const scope = getManagedUserScope(user, managedDepartment || undefined);
+  if (!scope) {
+    return NextResponse.json({ success: false, error: '只有指定部门负责人可以管理部门用户' }, { status: 403 });
+  }
   if (!payload.permissions || typeof payload.permissions !== 'object' || Array.isArray(payload.permissions)) {
     return badRequest('权限数据格式错误');
   }
 
   const target = await queryOne(USER_SELECT + ' WHERE id = $1', [userId]) as DepartmentUserRow | null;
   if (!target) return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
-  if (!canManageTargetUser(user, target)) {
+  if (!canManageTargetUser(user, target, scope.department)) {
     return NextResponse.json({ success: false, error: '无权管理该用户' }, { status: 403 });
   }
 
-  const editableKeys = getEditablePermissionKeys(user, target);
+  const editableKeys = getEditablePermissionKeys(user, target, scope.department);
   const entries = Object.entries(payload.permissions as Record<string, unknown>);
   if (entries.length === 0) return badRequest('至少提交一项权限');
   const invalidKey = entries.find(([key, value]) => !editableKeys.includes(key as PermissionKey) || typeof value !== 'boolean');

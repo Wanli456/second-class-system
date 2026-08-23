@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft, Check, Loader2, ShieldCheck, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import type { DepartmentUserManagementDepartment } from '@/lib/department-user-management';
 
 type PermissionKey =
   | 'canPublish'
@@ -48,7 +49,7 @@ function roleLabel(role: string | null) {
   return role === 'leader' ? '部门负责人' : role === 'class_leader' ? '班级负责人' : '成员';
 }
 
-export default function DepartmentUsersPage() {
+export default function DepartmentUsersPage({ managedDepartment }: { managedDepartment?: DepartmentUserManagementDepartment }) {
   const router = useRouter();
   const [department, setDepartment] = useState('');
   const [permissionKeys, setPermissionKeys] = useState<PermissionKey[]>([]);
@@ -65,7 +66,11 @@ export default function DepartmentUsersPage() {
       return;
     }
 
-    fetch('/api/department-users')
+    const endpoint = managedDepartment
+      ? '/api/department-users?department=' + encodeURIComponent(managedDepartment)
+      : '/api/department-users';
+
+    fetch(endpoint)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.error || '加载失败');
@@ -75,7 +80,7 @@ export default function DepartmentUsersPage() {
       })
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : '加载失败'))
       .finally(() => setLoading(false));
-  }, [router]);
+  }, [managedDepartment, router]);
 
   const updatePermission = (userId: string, key: PermissionKey, checked: boolean) => {
     setUsers((current) => current.map((item) => (
@@ -94,7 +99,7 @@ export default function DepartmentUsersPage() {
       const res = await fetch('/api/department-users', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, permissions: user.permissions }),
+        body: JSON.stringify({ userId: user.id, permissions: user.permissions, department: managedDepartment }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || '保存失败');
