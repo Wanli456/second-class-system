@@ -285,7 +285,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
           </div>
         </header>
 
-        <div className={isSubmitMode ? '' : 'grid items-start gap-6 xl:grid-cols-[320px_minmax(0,1fr)]'}>
+        <div>
           {isSubmitMode && <aside className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-5 py-4 sm:px-7"><h3 className="text-base font-semibold text-slate-950">原假条信息</h3><p className="mt-1 text-sm text-pretty text-slate-500">一张原假条只能关联一个系统活动。</p></div><div className="space-y-4 px-5 py-6 sm:px-7">
               <label className="block space-y-2"><span className="text-sm font-medium text-slate-800">关联活动</span>
               <input aria-label="活动名称" list="original-activity-options" placeholder="输入活动名称或活动 ID" value={activityName} onChange={(event) => { setActivityName(event.target.value); const match = activityOptions.find((item) => item.full_name === event.target.value || item.id === event.target.value); setActivityId(match?.id || ''); }} className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-100" />
