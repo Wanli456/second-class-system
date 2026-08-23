@@ -280,12 +280,11 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
   return (
     <DashboardLayout user={user} title={isSubmitMode ? '提交原假条' : '原假条维护'} activeNavHref={isSubmitMode ? '/leave-slip/originals/submit' : '/leave-slip/originals'}>
       <div className={isSubmitMode ? 'mx-auto w-full max-w-2xl' : 'mx-auto w-full max-w-6xl'}>
-        <header className={isSubmitMode ? 'mb-6 rounded-2xl border border-slate-200 bg-white px-5 py-6 shadow-sm sm:px-7' : 'mb-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-6 shadow-sm sm:flex-row sm:items-end sm:justify-between sm:px-7'}>
+        <header className="mb-6 rounded-2xl border border-slate-200 bg-white px-5 py-6 shadow-sm sm:px-7">
           <div className={isSubmitMode ? 'flex items-start gap-4' : ''}>
             {isSubmitMode && <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><FileCheck2 className="size-5" /></span>}
-            <div><p className="text-sm font-medium text-teal-700">假条管理</p><h2 className="mt-1 text-2xl font-bold text-balance text-slate-950">{isSubmitMode ? '提交原假条' : '维护原假条'}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-pretty text-slate-600">{isSubmitMode ? '上传活动方提供的原始假条。系统会自动识别图片内容，请在提交前人工核对。' : '集中查询、核对和维护已归档的活动方原假条。'}</p></div>
+            <div><p className="text-sm font-medium text-teal-700">假条管理</p><h2 className="mt-1 text-2xl font-bold text-balance text-slate-950">{isSubmitMode ? '提交原假条' : '维护原假条'}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-pretty text-slate-600">{isSubmitMode ? '上传活动方提供的原始假条。系统会自动识别图片内容，请在提交前人工核对。' : '集中查询、核对和维护已归档的活动方原假条。此处不新增、不提交原假条。'}</p></div>
           </div>
-          {!isSubmitMode && <Link href="/leave-slip/originals/submit" className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-medium text-white transition-colors hover:bg-teal-800"><Plus className="size-4" />提交原假条</Link>}
         </header>
 
         <div className={isSubmitMode ? '' : 'grid items-start gap-6 xl:grid-cols-[320px_minmax(0,1fr)]'}>
@@ -330,7 +329,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
             </div>
 
             <div className="space-y-4">
-              {filtered.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-12 text-center"><FileCheck2 className="mx-auto size-7 text-slate-400" /><h3 className="mt-3 text-base font-semibold text-slate-800">暂无归档原假条</h3><p className="mt-1 text-sm text-pretty text-slate-500">提交原假条后，记录会显示在这里。</p><Link href="/leave-slip/originals/submit" className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-medium text-white hover:bg-teal-800"><Plus className="size-4" />提交原假条</Link></div> : null}
+              {filtered.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-12 text-center"><FileCheck2 className="mx-auto size-7 text-slate-400" /><h3 className="mt-3 text-base font-semibold text-slate-800">没有匹配的归档原假条</h3><p className="mt-1 text-sm text-pretty text-slate-500">请调整查询关键词，或点击“刷新”重新获取归档记录。</p></div> : null}
               {filtered.map((original) => {
                 const classNames = parseJsonArray(original.class_names);
                 const studentNames = parseJsonArray(original.student_names);
@@ -347,11 +346,11 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
                           <div className="mt-3 flex flex-wrap gap-2">
                             {(() => {
                               const images = parseImageList(original.image_list);
-                              if (images.length > 0) return images.map((image, index) => <FilePreviewLink key={`${image.url}-${index}`} url={image.url} fileName={image.name} label={`查看原假条图片 ${index + 1}`} className="text-xs text-sky-700" />);
-                              return original.image_url ? [<FilePreviewLink key="legacy" url={original.image_url} fileName={original.image_name || undefined} label="查看原假条图片" className="text-xs text-sky-700" />] : null;
+                              if (images.length > 0) return images.map((image, index) => <FilePreviewLink key={`${image.url}-${index}`} url={image.url} fileName={image.name} label={`打开原件核对 ${index + 1}`} className="text-sm font-medium text-teal-700 hover:text-teal-800" />);
+                              return original.image_url ? [<FilePreviewLink key="legacy" url={original.image_url} fileName={original.image_name || undefined} label="打开原件核对" className="text-sm font-medium text-teal-700 hover:text-teal-800" />] : null;
                             })()}
                           </div>
-                        ) : null}
+                        ) : <p className="mt-3 text-sm text-amber-700">此归档记录未附原假条图片，暂时无法核对原件。</p>}
                       </div>
                       <Button type="button" variant="destructive" size="sm" onClick={() => setDeleteTarget(original)} aria-label="删除原假条"><Trash2 className="size-3.5" />删除</Button>
                     </div>
