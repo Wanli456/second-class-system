@@ -188,7 +188,8 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
     const roleAllowed = !item.requiredRole || user.role === 'admin' || user.role === item.requiredRole;
     const permissionAllowed = !item.requiredPermission || hasPermission(user, item.requiredPermission);
     const anyPermissionAllowed = !item.requiredAnyPermissions?.length || item.requiredAnyPermissions.some((permission) => hasPermission(user, permission));
-    const departmentAllowed = !item.requiredDepartment || (isDepartmentUserManager(user) && user.department === item.requiredDepartment);
+    // 系统管理员需要能进入两个部门的用户管理区；部门负责人仍只能看到自己的入口。
+    const departmentAllowed = !item.requiredDepartment || user.role === 'admin' || (isDepartmentUserManager(user) && user.department === item.requiredDepartment);
 
     // A role or its matching permission is enough. This lets an admin grant
     // a capability to a student without changing the student's base role.
