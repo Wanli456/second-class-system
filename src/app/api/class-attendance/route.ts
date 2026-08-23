@@ -109,7 +109,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         'SELECT class_name, student_id, student_name FROM class_roster WHERE class_name IS NOT NULL AND class_name <> \'\' AND student_id IS NOT NULL AND student_id <> \'\'',
       ),
       query<UserRosterStudent>(
-        'SELECT class_name, student_id FROM users WHERE class_name IS NOT NULL AND class_name <> \'\' AND student_id IS NOT NULL AND student_id <> \'\'',
+        'SELECT class_name, student_id, username FROM users WHERE class_name IS NOT NULL AND class_name <> \'\' AND student_id IS NOT NULL AND student_id <> \'\'',
       ),
       query<ApprovedLeaveStudent>(
         'SELECT students.class_name, students.student_id FROM leave_slip_students students INNER JOIN leave_slips slips ON slips.id = students.slip_id WHERE slips.review_status = \'已通过\' AND COALESCE(slips.start_time, slips.created_at) < $2 AND COALESCE(slips.end_time, slips.start_time, slips.created_at) >= $1',
