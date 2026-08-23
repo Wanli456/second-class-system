@@ -19,7 +19,7 @@ export interface Activity {
   leader_phone: string;
   leader_details?: string | null;
   scope_names?: string | null;
-  scope_type?: 'department' | 'class' | null;
+  scope_type?: 'department' | 'class' | 'other_college' | null;
   scope_name?: string | null;
   activity_submitter_name?: string | null;
   activity_submitter_student_id?: string | null;
@@ -53,7 +53,7 @@ export interface ActivitySubmission {
   leader_phone: string;
   leader_details?: string | null;
   scope_names?: string | null;
-  scope_type?: 'department' | 'class' | null;
+  scope_type?: 'department' | 'class' | 'other_college' | null;
   scope_name?: string | null;
   activity_submitter_name?: string | null;
   activity_submitter_student_id?: string | null;

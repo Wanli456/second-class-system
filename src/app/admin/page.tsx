@@ -101,7 +101,7 @@ interface ScoringActivity {
   registration_end_time?: string | null;
   status: string;
   scope_names?: string | null;
-  scope_type?: 'department' | 'class' | null;
+  scope_type?: 'department' | 'class' | 'other_college' | null;
   scope_name?: string | null;
   activity_submitter_name?: string | null;
   activity_submitter_student_id?: string | null;
@@ -762,6 +762,7 @@ function AdminPage() {
               <span>实际赋分材料提交人：{a.scoring_material_submitter_name || '-'}{a.scoring_material_submitter_student_id ? `（${a.scoring_material_submitter_student_id}）` : ''}</span>
             </div>
             <div className="mt-4 flex flex-wrap gap-3 border-t border-slate-200 pt-4 text-sm">
+              {a.scope_type === 'other_college' && <div className="flex flex-wrap items-center gap-2"><Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">其他学院登记</Badge><span className="text-sm text-slate-600">主办学院：{a.scope_name || '未填写'}</span></div>}
               <div className="flex items-center gap-2"><span className="text-slate-500">赋分表：</span>{a.scoring_table_url ? <div className="flex items-center gap-2"><FilePreviewLink url={a.scoring_table_url} fileName={a.scoring_table_file_name} label="查看赋分表" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /><a href={a.scoring_table_url} download className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"><Download className="size-3" aria-hidden="true" />下载</a></div> : <span className="text-xs text-red-600">负责人尚未上传赋分表</span>}</div>
               {a.level === '校级' && <div className="flex items-center gap-2"><span className="text-slate-500">备案表照片：</span>{a.record_photo_url ? <div className="flex items-center gap-2"><FilePreviewLink url={a.record_photo_url} fileName={a.record_photo_file_name} label="查看备案表照片" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /><a href={a.record_photo_url} download className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"><Download className="size-3" aria-hidden="true" />下载</a></div> : <span className="text-xs text-red-600">未上传备案表照片（无法赋分）</span>}</div>}
             </div>

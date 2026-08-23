@@ -139,6 +139,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: '活动提交', href: '/submit', icon: Send, requiredPermission: 'canSubmitActivity' },
   { label: '提交状态', href: '/submit/status', icon: FileCheck, requiredPermission: 'canViewSubmissionStatus' },
   { label: '赋分材料', href: '/submit/scoring', icon: Award, requiredPermission: 'canSubmitScoring' },
+  { label: '其他学院登记', href: '/other-college-registration', icon: Award, requiredPermission: 'canSubmitScoring' },
   { label: '我的假条', href: '/leave-slip/mine', icon: FileCheck },
   { label: '假条上传', href: '/leave-slip/upload', icon: FileCheck, requiredPermission: 'canUploadLeave' },
   { label: '临时请假', href: '/leave-slip/temporary', icon: Send, requiredPermission: 'canStartGroupLeave' },

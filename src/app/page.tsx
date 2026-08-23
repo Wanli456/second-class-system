@@ -236,6 +236,7 @@ export default function Home() {
       { href: '/submit', label: '活动提交', detail: '提交活动基本信息、查看审核状态', icon: Send, tone: 'bg-emerald-50 text-emerald-700', show: hasPermission(user, 'canSubmitActivity') },
       { href: '/submit/status', label: '提交状态', detail: '查询活动提交进度和结果', icon: FileCheck, tone: 'bg-slate-100 text-slate-700', show: hasPermission(user, 'canViewSubmissionStatus') },
       { href: '/submit/scoring', label: '赋分材料', detail: '上传活动赋分表、备案表照片', icon: Award, tone: 'bg-amber-50 text-amber-700', show: hasPermission(user, 'canSubmitScoring') },
+      { href: '/other-college-registration', label: '其他学院登记', detail: '登记其他学院校级活动的赋分材料', icon: Award, tone: 'bg-amber-50 text-amber-700', show: hasPermission(user, 'canSubmitScoring') },
     ].filter((entry) => entry.show);
 
     // 学习竞技部：假条、晚自习、考勤工作安排。
@@ -286,6 +287,7 @@ export default function Home() {
       ...(hasPermission(user, 'canSubmitActivity') ? ['/submit'] : []),
       ...(hasPermission(user, 'canViewSubmissionStatus') ? ['/submit/status'] : []),
       ...(hasPermission(user, 'canSubmitScoring') ? ['/submit/scoring'] : []),
+      ...(hasPermission(user, 'canSubmitScoring') ? ['/other-college-registration'] : []),
       ...(hasPermission(user, 'canPublish') ? ['/admin?role=admin&tab=review'] : []),
       ...(hasPermission(user, 'canScore') ? ['/admin?role=admin&tab=scoring'] : []),
       ...(isAdmin ? ['/admin?role=admin&tab=activities', '/admin?role=admin&tab=users'] : []),
