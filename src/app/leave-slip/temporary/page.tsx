@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Upload } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
+import { PageErrorDialog } from '@/components/PageErrorDialog';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { Button } from '@/components/ui/button';
@@ -135,8 +136,7 @@ export default function TemporaryLeavePage() {
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">适用于临时性、无需人工查对的请假。提交后自动通过并立即生效，请确保名单和图片真实有效。</p>
         </header>
 
-        {error && <div role="alert" className="mb-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
-        {success && <div role="status" className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"><CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600" /><p>{success}</p></div>}
+        {success && <div role="status" className="sr-only">{success}</div>}
 
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -173,6 +173,9 @@ export default function TemporaryLeavePage() {
           </div>
         </div>
       </div>
+
+      <PageErrorDialog open={Boolean(error)} message={error} onClose={() => setError(null)} />
+      <PageErrorDialog open={Boolean(success)} message={success} tone="success" onClose={() => setSuccess(null)} />
     </DashboardLayout>
   );
 }

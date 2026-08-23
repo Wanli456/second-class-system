@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, Plus, ScanText, Upload } from 'lucide-react';
+import { AlertCircle, Plus, ScanText, Upload } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
+import { PageErrorDialog } from '@/components/PageErrorDialog';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { Button } from '@/components/ui/button';
@@ -337,8 +338,7 @@ export default function AttendanceWorkPage() {
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">按周上传部门考勤排班表：先选“周一日期”，再按星期填写每天考勤人员。查对通过后，名单内人员在对应日期不再记为晚自习缺勤。</p>
         </header>
 
-        {error && <div role="alert" className="mb-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
-        {success && <div role="status" className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"><CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600" /><p>{success}</p></div>}
+        {success && <div role="status" className="sr-only">{success}</div>}
 
         {canUpload && (
           <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -433,6 +433,9 @@ export default function AttendanceWorkPage() {
           )}
         </div>
       </div>
+
+      <PageErrorDialog open={Boolean(error)} message={error} onClose={() => setError(null)} />
+      <PageErrorDialog open={Boolean(success)} message={success} tone={success?.includes('驳回') || success?.includes('失败') ? 'warning' : 'success'} onClose={() => setSuccess(null)} />
     </DashboardLayout>
   );
 }

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { CalendarDays, ChevronDown, ChevronUp, LogIn, Search, Users } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
+import { PageErrorDialog } from '@/components/PageErrorDialog';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 
@@ -166,7 +167,7 @@ export default function EveningStudyPage() {
   const people = expanded === 'duty' ? [] : expanded === 'approved' ? approved : expanded === 'pending' ? pending : rejected;
 
   return <DashboardLayout title="晚自习请假查询" user={user}><div className="mx-auto max-w-4xl space-y-4">
-    <div className="rounded-lg border bg-white p-5 shadow-sm"><div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-teal-700" /><h2 className="font-semibold">按日期和班级查询</h2></div><div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px_auto]"><label className="text-sm font-medium">班级<input value={className} onChange={(e) => setClassName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void search()} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" placeholder="例如：计算机2101" /></label><label className="text-sm font-medium">日期<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" /></label><button onClick={() => void search()} disabled={loading} className="mt-auto inline-flex h-10 items-center justify-center gap-2 rounded-md bg-slate-900 px-4 text-sm text-white disabled:opacity-50"><Search className="h-4 w-4" />{loading ? '查询中' : '查询'}</button></div>{error && <p role="alert" className="mt-3 text-sm text-rose-600">{error}</p>}</div>
+    <div className="rounded-lg border bg-white p-5 shadow-sm"><div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-teal-700" /><h2 className="font-semibold">按日期和班级查询</h2></div><div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px_auto]"><label className="text-sm font-medium">班级<input value={className} onChange={(e) => setClassName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void search()} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" placeholder="例如：计算机2101" /></label><label className="text-sm font-medium">日期<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" /></label><button onClick={() => void search()} disabled={loading} className="mt-auto inline-flex h-10 items-center justify-center gap-2 rounded-md bg-slate-900 px-4 text-sm text-white disabled:opacity-50"><Search className="h-4 w-4" />{loading ? '查询中' : '查询'}</button></div></div>
     <div className="rounded-lg border bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-sm text-gray-600"><Users className="h-4 w-4" />{date} · {className} · 点击人数查看名单</div><div className="mt-4 grid gap-3 sm:grid-cols-4"><CountButton label="已通过" count={approved.length} active={expanded === 'approved'} onClick={() => setExpanded(expanded === 'approved' ? null : 'approved')} color="text-emerald-700" /><CountButton label="待查对" count={pending.length} active={expanded === 'pending'} onClick={() => setExpanded(expanded === 'pending' ? null : 'pending')} color="text-amber-700" /><CountButton label="已驳回" count={rejected.length} active={expanded === 'rejected'} onClick={() => setExpanded(expanded === 'rejected' ? null : 'rejected')} color="text-gray-500" /><CountButton label="考勤工作" count={dutyNames.length} active={expanded === 'duty'} onClick={() => setExpanded(expanded === 'duty' ? null : 'duty')} color="text-sky-700" /></div></div>
     {expanded === 'duty' ? (
       <div className="rounded-lg border bg-white p-5 shadow-sm">
@@ -180,7 +181,9 @@ export default function EveningStudyPage() {
     ) : expanded ? (
       <div className="rounded-lg border bg-white p-5 shadow-sm"><h3 className="font-semibold">{expanded === 'approved' ? '已通过名单' : expanded === 'pending' ? '待查对名单' : '已驳回名单'}</h3>{people.length ? <div className="mt-3 divide-y">{people.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span className="font-medium">{item.student_name}（{item.student_id}）· {item.class_name}</span><span className="text-gray-500">{item.leave_type} · {formatTime(item.start_time)} 至 {formatTime(item.end_time)}</span></div>)}</div> : <p className="mt-4 text-sm text-gray-400">暂无人员</p>}</div>
     ) : null}
-  </div></DashboardLayout>;
+  </div>
+      <PageErrorDialog open={Boolean(error)} message={error} onClose={() => setError('')} />
+    </DashboardLayout>;
 }
 
 function CountButton({ label, count, active, onClick, color }: { label: string; count: number; active: boolean; onClick: () => void; color: string }) { return <button onClick={onClick} className={`flex items-center justify-between rounded-md border p-4 text-left transition-colors ${active ? 'border-slate-900 bg-slate-50' : 'hover:bg-gray-50'}`}><span className="text-sm text-gray-600">{label}</span><span className={`flex items-center gap-2 text-xl font-semibold ${color}`}>{count}<span className="text-gray-400">{active ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</span></span></button>; }

@@ -150,5 +150,10 @@ export async function compareSlipWithOriginals(slipId: string): Promise<AutoMatc
 }
 
 function unique(values: string[]): string[] {
-  return [...new Set(values.map((item) => item.trim()).filter(Boolean))];
+  return [...new Set(values.map(stripClassSuffix).map((item) => item.trim()).filter(Boolean))];
+}
+
+function stripClassSuffix(value: string): string {
+  // 原假条中姓名可能存成“刘玉(应化2532)”，匹配时只比较姓名本身。
+  return value.replace(/\([^)]*\)/g, '').replace(/（[^）]*）/g, '').trim();
 }

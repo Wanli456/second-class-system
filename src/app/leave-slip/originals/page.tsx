@@ -116,13 +116,13 @@ export default function LeaveSlipOriginalsPage() {
     return uploaded;
   };
 
-  const handleOcr = async () => {
-    if (!imageFiles.length) { alert('请先选择原假条图片'); return; }
+  const runOcrForFiles = async (files: File[]) => {
+    if (!files.length) return;
     setOcrLoading(true);
     setOcrError('');
     setOcrLines([]);
     try {
-      const uploaded = await uploadFilesToUrls(imageFiles);
+      const uploaded = await uploadFilesToUrls(files);
 
       const res = await apiFetch('/api/ocr/analyze', {
         method: 'POST',
@@ -133,9 +133,39 @@ export default function LeaveSlipOriginalsPage() {
       if (!data.success) throw new Error(data.error || 'OCR 识别失败');
 
       const fields = data.data.fields || {};
-      if (fields.activity_name) setActivityName(String(fields.activity_name));
-      if (Array.isArray(fields.classes) && fields.classes.length) setClassNamesText(fields.classes.join('、'));
-      if (Array.isArray(fields.students) && fields.students.length) setStudentNamesText(fields.students.join('、'));
+      const rawClasses = Array.isArray(fields.classes) ? fields.classes.map(String).filter(Boolean) : [];
+      const classStudents = Array.isArray(fields.class_students)
+        ? fields.class_students as Array<{ class_name?: unknown; students?: unknown; student_ids?: unknown }>
+        : [];
+      const classes = rawClasses.length
+        ? rawClasses
+        : classStudents.map((item) => String(item.class_name || '')).filter(Boolean);
+      const rawStudents: string[] = Array.isArray(fields.students) ? fields.students.map((item: unknown) => String(item)).filter(Boolean) : [];
+      const rawIds: string[] = Array.isArray(fields.student_ids) ? fields.student_ids.map((item: unknown) => String(item)).filter(Boolean) : [];
+
+      let studentText = '';
+      if (classStudents.length) {
+        const entries: string[] = [];
+        for (const item of classStudents) {
+          const className = String(item.class_name || '');
+          const classStudentNames = Array.isArray(item.students) ? item.students.map(String).filter(Boolean) : [];
+          classStudentNames.forEach((name) => entries.push(className ? `${name}(${className})` : name));
+        }
+        studentText = entries.join('、');
+      } else if (rawStudents.length) {
+        studentText = rawStudents.map((name, index) => (
+          rawIds.length === rawStudents.length ? `${name} ${rawIds[index]}`.trim() : name
+        )).join('、');
+      }
+
+      if (fields.activity_name) {
+        const recognizedActivity = String(fields.activity_name);
+        setActivityName(recognizedActivity);
+        const match = activityOptions.find((item) => item.full_name === recognizedActivity || item.id === recognizedActivity);
+        if (match?.id) setActivityId(match.id);
+      }
+      if (classes.length) setClassNamesText(classes.join('、'));
+      if (studentText) setStudentNamesText(studentText);
       if (fields.start_time && String(fields.start_time).length >= 16) setStartTime(String(fields.start_time).slice(0, 16));
       if (fields.end_time && String(fields.end_time).length >= 16) setEndTime(String(fields.end_time).slice(0, 16));
       if (fields.suggested_notes) setNotes((previous) => previous || String(fields.suggested_notes));
@@ -145,6 +175,19 @@ export default function LeaveSlipOriginalsPage() {
     } finally {
       setOcrLoading(false);
     }
+  };
+
+  const handleOcr = async () => {
+    if (!imageFiles.length) { alert('请先选择原假条图片'); return; }
+    await runOcrForFiles(imageFiles);
+  };
+
+  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (!files.length) return;
+    setImageFiles(files);
+    void runOcrForFiles(files);
   };
 
   const handleSubmit = async () => {
@@ -224,15 +267,15 @@ export default function LeaveSlipOriginalsPage() {
               <datalist id="original-activity-options">{activityOptions.map((activity) => <option key={activity.id} value={activity.full_name}>{activity.id}</option>)}</datalist>
               <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs tabular-nums text-slate-600">已绑定活动ID：{activityId || '未选择'}（一次只能绑一个活动）</div>
               <textarea aria-label="涉及班级" placeholder="涉及班级，逗号分隔" value={classNamesText} onChange={(event) => setClassNamesText(event.target.value)} className="min-h-16 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600" />
-              <textarea aria-label="涉及学生" placeholder="涉及学生姓名/学号，逗号分隔" value={studentNamesText} onChange={(event) => setStudentNamesText(event.target.value)} className="min-h-16 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600" />
+              <textarea aria-label="涉及学生" placeholder="姓名(班级)，如：刘玉(应化2532)、宣锐(应急2531)" value={studentNamesText} onChange={(event) => setStudentNamesText(event.target.value)} className="min-h-16 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600" />
               <div className="grid grid-cols-2 gap-2">
                 <input aria-label="开始时间" type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-teal-600" />
                 <input aria-label="结束时间" type="datetime-local" value={endTime} onChange={(event) => setEndTime(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-teal-600" />
               </div>
               <textarea aria-label="备注" placeholder="备注（可选）" value={notes} onChange={(event) => setNotes(event.target.value)} className="min-h-16 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-teal-600" />
-              <label className="block cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 transition-colors hover:border-teal-400">
+              <label className="relative block cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 transition-colors hover:border-teal-400">
                 <span className="flex items-center gap-2"><Upload className="size-4 text-teal-700" /><span className="min-w-0 flex-1 truncate text-xs text-slate-600">{imageFiles.length ? `已选 ${imageFiles.length} 张截图` : '上传原假条图片（多张截图可一次全选）'}</span></span>
-                <input type="file" accept="image/*" multiple className="sr-only" onChange={(event) => setImageFiles(Array.from(event.target.files || []))} />
+                <input type="file" accept="image/*" multiple className="sr-only" onChange={handleImageChange} />
               </label>
               <Button type="button" variant="outline" onClick={handleOcr} disabled={ocrLoading || !imageFiles.length} className="w-full bg-white disabled:opacity-50"><ScanText className="size-4" />{ocrLoading ? 'OCR 识别中...' : 'OCR 自动识别'}</Button>
               {ocrError && <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{ocrError}</p>}

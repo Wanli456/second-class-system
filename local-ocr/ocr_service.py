@@ -26,6 +26,53 @@ def load_engine():
         return RapidOCR()
 
 
+def _extract_table_class_students(text: str):
+    """解析原假条中“班级 / 姓名 / 联系方式 / 辅导员电话”这类表格。
+
+    班级形如“应化2532”“应急2531”（中文 + 4位数字，且不一定带“班”字），
+    姓名是连续的 2-4 字中文，电话号码是 1 开头的 11 位数字。
+    """
+    lines = [line.strip() for line in text.splitlines()]
+    class_pattern = re.compile(r"^[\u4e00-\u9fff]{1,8}\d{4}$")
+    name_pattern = re.compile(r"^[\u4e00-\u9fff]{2,4}$")
+    phone_pattern = re.compile(r"^1\d{10}$")
+    stop_names = {
+        "请假条", "此致", "敬礼", "老师", "同学", "学生", "学生会", "学习", "竞技",
+        "部长", "辅导员", "姓名", "班级", "联系方式", "备注", "日期", "批准", "您好",
+        "情况", "属实", "名单", "电话", "签名", "签字", "公章", "老师签字", "情况属实",
+        "生会", "校学生", "情属层", "校学生会", "学习意",
+    }
+    result = []
+    current_class_name = None
+    current_names = []
+    seen_classes = set()
+
+    def flush():
+        nonlocal current_class_name, current_names
+        if current_class_name and current_class_name not in seen_classes:
+            seen_classes.add(current_class_name)
+            clean_names = [name for name in current_names if name not in stop_names]
+            if clean_names:
+                result.append({"class_name": current_class_name, "students": clean_names, "student_ids": []})
+        current_class_name = None
+        current_names = []
+
+    for line in lines:
+        if class_pattern.match(line):
+            flush()
+            current_class_name = line
+            current_names = []
+            continue
+        if phone_pattern.match(line):
+            continue
+        if current_class_name and name_pattern.match(line) and line not in stop_names:
+            if line not in current_names:
+                current_names.append(line)
+
+    flush()
+    return result
+
+
 def extract_class_students(text: str, activity_name: str):
     """把整段文字按“班级”切块，提取 班级 -> 学生名单 的映射。"""
     flat = re.sub(r"\s+", " ", text).strip()
@@ -35,7 +82,7 @@ def extract_class_students(text: str, activity_name: str):
     class_pattern = re.compile(r"([\u4e00-\u9fffA-Za-z0-9]{2,12}?\d{2,4}班)")
     matches = list(class_pattern.finditer(flat))
     if not matches:
-        return []
+        return _extract_table_class_students(text)
 
     seen_classes = set()
     result = []
@@ -117,10 +164,66 @@ def extract_class_students(text: str, activity_name: str):
         student_ids = ids if len(ids) == len(names) else []
 
         result.append({"class_name": class_name, "students": names, "student_ids": student_ids})
+    if result:
+        return result
+    return _extract_table_class_students(text)
+
+
+def _extract_table_class_students_with_boxes(raw_lines):
+    """基于文字坐标解析“班级 / 姓名 / 联系方式 / 辅导员姓名...”表格。
+
+    学生姓名列在 x < 500，辅导员姓名列在 x >= 500，从而避免把辅导员名
+    当成学生名。班级是全中文 + 4 位数字，如“应化2532”。
+    """
+    class_pattern = re.compile(r"^[\u4e00-\u9fff]{1,8}\d{4}$")
+    name_pattern = re.compile(r"^[\u4e00-\u9fff]{2,4}$")
+    phone_pattern = re.compile(r"^1\d{10}$")
+    stop_names = {
+        "请假条", "此致", "敬礼", "老师", "同学", "学生", "学生会", "学习", "竞技",
+        "部长", "辅导员", "姓名", "班级", "联系方式", "备注", "日期", "批准", "您好",
+        "情况", "属实", "名单", "电话", "签名", "签字", "公章", "老师签字", "情况属实",
+        "生会", "校学生", "情属层", "校学生会", "学习意",
+    }
+
+    ordered = sorted(raw_lines, key=lambda item: (item["box"][0][1], item["box"][0][0]))
+    entries = []
+    for item in ordered:
+        text = item["text"].strip()
+        x = item["box"][0][0]
+        y = item["box"][0][1]
+        entries.append((x, y, text))
+
+    class_entries = []
+    for x, y, text in entries:
+        if class_pattern.match(text) and x < 500:
+            class_entries.append({"name": text, "y": y, "x": x})
+    class_entries.sort(key=lambda item: (item["y"], item["x"]))
+
+    class_order = []
+    for item in class_entries:
+        if item["name"] not in class_order:
+            class_order.append(item["name"])
+
+    students_by_class = {name: [] for name in class_order}
+    for x, y, text in entries:
+        if not name_pattern.match(text) or text in stop_names or x >= 500:
+            continue
+        candidates = [item for item in class_entries if item["y"] <= y + 20]
+        if not candidates:
+            continue
+        nearest_class = max(candidates, key=lambda item: item["y"])
+        class_name = nearest_class["name"]
+        if class_name in students_by_class and text not in students_by_class[class_name]:
+            students_by_class[class_name].append(text)
+
+    result = []
+    for class_name in class_order:
+        if students_by_class[class_name]:
+            result.append({"class_name": class_name, "students": students_by_class[class_name], "student_ids": []})
     return result
 
 
-def parse_fields(text: str):
+def parse_fields(text: str, raw_lines=None):
     fields = {
         "activity_name": "",
         "classes": [],
@@ -142,7 +245,12 @@ def parse_fields(text: str):
         fields["activity_name"] = activity_match.group(1).strip()
 
     # 班级与学生：按 “班级 -> 学生” 切块，既解决多班筛选，也避免班级名被截断。
-    class_students = extract_class_students(text, fields["activity_name"])
+    if raw_lines is not None:
+        class_students = _extract_table_class_students_with_boxes(raw_lines)
+        if not class_students:
+            class_students = extract_class_students(text, fields["activity_name"])
+    else:
+        class_students = extract_class_students(text, fields["activity_name"])
     if class_students:
         fields["class_students"] = class_students
         fields["classes"] = [item["class_name"] for item in class_students]
@@ -203,18 +311,25 @@ def main() -> int:
     ocr_result, _ = engine(str(image_path))
 
     lines = []
+    raw_lines = []
     if ocr_result:
         for box, text, score in ocr_result:
             if text is None:
                 continue
-            lines.append({"text": str(text).strip(), "score": float(score) if score is not None else None})
+            text_value = str(text).strip()
+            lines.append({"text": text_value, "score": float(score) if score is not None else None})
+            raw_lines.append({
+                "text": text_value,
+                "score": float(score) if score is not None else None,
+                "box": [[int(x), int(y)] for x, y in box],
+            })
 
     full_text = "\n".join(line["text"] for line in lines)
     fields = {"activity_name": "", "classes": [], "students": [], "start_time": "", "end_time": "",
               "counselor_signature": False, "official_seal": False, "teacher_signature": False,
               "cover_line": "", "suggested_notes": ""}
     if lines:
-        fields = parse_fields(full_text)
+        fields = parse_fields(full_text, raw_lines)
 
     result = {"ok": True, "lines": lines, "fields": fields, "engine": "RapidOCR"}
     output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -2,13 +2,14 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { AlertCircle, CheckCircle2, FileCheck2, Plus, ScanText, Send, Trash2, Upload } from 'lucide-react';
+import { AlertCircle, FileCheck2, Minus, Plus, ScanText, Send, Trash2, Upload, X } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
+import { PageErrorDialog } from '@/components/PageErrorDialog';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 
 interface StudentRow { student_id: string; student_name: string; class_name: string; }
@@ -33,7 +34,6 @@ function FieldBadge({ kind, label }: { kind: 'auto' | 'manual'; label?: string }
 }
 
 export default function LeaveSlipUploadPage() {
-  const router = useRouter();
   const { user, initialized } = useUser();
   const [slipType, setSlipType] = useState<(typeof SLIP_TYPES)[number]['value']>('手写假条');
   const [leaveType, setLeaveType] = useState('事假');
@@ -44,6 +44,8 @@ export default function LeaveSlipUploadPage() {
   const [activityOptions, setActivityOptions] = useState<ActivityOption[]>([]);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewZoom, setPreviewZoom] = useState(1);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrError, setOcrError] = useState('');
   const [ocrLines, setOcrLines] = useState<Array<{ text: string; score?: number; image?: number }>>([]);
@@ -81,6 +83,8 @@ export default function LeaveSlipUploadPage() {
 
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
+    // 清空原生 input，避免选择完成后浏览器聚焦隐藏 input 导致页面滚动/高度异常。
+    event.target.value = '';
     if (!files.length) return;
     if (files.some((file) => file.size > 5 * 1024 * 1024)) {
       setError('单张假条图片不能超过 5MB');
@@ -96,6 +100,26 @@ export default function LeaveSlipUploadPage() {
     // 选完图片就自动识别，所有假条类型都走同一个 AI/OCR 入口。
     void runOcrForFiles(allFiles);
   };
+
+  const removeImage = (index: number) => {
+    setImageFiles((previous) => previous.filter((_, itemIndex) => itemIndex !== index));
+    setImagePreviews((previous) => previous.filter((_, itemIndex) => itemIndex !== index));
+    setOcrLines([]);
+    setOcrError('');
+    setOcrNotice('');
+  };
+
+  const openImagePreview = (src: string) => {
+    setPreviewZoom(1);
+    setPreviewImage(src);
+  };
+
+  const closeImagePreview = () => {
+    setPreviewImage(null);
+    setPreviewZoom(1);
+  };
+
+  const zoomImageBy = (delta: number) => setPreviewZoom((current) => Math.min(4, Math.max(1, Number((current + delta).toFixed(2)))));
 
   const uploadFilesToUrls = async (files: File[]) => {
     const uploaded: Array<{ url: string; name: string }> = [];
@@ -245,7 +269,6 @@ export default function LeaveSlipUploadPage() {
       setCounselorSignature(false);
       setOfficialSeal(false);
       setTeacherSignature(false);
-      window.setTimeout(() => router.push('/leave-slip/query'), 1500);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : '提交失败');
     } finally {
@@ -290,8 +313,7 @@ export default function LeaveSlipUploadPage() {
           </ul>
         </div>
 
-        {error && <div role="alert" className="mb-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
-        {success && <div role="status" className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"><CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600" /><p>{success}，即将跳转到查询页</p></div>}
+        {success && <div role="status" className="sr-only">{success}</div>}
 
         <div className="space-y-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <fieldset>
@@ -358,7 +380,7 @@ export default function LeaveSlipUploadPage() {
             {slipType === '其他请假' && (
               <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-700">请上传社团、比赛、培训、虚拟工作室等相关截图（至少 1 张）；请假类型可选<strong>社团、比赛、培训、虚拟工作室</strong>；该类型不关联系统活动。</p>
             )}
-            <label className="mt-4 block cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 transition-colors hover:border-teal-400 hover:bg-teal-50/40">
+            <label className="relative mt-4 block cursor-pointer rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 transition-colors hover:border-teal-400 hover:bg-teal-50/40">
               <span className="flex items-center gap-3">
                 <span className="flex size-10 items-center justify-center rounded-lg bg-white text-teal-700 shadow-sm ring-1 ring-slate-200"><Upload className="size-4" /></span>
                 <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-slate-800">{imageFiles.length ? `已选 ${imageFiles.length} 张图片` : '选择假条图片（同一张假条的多段截图可一次全选）'}</span><span className="mt-0.5 block text-xs text-slate-500">支持常见图片格式，单张不超过 5MB</span></span>
@@ -368,7 +390,25 @@ export default function LeaveSlipUploadPage() {
             </label>
             {imagePreviews.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
-                {imagePreviews.map((preview, index) => <img key={`${preview.slice(0, 32)}-${index}`} src={preview} alt={`假条预览 ${index + 1}`} className="size-24 rounded-md border border-slate-200 object-contain" />)}
+                {imagePreviews.map((preview, index) => (
+                  <div key={`${preview.slice(0, 32)}-${index}`} className="relative">
+                    <img
+                      src={preview}
+                      alt={`假条预览 ${index + 1}`}
+                      onClick={() => openImagePreview(preview)}
+                      className="size-24 cursor-zoom-in rounded-md border border-slate-200 object-contain hover:border-teal-500 hover:ring-2 hover:ring-teal-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      aria-label={`删除第 ${index + 1} 张假条图片`}
+                      title="删除图片"
+                      className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-slate-900 text-white shadow hover:bg-rose-600"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
             <>
@@ -416,7 +456,38 @@ export default function LeaveSlipUploadPage() {
             <p className="text-xs text-slate-500 sm:ml-auto">上传后由考勤组长查对</p>
           </div>
         </div>
+
+        <Dialog open={Boolean(previewImage)} onOpenChange={(open) => { if (!open) closeImagePreview(); }}>
+          <DialogContent
+            showCloseButton={false}
+            className="w-fit max-w-[calc(100vw-2rem)] gap-0 overflow-hidden rounded-lg border border-slate-800 bg-slate-950 p-0 sm:max-w-[calc(100vw-2rem)]"
+          >
+            <DialogTitle className="sr-only">假条图片放大预览</DialogTitle>
+            <div className="relative max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] overflow-auto">
+              <div style={{ zoom: previewZoom }}>
+                {previewImage && (
+                  <img
+                    src={previewImage}
+                    alt="假条图片放大预览"
+                    className="block h-auto max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] w-auto cursor-zoom-in"
+                    onClick={() => setPreviewZoom((current) => current === 1 ? 2 : 1)}
+                  />
+                )}
+              </div>
+              <div className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-slate-950/70 p-1 text-white backdrop-blur">
+                <Button type="button" variant="ghost" size="icon" className="size-8 text-white hover:bg-white/10" onClick={() => zoomImageBy(-0.25)} aria-label="缩小图片" disabled={previewZoom <= 1}><Minus className="size-4" /></Button>
+                <span className="w-12 text-center text-xs font-semibold tabular-nums text-white">{Math.round(previewZoom * 100)}%</span>
+                <Button type="button" variant="ghost" size="icon" className="size-8 text-white hover:bg-white/10" onClick={() => zoomImageBy(0.25)} aria-label="放大图片" disabled={previewZoom >= 4}><Plus className="size-4" /></Button>
+                <Button type="button" variant="ghost" className="h-8 px-2 text-xs font-semibold text-white hover:bg-white/10" onClick={() => setPreviewZoom(1)}>适合窗口</Button>
+                <Button type="button" variant="ghost" size="icon" className="size-8 text-white hover:bg-white/10" onClick={closeImagePreview} aria-label="关闭预览"><X className="size-4" /></Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
+
+      <PageErrorDialog open={Boolean(error)} message={error} onClose={() => setError(null)} />
+      <PageErrorDialog open={Boolean(success)} message={success} tone={success?.includes('疑似') ? 'warning' : 'success'} onClose={() => setSuccess(null)} />
     </DashboardLayout>
   );
 }

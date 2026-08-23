@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { FileText } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
+import { PageErrorDialog } from '@/components/PageErrorDialog';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { Button } from '@/components/ui/button';
@@ -85,8 +86,6 @@ export default function MyLeaveSlipsPage() {
           <Button type="button" variant="outline" onClick={() => void load()} disabled={loading}>{loading ? '刷新中...' : '刷新'}</Button>
         </header>
 
-        {error && <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</div>}
-
         <div className="space-y-4">
           {!loading && slips.length === 0 && !error ? <div className="rounded-xl border border-dashed border-slate-300 bg-white py-12 text-center text-sm text-slate-400">暂无与你相关的假条</div> : null}
           {slips.map((slip) => {
@@ -112,6 +111,8 @@ export default function MyLeaveSlipsPage() {
           })}
         </div>
       </div>
+
+      <PageErrorDialog open={Boolean(error)} message={error} onClose={() => setError('')} />
     </DashboardLayout>
   );
 }
