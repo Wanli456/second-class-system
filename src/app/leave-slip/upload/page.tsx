@@ -33,6 +33,36 @@ function FieldBadge({ kind, label }: { kind: 'auto' | 'manual'; label?: string }
   return <span className="ml-1 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">{label || '需手填/手选'}</span>;
 }
 
+function normalizeClassName(value: string): string {
+  return value.replace(/\s+/g, '').replace(/班$/g, '');
+}
+
+function isSubsequence(shortText: string, fullText: string): boolean {
+  let index = 0;
+  for (const char of fullText) {
+    if (shortText[index] === char) index += 1;
+    if (index === shortText.length) return true;
+  }
+  return index === shortText.length;
+}
+
+function classTextMatches(recognized: string | null | undefined, official: string | null | undefined): boolean {
+  const normalizedRecognized = normalizeClassName(String(recognized || ''));
+  const normalizedOfficial = normalizeClassName(String(official || ''));
+  if (!normalizedRecognized || !normalizedOfficial) return false;
+  if (normalizedRecognized === normalizedOfficial) return true;
+  if (normalizedOfficial.includes(normalizedRecognized) || normalizedRecognized.includes(normalizedOfficial)) return true;
+  const recognizedNumber = normalizedRecognized.match(/(\d+)$/)?.[1] || '';
+  const officialNumber = normalizedOfficial.match(/(\d+)$/)?.[1] || '';
+  if (recognizedNumber && recognizedNumber === officialNumber) {
+    const recognizedPrefix = normalizedRecognized.slice(0, -recognizedNumber.length);
+    const officialPrefix = normalizedOfficial.slice(0, -officialNumber.length);
+    if (!recognizedPrefix || !officialPrefix) return true;
+    if (isSubsequence(recognizedPrefix, officialPrefix)) return true;
+  }
+  return false;
+}
+
 export default function LeaveSlipUploadPage() {
   const { user, initialized } = useUser();
   const [slipType, setSlipType] = useState<(typeof SLIP_TYPES)[number]['value']>('手写假条');
@@ -156,13 +186,14 @@ export default function LeaveSlipUploadPage() {
       const currentClass = (user?.className || '').replace(/\s+/g, '');
       const recognizedClasses = classes.map((item) => item.replace(/\s+/g, '')).filter(Boolean);
 
-      const matchedClassEntry = classStudents.find((entry) => String(entry.class_name || '').replace(/\s+/g, '') === currentClass);
+      const matchedClassEntry = classStudents.find((entry) => classTextMatches(entry.class_name, currentClass));
       const matchedNames: string[] = Array.isArray(matchedClassEntry?.students) ? matchedClassEntry.students.map(String) : [];
       const matchedIds: string[] = Array.isArray(matchedClassEntry?.student_ids) ? matchedClassEntry.student_ids.map(String) : [];
       const studentsToFill = matchedNames.length ? matchedNames : names;
       const shouldUseMatchedIds = Boolean(matchedClassEntry) && matchedIds.length === studentsToFill.length;
+      const singleClassMatches = recognizedClasses.length === 1 && classTextMatches(recognizedClasses[0], currentClass);
       const shouldAutoFill = Boolean(currentClass)
-        && (matchedClassEntry ? matchedNames.length > 0 : recognizedClasses.length === 1 && recognizedClasses[0] === currentClass);
+        && (matchedClassEntry ? matchedNames.length > 0 : singleClassMatches);
 
       if (recognizedClasses.length > 1) {
         setOcrNotice(
@@ -170,7 +201,7 @@ export default function LeaveSlipUploadPage() {
             ? `识别到多个班级（${classes.join('、')}），已自动只把本班「${matchedClassEntry.class_name}」的同学填入下方名单${shouldUseMatchedIds ? '，姓名和学号一起填入' : '，学号请手填'}，请核对。`
             : `识别到多个班级（${classes.join('、')}），但没有识别到本班「${user?.className || '未设置班级'}」，请手动填写本班同学。`,
         );
-      } else if (recognizedClasses.length === 1 && currentClass && recognizedClasses[0] === currentClass) {
+      } else if (recognizedClasses.length === 1 && currentClass && singleClassMatches) {
         setOcrNotice(`识别到本班「${classes[0]}」的同学，已自动填入下方名单${shouldUseMatchedIds ? '（姓名和学号）' : ''}，请核对后补全学号。`);
       } else if (recognizedClasses.length === 1) {
         setOcrNotice(`图片识别到的是「${classes[0]}」，但当前账号是「${user?.className || '未设置班级'}」，为避免填错班，系统没有自动填入，请手动填写。`);

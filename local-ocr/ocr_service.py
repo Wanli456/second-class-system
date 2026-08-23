@@ -170,14 +170,16 @@ def extract_class_students(text: str, activity_name: str):
 
 
 def _extract_table_class_students_with_boxes(raw_lines):
-    """基于文字坐标解析“班级 / 姓名 / 联系方式 / 辅导员姓名...”表格。
+    """基于文字坐标解析“班级 / 学号 / 姓名 / 联系方式 / 辅导员姓名...”表格。
 
-    学生姓名列在 x < 500，辅导员姓名列在 x >= 500，从而避免把辅导员名
-    当成学生名。班级是全中文 + 4 位数字，如“应化2532”。
+    学生姓名和学号都取 x < 500 的列，辅导员姓名/辅导员电话在右侧
+    x >= 500，不纳入学生名单。一行里学号数量与姓名数量一致时，按
+    从左到右顺序一一对应；不一致时只保留姓名，避免张冠李戴。
     """
-    class_pattern = re.compile(r"^[\u4e00-\u9fff]{1,8}\d{4}$")
+    class_pattern = re.compile(r"(^[\u4e00-\u9fffA-Za-z0-9]{1,12}班$|^[\u4e00-\u9fff]{1,8}\d{4}$)")
     name_pattern = re.compile(r"^[\u4e00-\u9fff]{2,4}$")
     phone_pattern = re.compile(r"^1\d{10}$")
+    id_pattern = re.compile(r"^\d{8,12}$")
     stop_names = {
         "请假条", "此致", "敬礼", "老师", "同学", "学生", "学生会", "学习", "竞技",
         "部长", "辅导员", "姓名", "班级", "联系方式", "备注", "日期", "批准", "您好",
@@ -185,13 +187,25 @@ def _extract_table_class_students_with_boxes(raw_lines):
         "生会", "校学生", "情属层", "校学生会", "学习意",
     }
 
-    ordered = sorted(raw_lines, key=lambda item: (item["box"][0][1], item["box"][0][0]))
     entries = []
-    for item in ordered:
-        text = item["text"].strip()
-        x = item["box"][0][0]
-        y = item["box"][0][1]
+    for item in raw_lines:
+        text = str(item.get("text", "")).strip()
+        if not text:
+            continue
+        box = item.get("box")
+        if not box or not box[0]:
+            continue
+        x = int(box[0][0])
+        y = int(box[0][1])
         entries.append((x, y, text))
+    entries.sort(key=lambda entry: (entry[1], entry[0]))
+
+    rows = []
+    for x, y, text in entries:
+        if not rows or y - rows[-1]["max_y"] > 20:
+            rows.append({"min_y": y, "max_y": y, "items": []})
+        rows[-1]["max_y"] = max(rows[-1]["max_y"], y)
+        rows[-1]["items"].append((x, y, text))
 
     class_entries = []
     for x, y, text in entries:
@@ -204,22 +218,49 @@ def _extract_table_class_students_with_boxes(raw_lines):
         if item["name"] not in class_order:
             class_order.append(item["name"])
 
-    students_by_class = {name: [] for name in class_order}
-    for x, y, text in entries:
-        if not name_pattern.match(text) or text in stop_names or x >= 500:
-            continue
-        candidates = [item for item in class_entries if item["y"] <= y + 20]
+    students_by_class = {name: {"students": [], "student_ids": []} for name in class_order}
+
+    for row in rows:
+        row_y = row["max_y"]
+        candidates = [item for item in class_entries if item["y"] <= row_y + 20]
         if not candidates:
             continue
         nearest_class = max(candidates, key=lambda item: item["y"])
         class_name = nearest_class["name"]
-        if class_name in students_by_class and text not in students_by_class[class_name]:
-            students_by_class[class_name].append(text)
+        if class_name not in students_by_class:
+            continue
+
+        row_items = sorted(row["items"], key=lambda entry: entry[0])
+        names_in_row = []
+        ids_in_row = []
+        for x, y, text in row_items:
+            if x >= 500:
+                continue
+            if name_pattern.match(text) and text not in stop_names:
+                if text not in names_in_row:
+                    names_in_row.append(text)
+            elif id_pattern.match(text) and not phone_pattern.match(text):
+                if text not in ids_in_row:
+                    ids_in_row.append(text)
+
+        if not names_in_row:
+            continue
+        paired_ids = ids_in_row if len(ids_in_row) == len(names_in_row) else []
+        for index, name in enumerate(names_in_row):
+            if name not in students_by_class[class_name]["students"]:
+                students_by_class[class_name]["students"].append(name)
+                students_by_class[class_name]["student_ids"].append(paired_ids[index] if paired_ids else "")
 
     result = []
     for class_name in class_order:
-        if students_by_class[class_name]:
-            result.append({"class_name": class_name, "students": students_by_class[class_name], "student_ids": []})
+        entry = students_by_class[class_name]
+        if entry["students"]:
+            student_ids = [sid for sid in entry["student_ids"] if sid]
+            result.append({
+                "class_name": class_name,
+                "students": entry["students"],
+                "student_ids": student_ids if len(student_ids) == len(entry["students"]) else [],
+            })
     return result
 
 
