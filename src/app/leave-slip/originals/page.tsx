@@ -68,6 +68,10 @@ function formatStudentEntry(studentId: string, className: string, name: string):
   return [studentId.trim(), className.trim(), name.trim()].join('｜');
 }
 
+function getClassNamesFromStudents(entries: string[]): string[] {
+  return [...new Set(entries.map((entry) => entry.split('｜')[1]).filter(Boolean))];
+}
+
 export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: 'submit' | 'maintain' }) {
   const { user, initialized } = useUser();
   const isSubmitMode = mode === 'submit';
@@ -76,7 +80,6 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
   const [activityName, setActivityName] = useState('');
   const [activityId, setActivityId] = useState('');
   const [activityOptions, setActivityOptions] = useState<ActivityOption[]>([]);
-  const [classNamesText, setClassNamesText] = useState('');
   const [studentNamesText, setStudentNamesText] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
@@ -151,13 +154,9 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
       if (!data.success) throw new Error(data.error || 'OCR 识别失败');
 
       const fields = data.data.fields || {};
-      const rawClasses = Array.isArray(fields.classes) ? fields.classes.map(String).filter(Boolean) : [];
       const classStudents = Array.isArray(fields.class_students)
         ? fields.class_students as Array<{ class_name?: unknown; students?: unknown; student_ids?: unknown }>
         : [];
-      const classes = rawClasses.length
-        ? rawClasses
-        : classStudents.map((item) => String(item.class_name || '')).filter(Boolean);
       const rawStudents: string[] = Array.isArray(fields.students) ? fields.students.map((item: unknown) => String(item)).filter(Boolean) : [];
       const rawIds: string[] = Array.isArray(fields.student_ids) ? fields.student_ids.map((item: unknown) => String(item)).filter(Boolean) : [];
 
@@ -181,7 +180,6 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
         const match = activityOptions.find((item) => item.full_name === recognizedActivity || item.id === recognizedActivity);
         if (match?.id) setActivityId(match.id);
       }
-      if (classes.length) setClassNamesText(classes.join('、'));
       if (studentText) setStudentNamesText(studentText);
       if (fields.start_time && String(fields.start_time).length >= 16) setStartTime(String(fields.start_time).slice(0, 16));
       if (fields.end_time && String(fields.end_time).length >= 16) setEndTime(String(fields.end_time).slice(0, 16));
@@ -221,13 +219,14 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
     setSubmitSuccess('');
     try {
       const uploaded = imageFiles.length ? await uploadFilesToUrls(imageFiles) : [];
+      const classNames = getClassNamesFromStudents(studentEntries);
       const res = await apiFetch('/api/leave-slips/originals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           activity_id: activityId.trim() || null,
           activity_name: activityName.trim() || null,
-          class_names: classNamesText.split(/[,，、\n]/).map((item) => item.trim()).filter(Boolean),
+          class_names: classNames,
           student_names: studentEntries,
           start_time: startTime ? new Date(startTime).toISOString() : null,
           end_time: endTime ? new Date(endTime).toISOString() : null,
@@ -242,7 +241,6 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
       if (!data.success) throw new Error(data.error || '保存失败');
       setActivityId('');
       setActivityName('');
-      setClassNamesText('');
       setStudentNamesText('');
       setStartTime('');
       setEndTime('');
@@ -294,8 +292,8 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
               </label>
               <datalist id="original-activity-options">{activityOptions.map((activity) => <option key={activity.id} value={activity.full_name}>{activity.id}</option>)}</datalist>
               <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs tabular-nums text-slate-600">已绑定活动 ID：<span className="font-medium text-slate-800">{activityId || '未选择'}</span></div>
-              <div className="grid gap-4 sm:grid-cols-2"><label className="block space-y-2"><span className="text-sm font-medium text-slate-800">涉及班级</span><textarea aria-label="涉及班级" placeholder="多个班级用逗号分隔" value={classNamesText} onChange={(event) => setClassNamesText(event.target.value)} className="min-h-28 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label><label className="block space-y-2"><span className="text-sm font-medium text-slate-800">涉及学生（学号｜班级｜姓名）</span><textarea aria-label="涉及学生的学号、班级和姓名" placeholder={'每行一名学生，例如：\n20250001｜应化2532｜刘玉\n20250002｜应急2531｜宣锐'} value={studentNamesText} onChange={(event) => setStudentNamesText(event.target.value)} className="min-h-28 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label></div>
-              <p className="-mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">每行只填写一名学生，按 <span className="font-medium text-slate-800">学号｜班级｜姓名</span> 顺序使用竖线分隔。三项信息会按同一行一一对应保存，缺少任一项不能提交；OCR 识别后也会按此顺序回填。</p>
+              <label className="block space-y-2"><span className="text-sm font-medium text-slate-800">涉及学生（学号｜班级｜姓名）</span><textarea aria-label="涉及学生的学号、班级和姓名" placeholder={'每行一名学生，例如：\n20250001｜应化2532｜刘玉\n20250002｜应急2531｜宣锐'} value={studentNamesText} onChange={(event) => setStudentNamesText(event.target.value)} className="min-h-32 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label>
+              <p className="-mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">每行只填写一名学生，按 <span className="font-medium text-slate-800">学号｜班级｜姓名</span> 顺序使用竖线分隔。三项信息会按同一行一一对应保存，缺少任一项不能提交；系统会从每行学生信息自动汇总涉及班级，OCR 识别后也会按此顺序回填。</p>
               <div className="grid grid-cols-2 gap-2">
                 <input aria-label="开始时间" type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-teal-600" />
                 <input aria-label="结束时间" type="datetime-local" value={endTime} onChange={(event) => setEndTime(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-teal-600" />
