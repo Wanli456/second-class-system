@@ -298,7 +298,10 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
                 <span className="flex items-center gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white text-teal-700 shadow-sm"><Upload className="size-4" /></span><span className="min-w-0 flex-1"><span className="block text-sm font-medium text-slate-800">选择原假条图片</span><span className="mt-1 block truncate text-xs text-slate-500">{imageFiles.length ? `已选择 ${imageFiles.length} 张图片` : '支持一次选择多张截图'}</span></span></span>
                 <input type="file" accept="image/*" multiple className="sr-only" onChange={handleImageChange} />
               </label>
-              <div className="grid gap-3"><Button type="button" onClick={handleSubmit} disabled={saving || ocrLoading} className="h-11 bg-teal-700 hover:bg-teal-800"><Plus className="size-4" />{ocrLoading ? '自动识别中...' : saving ? '提交中...' : '提交原假条'}</Button></div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Button type="button" variant="outline" onClick={() => void runOcrForFiles(imageFiles)} disabled={ocrLoading || !imageFiles.length} className="h-11 bg-white">自动识别</Button>
+                <Button type="button" onClick={handleSubmit} disabled={saving || ocrLoading} className="h-11 bg-teal-700 hover:bg-teal-800"><Plus className="size-4" />{ocrLoading ? '自动识别中...' : saving ? '提交中...' : '提交原假条'}</Button>
+              </div>
               {ocrError && <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{ocrError}</p>}
               {submitSuccess && <p className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"><CheckCircle2 className="size-4 shrink-0" />{submitSuccess}</p>}
               {ocrLines.length > 0 && (

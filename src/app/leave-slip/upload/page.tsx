@@ -447,6 +447,7 @@ export default function LeaveSlipUploadPage() {
             )}
             <>
               {ocrLoading && <p className="mt-3 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-700">图片自动识别中，请稍候…</p>}
+              <Button type="button" variant="outline" onClick={() => void runOcrForFiles(imageFiles)} disabled={ocrLoading || !imageFiles.length} className="bg-white">自动识别</Button>
               {ocrError && <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{ocrError}（识别失败可手动填写，不影响提交）</p>}
               {ocrLines.length > 0 && (
                 <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">

@@ -382,6 +382,7 @@ export default function AttendanceWorkPage() {
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
               {ocrLoading && <p className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-700">图片自动识别中，请稍候…</p>}
+              <Button type="button" variant="outline" onClick={() => void runOcr(imageFiles)} disabled={ocrLoading || !imageFiles.length} className="bg-white">自动识别</Button>
               <Button type="button" onClick={() => void submit()} disabled={submitting} className="bg-slate-950 hover:bg-slate-800"><Plus className="size-4" />{submitting ? '提交中...' : (editingId ? '保存修改' : '提交安排')}</Button>
             </div>
             {ocrLines.length > 0 && (
