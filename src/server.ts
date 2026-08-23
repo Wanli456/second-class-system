@@ -31,6 +31,7 @@ app.prepare().then(async () => {
 
   const server = createServer(async (req, res) => {
     try {
+      if (dev) res.setHeader('Cache-Control', 'no-store, max-age=0');
       const parsedUrl = parse(req.url!, true);
       await handle(req, res, parsedUrl);
     } catch (err) {
