@@ -12,27 +12,31 @@ type PermissionKey =
   | 'canSubmitActivity'
   | 'canViewSubmissionStatus'
   | 'canSubmitScoring'
+  | 'canRegisterOtherCollege'
   | 'canReviewLeave'
   | 'canViewEveningStudy'
   | 'canStartGroupLeave'
   | 'canManageAttendanceWork'
   | 'canUploadLeave'
   | 'canQueryLeave'
-  | 'canManageOriginalLeave';
+  | 'canManageOriginalLeave'
+  | 'canSubmitOriginalLeave';
 
 const PERMISSION_LABELS: Record<PermissionKey, string> = {
   canPublish: '活动审核权限',
   canScore: '活动赋分权限',
   canSubmitActivity: '活动提交权限',
   canViewSubmissionStatus: '查看提交状态权限',
-  canSubmitScoring: '赋分材料/其他学院登记权限',
+  canSubmitScoring: '赋分材料权限',
+  canRegisterOtherCollege: '其他学院登记权限',
   canReviewLeave: '假条查对权限',
   canViewEveningStudy: '晚自习查询权限',
   canStartGroupLeave: '发起集体请假权限',
   canManageAttendanceWork: '考勤工作安排权限',
   canUploadLeave: '假条上传权限',
   canQueryLeave: '请假查询权限',
-  canManageOriginalLeave: '提交/维护原假条权限',
+  canSubmitOriginalLeave: '提交原假条权限',
+  canManageOriginalLeave: '维护原假条权限',
 };
 
 type ManagedUser = {

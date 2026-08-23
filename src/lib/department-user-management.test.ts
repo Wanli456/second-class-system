@@ -33,6 +33,7 @@ assert.deepEqual(getEditablePermissionKeys(learningManager, { id: 'student', rol
   'canStartGroupLeave',
   'canReviewLeave',
   'canQueryLeave',
+  'canSubmitOriginalLeave',
   'canManageOriginalLeave',
   'canManageAttendanceWork',
   'canViewEveningStudy',
@@ -41,6 +42,7 @@ assert.deepEqual(getEditablePermissionKeys(certificationManager, { id: 'other-le
   'canPublish',
   'canScore',
   'canSubmitScoring',
+  'canRegisterOtherCollege',
   'canViewSubmissionStatus',
   'canSubmitActivity',
 ]);

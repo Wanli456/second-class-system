@@ -105,6 +105,7 @@ type RawPermissionUser = Pick<AuthUser,
   | 'can_submit_activity'
   | 'can_view_submission_status'
   | 'can_submit_scoring'
+  | 'can_register_other_college'
   | 'can_review_leave'
   | 'can_view_evening_study'
   | 'can_start_group_leave'
@@ -112,6 +113,7 @@ type RawPermissionUser = Pick<AuthUser,
   | 'can_upload_leave'
   | 'can_query_leave'
   | 'can_manage_original_leave'
+  | 'can_submit_original_leave'
 >;
 
 const RAW_PERMISSION_FIELD: Record<PermissionKey, keyof RawPermissionUser> = {
@@ -120,6 +122,7 @@ const RAW_PERMISSION_FIELD: Record<PermissionKey, keyof RawPermissionUser> = {
   canSubmitActivity: 'can_submit_activity',
   canViewSubmissionStatus: 'can_view_submission_status',
   canSubmitScoring: 'can_submit_scoring',
+  canRegisterOtherCollege: 'can_register_other_college',
   canReviewLeave: 'can_review_leave',
   canViewEveningStudy: 'can_view_evening_study',
   canStartGroupLeave: 'can_start_group_leave',
@@ -127,6 +130,7 @@ const RAW_PERMISSION_FIELD: Record<PermissionKey, keyof RawPermissionUser> = {
   canUploadLeave: 'can_upload_leave',
   canQueryLeave: 'can_query_leave',
   canManageOriginalLeave: 'can_manage_original_leave',
+  canSubmitOriginalLeave: 'can_submit_original_leave',
 };
 
 function hasEffectivePermission(user: Partial<RawPermissionUser>, key: PermissionKey): boolean {

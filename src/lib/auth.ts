@@ -31,6 +31,7 @@ export type AuthUser = {
   can_submit_activity: boolean;
   can_view_submission_status: boolean;
   can_submit_scoring: boolean;
+  can_register_other_college: boolean;
   can_review_leave: boolean;
   can_view_evening_study: boolean;
   can_start_group_leave: boolean;
@@ -38,6 +39,7 @@ export type AuthUser = {
   can_upload_leave: boolean;
   can_query_leave: boolean;
   can_manage_original_leave: boolean;
+  can_submit_original_leave: boolean;
   contact_phone?: string | null;
   department?: string | null;
   class_name?: string | null;
@@ -123,7 +125,7 @@ function calculateUserPermissions(user: AuthUser) {
   const overrides = parsePermissionOverrides(user.permission_overrides);
 
   const permission = (
-    key: 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave' | 'canManageAttendanceWork' | 'canUploadLeave' | 'canQueryLeave' | 'canManageOriginalLeave',
+    key: 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canRegisterOtherCollege' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave' | 'canManageAttendanceWork' | 'canUploadLeave' | 'canQueryLeave' | 'canManageOriginalLeave' | 'canSubmitOriginalLeave',
     raw: boolean,
     fallback: boolean,
   ) => {
@@ -148,12 +150,14 @@ function calculateUserPermissions(user: AuthUser) {
     canSubmitActivity: permission('canSubmitActivity', user.can_submit_activity, false),
     canViewSubmissionStatus: permission('canViewSubmissionStatus', user.can_view_submission_status, false),
     canSubmitScoring: permission('canSubmitScoring', user.can_submit_scoring, false),
+    canRegisterOtherCollege: permission('canRegisterOtherCollege', user.can_register_other_college, false),
     canViewEveningStudy: permission('canViewEveningStudy', user.can_view_evening_study, false),
     canStartGroupLeave: permission('canStartGroupLeave', user.can_start_group_leave, false),
     canManageAttendanceWork: permission('canManageAttendanceWork', user.can_manage_attendance_work, false),
     canUploadLeave: permission('canUploadLeave', user.can_upload_leave, false),
     canQueryLeave: permission('canQueryLeave', user.can_query_leave, false),
     canManageOriginalLeave: permission('canManageOriginalLeave', user.can_manage_original_leave, false),
+    canSubmitOriginalLeave: permission('canSubmitOriginalLeave', user.can_submit_original_leave, false),
   };
 }
 
@@ -170,7 +174,7 @@ export async function getSessionUser(request: NextRequest): Promise<AuthUser | n
   const userId = readSession(request.cookies.get(SESSION_COOKIE)?.value) || readSession(bearerToken);
   if (!userId) return null;
   return queryOne(
-    `SELECT id, username, student_id, role, can_publish, can_score, can_submit_activity, can_view_submission_status, can_submit_scoring, can_review_leave, can_view_evening_study, can_start_group_leave, can_manage_attendance_work, can_upload_leave, can_query_leave, can_manage_original_leave, department, class_name, contact_phone, permission_overrides
+    `SELECT id, username, student_id, role, can_publish, can_score, can_submit_activity, can_view_submission_status, can_submit_scoring, can_register_other_college, can_review_leave, can_view_evening_study, can_start_group_leave, can_manage_attendance_work, can_upload_leave, can_query_leave, can_manage_original_leave, can_submit_original_leave, department, class_name, contact_phone, permission_overrides
      FROM users WHERE id = $1`,
     [userId],
   );
@@ -187,7 +191,7 @@ export async function requireUser(request: NextRequest) {
 /**
  * 权限检查函数 - 使用统一的权限计算
  */
-export async function requirePermission(request: NextRequest, permission: 'admin' | 'publish' | 'submitActivity' | 'viewSubmissionStatus' | 'score' | 'submitScoring' | 'reviewLeave' | 'eveningStudy' | 'startGroupLeave' | 'manageAttendanceWork' | 'uploadLeave' | 'queryLeave' | 'manageOriginalLeave') {
+export async function requirePermission(request: NextRequest, permission: 'admin' | 'publish' | 'submitActivity' | 'viewSubmissionStatus' | 'score' | 'submitScoring' | 'registerOtherCollege' | 'reviewLeave' | 'eveningStudy' | 'startGroupLeave' | 'manageAttendanceWork' | 'uploadLeave' | 'queryLeave' | 'manageOriginalLeave' | 'submitOriginalLeave') {
   const result = await requireUser(request);
   if (result.response) return result;
 
@@ -206,6 +210,7 @@ export async function requirePermission(request: NextRequest, permission: 'admin
       viewSubmissionStatus: 'canViewSubmissionStatus' as const,
       score: 'canScore' as const,
       submitScoring: 'canSubmitScoring' as const,
+      registerOtherCollege: 'canRegisterOtherCollege' as const,
       reviewLeave: 'canReviewLeave' as const,
       eveningStudy: 'canViewEveningStudy' as const,
       startGroupLeave: 'canStartGroupLeave' as const,
@@ -213,6 +218,7 @@ export async function requirePermission(request: NextRequest, permission: 'admin
       uploadLeave: 'canUploadLeave' as const,
       queryLeave: 'canQueryLeave' as const,
       manageOriginalLeave: 'canManageOriginalLeave' as const,
+      submitOriginalLeave: 'canSubmitOriginalLeave' as const,
     };
 
     const permissionKey = permissionMap[permission];

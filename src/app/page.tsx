@@ -37,6 +37,7 @@ interface User {
   canSubmitActivity?: boolean;
   canViewSubmissionStatus?: boolean;
   canSubmitScoring?: boolean;
+  canRegisterOtherCollege?: boolean;
   canReviewLeave?: boolean;
   canViewEveningStudy?: boolean;
   canStartGroupLeave?: boolean;
@@ -44,6 +45,7 @@ interface User {
   canUploadLeave?: boolean;
   canQueryLeave?: boolean;
   canManageOriginalLeave?: boolean;
+  canSubmitOriginalLeave?: boolean;
   department?: string | null;
   permissionOverrides?: string | null;
 }
@@ -76,6 +78,7 @@ export default function Home() {
               canSubmitActivity: true,
               canViewSubmissionStatus: true,
               canSubmitScoring: true,
+              canRegisterOtherCollege: true,
               canReviewLeave: true,
               canViewEveningStudy: true,
               canStartGroupLeave: true,
@@ -83,6 +86,7 @@ export default function Home() {
               canUploadLeave: true,
               canQueryLeave: true,
               canManageOriginalLeave: true,
+              canSubmitOriginalLeave: true,
             }
           : {}),
       }
@@ -236,7 +240,7 @@ export default function Home() {
       { href: '/submit', label: '活动提交', detail: '提交活动基本信息、查看审核状态', icon: Send, tone: 'bg-emerald-50 text-emerald-700', show: hasPermission(user, 'canSubmitActivity') },
       { href: '/submit/status', label: '提交状态', detail: '查询活动提交进度和结果', icon: FileCheck, tone: 'bg-slate-100 text-slate-700', show: hasPermission(user, 'canViewSubmissionStatus') },
       { href: '/submit/scoring', label: '赋分材料', detail: '上传活动赋分表、备案表照片', icon: Award, tone: 'bg-amber-50 text-amber-700', show: hasPermission(user, 'canSubmitScoring') },
-      { href: '/other-college-registration', label: '其他学院登记', detail: '登记其他学院校级活动的赋分材料', icon: Award, tone: 'bg-amber-50 text-amber-700', show: hasPermission(user, 'canSubmitScoring') },
+      { href: '/other-college-registration', label: '其他学院登记', detail: '登记其他学院校级活动的赋分材料', icon: Award, tone: 'bg-amber-50 text-amber-700', show: hasPermission(user, 'canRegisterOtherCollege') },
     ].filter((entry) => entry.show);
 
     // 学习竞技部：假条、晚自习、考勤工作安排。
@@ -246,10 +250,10 @@ export default function Home() {
       { href: '/leave-slip/temporary', label: '临时请假', detail: '提交临时请假，自动审核通过', icon: Send, tone: 'bg-emerald-50 text-emerald-700', show: hasPermission(user, 'canStartGroupLeave') },
       { href: '/leave-slip/review', label: '假条查对', detail: '人工查对请假条', icon: UserCheck, tone: 'bg-amber-50 text-amber-700', show: hasPermission(user, 'canReviewLeave') },
       { href: '/leave-slip/query', label: '假条查询', detail: '按班级/姓名/日期搜索', icon: Moon, tone: 'bg-slate-100 text-slate-700', show: hasPermission(user, 'canQueryLeave') },
-      { href: '/leave-slip/originals/submit', label: '提交原假条', detail: '提交需要归档的原始假条', icon: FileCheck, tone: 'bg-slate-100 text-slate-700', show: hasPermission(user, 'canManageOriginalLeave') },
+      { href: '/leave-slip/originals/submit', label: '提交原假条', detail: '提交需要归档的原始假条', icon: FileCheck, tone: 'bg-slate-100 text-slate-700', show: hasPermission(user, 'canSubmitOriginalLeave') },
       { href: '/leave-slip/originals', label: '维护原假条', detail: '查询和维护已归档的原始假条', icon: ClipboardList, tone: 'bg-slate-100 text-slate-700', show: hasPermission(user, 'canManageOriginalLeave') },
-      { href: '/attendance-work', label: '考勤工作安排', detail: '按周提交和查对考勤工作安排', icon: ClipboardList, tone: 'bg-teal-50 text-teal-700', show: hasPermission(user, 'canManageAttendanceWork') || hasPermission(user, 'canReviewLeave') },
-      { href: '/evening-study', label: '晚自习查询', detail: '查看晚自习请假与考勤安排', icon: Moon, tone: 'bg-indigo-50 text-indigo-700', show: hasPermission(user, 'canViewEveningStudy') || hasPermission(user, 'canQueryLeave') },
+      { href: '/attendance-work', label: '考勤工作安排', detail: '按周提交和查对考勤工作安排', icon: ClipboardList, tone: 'bg-teal-50 text-teal-700', show: hasPermission(user, 'canManageAttendanceWork') },
+      { href: '/evening-study', label: '晚自习查询', detail: '查看晚自习请假与考勤安排', icon: Moon, tone: 'bg-indigo-50 text-indigo-700', show: hasPermission(user, 'canViewEveningStudy') },
     ].filter((entry) => entry.show);
 
     type EntryWithGroup = PortalEntry & { group: string };
@@ -279,15 +283,16 @@ export default function Home() {
       '/leave-slip/mine',
       ...(hasPermission(user, 'canUploadLeave') ? ['/leave-slip/upload'] : []),
       ...(hasPermission(user, 'canStartGroupLeave') ? ['/leave-slip/temporary'] : []),
-      ...(hasPermission(user, 'canManageAttendanceWork') || hasPermission(user, 'canReviewLeave') ? ['/attendance-work'] : []),
+      ...(hasPermission(user, 'canManageAttendanceWork') ? ['/attendance-work'] : []),
       ...(hasPermission(user, 'canReviewLeave') ? ['/leave-slip/review'] : []),
       ...(hasPermission(user, 'canQueryLeave') ? ['/leave-slip/query'] : []),
-      ...(hasPermission(user, 'canManageOriginalLeave') ? ['/leave-slip/originals/submit', '/leave-slip/originals'] : []),
-      ...(hasPermission(user, 'canViewEveningStudy') || hasPermission(user, 'canQueryLeave') ? ['/evening-study'] : []),
+      ...(hasPermission(user, 'canSubmitOriginalLeave') ? ['/leave-slip/originals/submit'] : []),
+      ...(hasPermission(user, 'canManageOriginalLeave') ? ['/leave-slip/originals'] : []),
+      ...(hasPermission(user, 'canViewEveningStudy') ? ['/evening-study'] : []),
       ...(hasPermission(user, 'canSubmitActivity') ? ['/submit'] : []),
       ...(hasPermission(user, 'canViewSubmissionStatus') ? ['/submit/status'] : []),
       ...(hasPermission(user, 'canSubmitScoring') ? ['/submit/scoring'] : []),
-      ...(hasPermission(user, 'canSubmitScoring') ? ['/other-college-registration'] : []),
+      ...(hasPermission(user, 'canRegisterOtherCollege') ? ['/other-college-registration'] : []),
       ...(hasPermission(user, 'canPublish') ? ['/admin?role=admin&tab=review'] : []),
       ...(hasPermission(user, 'canScore') ? ['/admin?role=admin&tab=scoring'] : []),
       ...(isAdmin ? ['/admin?role=admin&tab=activities', '/admin?role=admin&tab=users'] : []),

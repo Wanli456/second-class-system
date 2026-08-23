@@ -29,7 +29,7 @@ function isValidDateRange(startTime: string, endTime: string): boolean {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const auth = await requirePermission(request, 'submitScoring');
+  const auth = await requirePermission(request, 'registerOtherCollege');
   if (auth.response) return auth.response;
 
   let body: RegistrationBody;

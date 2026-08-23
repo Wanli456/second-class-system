@@ -17,13 +17,15 @@ export type PermissionKey =
   | 'canSubmitActivity'
   | 'canViewSubmissionStatus'
   | 'canSubmitScoring'
+  | 'canRegisterOtherCollege'
   | 'canReviewLeave'
   | 'canViewEveningStudy'
   | 'canStartGroupLeave'
   | 'canManageAttendanceWork'
   | 'canUploadLeave'
   | 'canQueryLeave'
-  | 'canManageOriginalLeave';
+  | 'canManageOriginalLeave'
+  | 'canSubmitOriginalLeave';
 
 export const DEPARTMENT_AUTO_PERMISSIONS: Record<string, Partial<Record<PermissionKey, boolean>>> = {
   // 注意：部门名称必须与用户管理/前端文案一致，否则自动权限不会命中。
@@ -32,6 +34,7 @@ export const DEPARTMENT_AUTO_PERMISSIONS: Record<string, Partial<Record<Permissi
     canStartGroupLeave: true,
     canReviewLeave: true,
     canQueryLeave: true,
+    canSubmitOriginalLeave: true,
     canManageOriginalLeave: true,
     canManageAttendanceWork: true,
     canViewEveningStudy: true,
@@ -40,6 +43,7 @@ export const DEPARTMENT_AUTO_PERMISSIONS: Record<string, Partial<Record<Permissi
     canPublish: true,
     canScore: true,
     canSubmitScoring: true,
+    canRegisterOtherCollege: true,
     canViewSubmissionStatus: true,
     canSubmitActivity: true,
   },
@@ -87,6 +91,7 @@ export interface PermissionUser {
   canSubmitActivity?: boolean | null;
   canViewSubmissionStatus?: boolean | null;
   canSubmitScoring?: boolean | null;
+  canRegisterOtherCollege?: boolean | null;
   canReviewLeave?: boolean | null;
   canViewEveningStudy?: boolean | null;
   canStartGroupLeave?: boolean | null;
@@ -94,6 +99,7 @@ export interface PermissionUser {
   canUploadLeave?: boolean | null;
   canQueryLeave?: boolean | null;
   canManageOriginalLeave?: boolean | null;
+  canSubmitOriginalLeave?: boolean | null;
 }
 
 /**

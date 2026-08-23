@@ -39,6 +39,7 @@ interface User {
   canSubmitActivity?: boolean;
   canViewSubmissionStatus?: boolean;
   canSubmitScoring?: boolean;
+  canRegisterOtherCollege?: boolean;
   canReviewLeave?: boolean;
   canViewEveningStudy?: boolean;
   canStartGroupLeave?: boolean;
@@ -46,6 +47,7 @@ interface User {
   canUploadLeave?: boolean;
   canQueryLeave?: boolean;
   canManageOriginalLeave?: boolean;
+  canSubmitOriginalLeave?: boolean;
   department?: string | null;
   permissionOverrides?: string | null;
 }
@@ -139,16 +141,16 @@ const NAV_ITEMS: NavItem[] = [
   { label: '活动提交', href: '/submit', icon: Send, requiredPermission: 'canSubmitActivity' },
   { label: '提交状态', href: '/submit/status', icon: FileCheck, requiredPermission: 'canViewSubmissionStatus' },
   { label: '赋分材料', href: '/submit/scoring', icon: Award, requiredPermission: 'canSubmitScoring' },
-  { label: '其他学院登记', href: '/other-college-registration', icon: Award, requiredPermission: 'canSubmitScoring' },
+  { label: '其他学院登记', href: '/other-college-registration', icon: Award, requiredPermission: 'canRegisterOtherCollege' },
   { label: '我的假条', href: '/leave-slip/mine', icon: FileCheck },
   { label: '假条上传', href: '/leave-slip/upload', icon: FileCheck, requiredPermission: 'canUploadLeave' },
   { label: '临时请假', href: '/leave-slip/temporary', icon: Send, requiredPermission: 'canStartGroupLeave' },
   { label: '假条查对', href: '/leave-slip/review', icon: UserCheck, requiredPermission: 'canReviewLeave' },
   { label: '假条查询', href: '/leave-slip/query', icon: Moon, requiredPermission: 'canQueryLeave' },
-  { label: '提交原假条', href: '/leave-slip/originals/submit', icon: FileCheck, requiredPermission: 'canManageOriginalLeave' },
+  { label: '提交原假条', href: '/leave-slip/originals/submit', icon: FileCheck, requiredPermission: 'canSubmitOriginalLeave' },
   { label: '维护原假条', href: '/leave-slip/originals', icon: ClipboardList, requiredPermission: 'canManageOriginalLeave' },
-  { label: '考勤工作安排', href: '/attendance-work', icon: ClipboardList, requiredAnyPermissions: ['canManageAttendanceWork', 'canReviewLeave'] },
-  { label: '晚自习查询', href: '/evening-study', icon: Moon, requiredAnyPermissions: ['canViewEveningStudy', 'canQueryLeave'] },
+  { label: '考勤工作安排', href: '/attendance-work', icon: ClipboardList, requiredPermission: 'canManageAttendanceWork' },
+  { label: '晚自习查询', href: '/evening-study', icon: Moon, requiredPermission: 'canViewEveningStudy' },
 ];
 
 export function DashboardLayout({ children, user: providedUser, onLogout, title, activeNavHref }: DashboardLayoutProps) {

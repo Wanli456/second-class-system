@@ -15,6 +15,7 @@ const PERMISSION_COLUMNS: Record<PermissionKey, string> = {
   canSubmitActivity: 'can_submit_activity',
   canViewSubmissionStatus: 'can_view_submission_status',
   canSubmitScoring: 'can_submit_scoring',
+  canRegisterOtherCollege: 'can_register_other_college',
   canReviewLeave: 'can_review_leave',
   canViewEveningStudy: 'can_view_evening_study',
   canStartGroupLeave: 'can_start_group_leave',
@@ -22,14 +23,15 @@ const PERMISSION_COLUMNS: Record<PermissionKey, string> = {
   canUploadLeave: 'can_upload_leave',
   canQueryLeave: 'can_query_leave',
   canManageOriginalLeave: 'can_manage_original_leave',
+  canSubmitOriginalLeave: 'can_submit_original_leave',
 };
 
 const USER_SELECT = [
   'SELECT id, username, student_id, role, department, class_name, contact_phone,',
   'can_publish, can_score, can_submit_activity, can_view_submission_status,',
-  'can_submit_scoring, can_view_evening_study, can_review_leave,',
+  'can_submit_scoring, can_register_other_college, can_view_evening_study, can_review_leave,',
   'can_start_group_leave, can_manage_attendance_work, can_upload_leave,',
-  'can_query_leave, can_manage_original_leave',
+  'can_query_leave, can_manage_original_leave, can_submit_original_leave',
   'FROM users',
 ].join(' ');
 

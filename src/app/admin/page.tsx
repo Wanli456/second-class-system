@@ -39,7 +39,7 @@ type ReviewStatus = '待审核' | '已通过' | '已驳回';
 type ScoringStatus = '待赋分' | '已赋分';
 type AdminRole = 'admin' | 'leader' | 'class_leader' | 'student';
 type AdminTab = 'activities' | 'review' | 'scoring' | 'users';
-type UserPermission = 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave' | 'canManageAttendanceWork' | 'canUploadLeave' | 'canQueryLeave' | 'canManageOriginalLeave';
+type UserPermission = 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canRegisterOtherCollege' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave' | 'canManageAttendanceWork' | 'canUploadLeave' | 'canQueryLeave' | 'canManageOriginalLeave' | 'canSubmitOriginalLeave';
 
 const USER_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
@@ -119,6 +119,7 @@ interface UserData {
   canSubmitActivity: boolean;
   canViewSubmissionStatus: boolean;
   canSubmitScoring: boolean;
+  canRegisterOtherCollege: boolean;
   canReviewLeave: boolean;
   canViewEveningStudy: boolean;
   canStartGroupLeave: boolean;
@@ -126,6 +127,7 @@ interface UserData {
   canUploadLeave: boolean;
   canQueryLeave: boolean;
   canManageOriginalLeave: boolean;
+  canSubmitOriginalLeave: boolean;
   department?: string | null;
   className?: string | null;
   contactPhone?: string | null;
@@ -237,6 +239,7 @@ function AdminPage() {
       canSubmitActivity: globalUser.canSubmitActivity || false,
       canViewSubmissionStatus: globalUser.canViewSubmissionStatus || false,
       canSubmitScoring: globalUser.canSubmitScoring || false,
+      canRegisterOtherCollege: globalUser.canRegisterOtherCollege || false,
       canReviewLeave: globalUser.canReviewLeave || false,
       canViewEveningStudy: globalUser.canViewEveningStudy || false,
       canStartGroupLeave: globalUser.canStartGroupLeave || false,
@@ -244,6 +247,7 @@ function AdminPage() {
       canUploadLeave: globalUser.canUploadLeave || false,
       canQueryLeave: globalUser.canQueryLeave || false,
       canManageOriginalLeave: globalUser.canManageOriginalLeave || false,
+      canSubmitOriginalLeave: globalUser.canSubmitOriginalLeave || false,
       department: globalUser.department || null,
       className: globalUser.className || null,
       contactPhone: globalUser.contactPhone || null,
@@ -521,6 +525,7 @@ function AdminPage() {
       canSubmitActivity: 'canSubmitActivity',
       canViewSubmissionStatus: 'canViewSubmissionStatus',
       canSubmitScoring: 'canSubmitScoring',
+      canRegisterOtherCollege: 'canRegisterOtherCollege',
       canReviewLeave: 'canReviewLeave',
       canViewEveningStudy: 'canViewEveningStudy',
       canStartGroupLeave: 'canStartGroupLeave',
@@ -528,6 +533,7 @@ function AdminPage() {
       canUploadLeave: 'canUploadLeave',
       canQueryLeave: 'canQueryLeave',
       canManageOriginalLeave: 'canManageOriginalLeave',
+      canSubmitOriginalLeave: 'canSubmitOriginalLeave',
     };
     const apiField = apiFieldMap[permission];
     const targetUser = users.find((item) => item.id === userId);
@@ -1751,10 +1757,12 @@ function UserManagement({
     { key: 'canManageAttendanceWork', label: '考勤工作安排权限' },
     { key: 'canReviewLeave', label: '假条查对权限' },
     { key: 'canQueryLeave', label: '假条查询权限' },
-    { key: 'canManageOriginalLeave', label: '提交/维护原假条权限' },
+    { key: 'canSubmitOriginalLeave', label: '提交原假条权限' },
+    { key: 'canManageOriginalLeave', label: '维护原假条权限' },
     { key: 'canPublish', label: '活动审核权限' },
     { key: 'canScore', label: '活动赋分权限' },
-    { key: 'canSubmitScoring', label: '赋分材料/其他学院登记权限' },
+    { key: 'canSubmitScoring', label: '赋分材料权限' },
+    { key: 'canRegisterOtherCollege', label: '其他学院登记权限' },
     { key: 'canViewEveningStudy', label: '晚自习查询权限' },
     { key: 'canSubmitActivity', label: '活动提交权限' },
     { key: 'canViewSubmissionStatus', label: '提交状态权限' },

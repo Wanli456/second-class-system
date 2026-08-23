@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   can_submit_activity BOOLEAN NOT NULL DEFAULT false,
   can_view_submission_status BOOLEAN NOT NULL DEFAULT false,
   can_submit_scoring BOOLEAN NOT NULL DEFAULT false,
+  can_register_other_college BOOLEAN NOT NULL DEFAULT false,
   can_review_leave BOOLEAN NOT NULL DEFAULT false,
   can_view_evening_study BOOLEAN NOT NULL DEFAULT false,
   can_start_group_leave BOOLEAN NOT NULL DEFAULT false,
@@ -23,6 +24,8 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_scoring BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS can_register_other_college BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_original_leave BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_activity BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_submission_status BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;

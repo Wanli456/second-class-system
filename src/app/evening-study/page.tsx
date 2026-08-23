@@ -64,7 +64,7 @@ export default function EveningStudyPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState<'approved' | 'pending' | 'rejected' | 'duty' | null>(null);
-  const canView = hasPermission(user, 'canViewEveningStudy') || hasPermission(user, 'canQueryLeave');
+  const canView = hasPermission(user, 'canViewEveningStudy');
 
   useEffect(() => { if (user?.className) setClassName(user.className); }, [user?.className]);
 

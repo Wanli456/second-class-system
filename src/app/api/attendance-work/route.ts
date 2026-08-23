@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
   if (auth.response) return auth.response;
   const user = auth.user!;
   const permissions = calculateUserPermissions(user);
-  const canList = permissions.canManageAttendanceWork || permissions.canReviewLeave || permissions.canViewEveningStudy || permissions.canQueryLeave;
+  const canList = permissions.canManageAttendanceWork;
   if (!canList) return NextResponse.json({ success: false, error: '暂无权限查看考勤工作安排' }, { status: 403 });
 
   const { searchParams } = new URL(request.url);

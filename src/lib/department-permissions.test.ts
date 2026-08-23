@@ -61,6 +61,7 @@ assert.deepEqual(getDepartmentAutoPermissionKeys(sportsLeader).sort(), [
   'canQueryLeave',
   'canReviewLeave',
   'canStartGroupLeave',
+  'canSubmitOriginalLeave',
   'canUploadLeave',
   'canViewEveningStudy',
 ]);

@@ -14,6 +14,7 @@ interface User {
   canSubmitActivity?: boolean;
   canViewSubmissionStatus?: boolean;
   canSubmitScoring?: boolean;
+  canRegisterOtherCollege?: boolean;
   canReviewLeave?: boolean;
   canViewEveningStudy?: boolean;
   canStartGroupLeave?: boolean;
@@ -21,6 +22,7 @@ interface User {
   canUploadLeave?: boolean;
   canQueryLeave?: boolean;
   canManageOriginalLeave?: boolean;
+  canSubmitOriginalLeave?: boolean;
   department?: string | null;
   className?: string | null;
   contactPhone?: string | null;

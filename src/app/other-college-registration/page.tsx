@@ -37,7 +37,7 @@ export default function OtherCollegeRegistrationPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const canRegister = hasPermission(user, 'canSubmitScoring');
+  const canRegister = hasPermission(user, 'canRegisterOtherCollege');
 
   const handleFile = (setter: (file: File | null) => void) => (event: ChangeEvent<HTMLInputElement>) => setter(event.target.files?.[0] || null);
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {

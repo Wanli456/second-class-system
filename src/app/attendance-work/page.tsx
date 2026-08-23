@@ -319,13 +319,13 @@ export default function AttendanceWorkPage() {
       </DashboardLayout>
     );
   }
-  if (!canUpload && !canReview) {
+  if (!canUpload) {
     return (
       <DashboardLayout user={user} title="部门考勤工作安排" activeNavHref="/attendance-work">
         <div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
           <AlertCircle className="mx-auto size-6 text-amber-600" />
           <h2 className="mt-3 font-semibold text-amber-900">当前账号没有部门考勤工作安排权限</h2>
-          <p className="mt-2 text-sm text-amber-800">请联系系统管理员授予 `canManageAttendanceWork`（提交）或 `canReviewLeave`（查对）权限。</p>
+          <p className="mt-2 text-sm text-amber-800">请联系系统管理员授予 `canManageAttendanceWork` 权限。</p>
         </div>
       </DashboardLayout>
     );

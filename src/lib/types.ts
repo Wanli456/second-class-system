@@ -243,6 +243,7 @@ export interface UserData {
   canSubmitActivity: boolean;
   canViewSubmissionStatus: boolean;
   canSubmitScoring: boolean;
+  canRegisterOtherCollege: boolean;
   canReviewLeave: boolean;
   canViewEveningStudy: boolean;
   canStartGroupLeave: boolean;
@@ -250,4 +251,5 @@ export interface UserData {
   canUploadLeave: boolean;
   canQueryLeave: boolean;
   canManageOriginalLeave: boolean;
+  canSubmitOriginalLeave: boolean;
 }

@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requirePermission(request, 'manageOriginalLeave');
+    const auth = await requirePermission(request, 'submitOriginalLeave');
     if (auth.response) return auth.response;
     const user = auth.user!;
 

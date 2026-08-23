@@ -48,6 +48,7 @@ if (localDb && shouldInitializeLocalDb) {
       can_submit_activity BOOLEAN NOT NULL DEFAULT false,
       can_view_submission_status BOOLEAN NOT NULL DEFAULT false,
       can_submit_scoring BOOLEAN NOT NULL DEFAULT false,
+      can_register_other_college BOOLEAN NOT NULL DEFAULT false,
       can_review_leave BOOLEAN NOT NULL DEFAULT false,
       can_view_evening_study BOOLEAN NOT NULL DEFAULT false,
       can_start_group_leave BOOLEAN NOT NULL DEFAULT false,
@@ -55,6 +56,7 @@ if (localDb && shouldInitializeLocalDb) {
       can_upload_leave BOOLEAN NOT NULL DEFAULT false,
       can_query_leave BOOLEAN NOT NULL DEFAULT false,
       can_manage_original_leave BOOLEAN NOT NULL DEFAULT false,
+      can_submit_original_leave BOOLEAN NOT NULL DEFAULT false,
       department TEXT,
       class_name TEXT,
       contact_phone TEXT,
@@ -330,6 +332,7 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_activity BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_submission_status BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_scoring BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_register_other_college BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_review_leave BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_evening_study BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_start_group_leave BOOLEAN NOT NULL DEFAULT false;
@@ -337,6 +340,7 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_upload_leave BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_query_leave BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_manage_original_leave BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_original_leave BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_phone TEXT;
