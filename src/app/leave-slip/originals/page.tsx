@@ -209,7 +209,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
 
   const handleSubmit = async () => {
     if (!activityId || !activityName.trim()) { alert('原假条一次只能绑定一个活动，请先选择系统活动'); return; }
-    if (!studentNamesText.trim() && !classNamesText.trim()) { alert('请至少填写班级或学生'); return; }
+    if (!studentNamesText.trim()) { alert('请至少填写一名学生的学号、班级和姓名'); return; }
     let studentEntries: string[] = [];
     try {
       studentEntries = studentNamesText.trim() ? parseStudentEntries(studentNamesText) : [];
