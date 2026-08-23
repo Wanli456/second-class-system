@@ -9,6 +9,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
+import { ImageUploadPreviews } from '@/components/ImageUploadPreviews';
 import { hasPermission } from '@/lib/department-permissions';
 import { canSelectActivityLeader } from '@/lib/activity-leader-rules';
 
@@ -164,4 +165,16 @@ export default function SubmitPage() {
   </div></DashboardLayout>;
 }
 
-function FilePicker({ label, file, existingUrl, existingName, onChange }: { label: string; file: File | null; existingUrl: string | null; existingName: string | null; onChange: (file: File | null) => void }) { return <label className="block text-sm font-medium">{label}<span className={`mt-1 flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-3 text-sm font-normal ${file ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'text-gray-500'}`}><Upload className="h-4 w-4" /><span className="truncate">{file?.name || existingName || (existingUrl ? '已上传文件，选择新文件可替换' : '选择文件')}</span><input type="file" className="hidden" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(e) => onChange(e.target.files?.[0] || null)} /></span></label>; }
+function FilePicker({ label, file, existingUrl, existingName, onChange }: { label: string; file: File | null; existingUrl: string | null; existingName: string | null; onChange: (file: File | null) => void }) {
+  const [preview, setPreview] = useState<string | null>(null);
+  const isImage = Boolean(file?.type.startsWith('image/'));
+
+  useEffect(() => {
+    if (!file || !file.type.startsWith('image/')) { setPreview(null); return; }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  return <div className="block text-sm font-medium">{label}<label className={'mt-1 flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-3 text-sm font-normal ' + (file ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'text-gray-500')}><Upload className="h-4 w-4" /><span className="truncate">{file?.name || existingName || (existingUrl ? '已上传文件，选择新文件可替换' : '选择文件')}</span><input type="file" className="hidden" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={(e) => onChange(e.target.files?.[0] || null)} /></label>{isImage && preview && <ImageUploadPreviews imageUrls={[preview]} altPrefix={label.replace(' *', '')} onRemove={() => onChange(null)} />}</div>;
+}

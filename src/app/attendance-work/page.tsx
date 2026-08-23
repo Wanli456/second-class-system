@@ -9,6 +9,7 @@ import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
 import { Button } from '@/components/ui/button';
+import { ImageUploadPreviews } from '@/components/ImageUploadPreviews';
 
 interface ScheduleItem { date: string; weekday: string; students: string[] }
 interface WorkArrangement {
@@ -378,7 +379,10 @@ export default function AttendanceWorkPage() {
                 <input type="file" accept="image/*" multiple className="sr-only" onChange={handleImageChange} aria-label="考勤排班表图片，可多选" />
               </span>
             </label>
-            {previews.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{previews.map((preview, index) => <img key={`${preview.slice(0, 32)}-${index}`} src={preview} alt={`预览 ${index + 1}`} className="size-24 rounded-md border border-slate-200 object-contain" />)}</div>}
+            <ImageUploadPreviews imageUrls={previews} altPrefix="考勤排班表图片" onRemove={(index) => {
+              setImageFiles((previous) => previous.filter((_, itemIndex) => itemIndex !== index));
+              setPreviews((previous) => previous.filter((_, itemIndex) => itemIndex !== index));
+            }} />
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
               {ocrLoading && <p className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-700">图片自动识别中，请稍候…</p>}
@@ -414,11 +418,7 @@ export default function AttendanceWorkPage() {
                     ) : (
                       <p className="mt-2 text-sm text-slate-600">日期：{item.start_date || '-'} 至 {item.end_date || '-'} · 考勤人员：{parseNames(item.student_names).join('、') || '-'}</p>
                     )}
-                    {parseImageList(item.image_list).length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {parseImageList(item.image_list).map((image, index) => <img key={`${image.url.slice(0, 40)}-${index}`} src={image.url} alt={`考勤表 ${index + 1}`} className="size-20 rounded-md border border-slate-200 object-contain" />)}
-                      </div>
-                    )}
+                    <ImageUploadPreviews imageUrls={parseImageList(item.image_list).map((image) => image.url)} altPrefix="考勤表" />
                     {item.review_note && <p className="mt-2 text-xs text-slate-500">备注：{item.review_note}</p>}
                     {canUpload && (user.role === 'admin' || user.role === 'leader' || item.created_by_user_id === user.id) && (
                       <Button type="button" variant="outline" onClick={() => startEdit(item)} className="mt-3 bg-white">修改（临时换人、改日期）</Button>

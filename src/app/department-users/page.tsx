@@ -31,12 +31,29 @@ const PERMISSION_LABELS: Record<PermissionKey, string> = {
   canRegisterOtherCollege: '其他学院登记权限',
   canReviewLeave: '假条查对权限',
   canViewEveningStudy: '晚自习查询权限',
-  canStartGroupLeave: '发起集体请假权限',
+  canStartGroupLeave: '临时请假权限',
   canManageAttendanceWork: '考勤工作安排权限',
   canUploadLeave: '假条上传权限',
   canQueryLeave: '请假查询权限',
   canSubmitOriginalLeave: '提交原假条权限',
   canManageOriginalLeave: '维护原假条权限',
+};
+
+const PERMISSION_HINTS: Record<PermissionKey, string> = {
+  canPublish: '允许查看并审核活动提交材料。',
+  canScore: '允许进入活动赋分并确认赋分结果。',
+  canSubmitActivity: '允许提交本学院的活动申请与相关材料。',
+  canViewSubmissionStatus: '允许查询已提交活动的审核进度和结果。',
+  canSubmitScoring: '允许为活动提交赋分表等赋分材料。',
+  canRegisterOtherCollege: '允许登记其他学院校级活动的备案表和赋分材料。',
+  canReviewLeave: '允许核对假条图片与请假信息是否一致。',
+  canViewEveningStudy: '允许查询晚自习请假及班级考勤情况。',
+  canStartGroupLeave: '允许发起本班学生的临时或集体请假。',
+  canManageAttendanceWork: '允许安排当天各班考勤人员和考勤工作。',
+  canUploadLeave: '允许代班级学生上传请假材料。',
+  canQueryLeave: '允许按学生、班级或学号查询请假记录。',
+  canSubmitOriginalLeave: '允许提交活动方归档用的原假条。',
+  canManageOriginalLeave: '允许集中查询、核对和维护已归档的活动方原假条。',
 };
 
 type ManagedUser = {
@@ -157,7 +174,7 @@ export default function DepartmentUsersPage({ managedDepartment }: { managedDepa
                 </div>
                 <div className="mt-4 grid gap-2 border-t border-slate-100 pt-4 sm:grid-cols-2 lg:grid-cols-3">
                   {permissionKeys.map((key) => (
-                    <label key={key} className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50">
+                    <label key={key} title={PERMISSION_HINTS[key]} className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50">
                       <input type="checkbox" checked={Boolean(user.permissions[key])} onChange={(event) => updatePermission(user.id, key, event.target.checked)} className="size-4 accent-teal-700" />
                       <span>{PERMISSION_LABELS[key] || key}</span>
                     </label>

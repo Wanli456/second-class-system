@@ -12,6 +12,7 @@ import { hasPermission } from '@/lib/department-permissions';
 import { formatActivityScopes } from '@/lib/business-rules';
 import { formatCategoryPath } from '@/lib/types';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
+import { ImageUploadPreviews } from '@/components/ImageUploadPreviews';
 import { CategoryBadge } from '@/components/CategoryBadge';
 
 interface Activity {
@@ -52,11 +53,19 @@ export default function SubmitScoringPage() {
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [scoringFile, setScoringFile] = useState<File | null>(null);
   const [recordPhotoFile, setRecordPhotoFile] = useState<File | null>(null);
+  const [recordPhotoPreview, setRecordPhotoPreview] = useState<string | null>(null);
   const [selectedActivityId, setSelectedActivityId] = useState<string>('');
   const [targetActivityId, setTargetActivityId] = useState<string | null>(null);
   const [submittedActivityId, setSubmittedActivityId] = useState<string | null>(null);
   const [showResubmit, setShowResubmit] = useState(false);
   const canAccessScoringMaterials = hasPermission(user, 'canSubmitScoring');
+
+  useEffect(() => {
+    if (!recordPhotoFile) { setRecordPhotoPreview(null); return; }
+    const url = URL.createObjectURL(recordPhotoFile);
+    setRecordPhotoPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [recordPhotoFile]);
 
   useEffect(() => {
     if (!initialized || !user || !canAccessScoringMaterials) return;
@@ -372,7 +381,10 @@ export default function SubmitScoringPage() {
                     <p className="mt-1 text-xs text-gray-400">支持 JPG、PNG 格式{selectedActivity.record_photo_url ? '；重新选择可替换原照片' : ''}</p>
                     {selectedActivity.record_photo_url && !recordPhotoFile && <p className="mt-2 text-xs text-emerald-600">当前已有备案表照片，若无需替换可直接提交</p>}
                     {recordPhotoFile && (
-                      <p className="mt-2 text-xs text-emerald-600">已选择：{recordPhotoFile.name}</p>
+                      <>
+                        <p className="mt-2 text-xs text-emerald-600">已选择：{recordPhotoFile.name}</p>
+                        {recordPhotoPreview && <ImageUploadPreviews imageUrls={[recordPhotoPreview]} altPrefix="备案表照片" onRemove={() => setRecordPhotoFile(null)} />}
+                      </>
                     )}
                   </div>
                 </div>

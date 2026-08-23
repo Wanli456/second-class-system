@@ -64,6 +64,66 @@ function classTextMatches(recognized: string | null | undefined, official: strin
   return false;
 }
 
+const STAFF_TEXT_PATTERN = /(辅导员|导员|班主任|指导老师|老师|签字|电话|联系电话)/;
+
+function cleanOcrText(value: unknown): string {
+  return String(value || '')
+    .replace(/[：:]/g, '')
+    .replace(/^(学号|姓名|班级)\s*/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
+function isLikelyStudentId(value: string): boolean {
+  return /^(?:学号)?\d{6,20}$/.test(value);
+}
+
+function isLikelyClassName(value: string): boolean {
+  const normalized = normalizeClassName(value);
+  if (!normalized || STAFF_TEXT_PATTERN.test(normalized) || isLikelyStudentId(normalized)) return false;
+  // 既兼容“虚拟2531”，也兼容“虚拟现实技术应用2531”，不要求末尾带“班”。
+  return /^(?=.*[^\d])[^\s]{1,30}\d{4}$/.test(normalized) || /^\d{4}班?$/.test(normalized);
+}
+
+function isLikelyStudentName(value: string): boolean {
+  return /^[\u4e00-\u9fa5·]{2,8}$/.test(value) && !STAFF_TEXT_PATTERN.test(value);
+}
+
+function normalizeStudentText(values: unknown[]): { student_id: string; student_name: string; class_name: string } {
+  const candidates = values.map(cleanOcrText).filter(Boolean);
+  return {
+    student_id: candidates.find(isLikelyStudentId)?.replace(/^学号/, '') || '',
+    class_name: candidates.find(isLikelyClassName) || '',
+    student_name: candidates.find((value) => isLikelyStudentName(value)) || '',
+  };
+}
+
+async function cropImageToLeftHalf(file: File): Promise<File> {
+  if (!file.type.startsWith('image/')) return file;
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = reject;
+      element.src = objectUrl;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.floor(image.naturalWidth / 2));
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d');
+    if (!context) return file;
+    context.drawImage(image, 0, 0, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, file.type || 'image/jpeg', 0.95));
+    return blob ? new File([blob], file.name, { type: blob.type || file.type, lastModified: file.lastModified }) : file;
+  } catch {
+    // 不能在浏览器中裁切的格式（例如个别 HEIC）仍交给服务端识别，避免阻断上传。
+    return file;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export default function LeaveSlipUploadPage() {
   const { user, initialized } = useUser();
   const [slipType, setSlipType] = useState<(typeof SLIP_TYPES)[number]['value']>('手写假条');
@@ -171,7 +231,9 @@ export default function LeaveSlipUploadPage() {
     setOcrLoading(true);
     setOcrLines([]);
     try {
-      const uploaded = await uploadFilesToUrls(files);
+      // 原图仍用于最终提交；只有送去自动识别的临时副本裁取左半边，避免导员信息混入学生名单。
+      const ocrFiles = await Promise.all(files.map(cropImageToLeftHalf));
+      const uploaded = await uploadFilesToUrls(ocrFiles);
       const res = await apiFetch('/api/ocr/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -181,15 +243,28 @@ export default function LeaveSlipUploadPage() {
       if (!data.success) throw new Error(data.error || '自动识别失败');
 
       const fields = data.data.fields || {};
-      const names: string[] = Array.isArray(fields.students) ? fields.students.map(String) : [];
-      const classes: string[] = Array.isArray(fields.classes) ? fields.classes.map(String) : [];
+      const names: string[] = Array.isArray(fields.students)
+        ? fields.students.map((item: unknown) => normalizeStudentText([item]).student_name).filter(Boolean)
+        : [];
+      const classes: string[] = Array.isArray(fields.classes)
+        ? fields.classes.map(cleanOcrText).filter(isLikelyClassName)
+        : [];
       const classStudents: Array<{ class_name: string; students?: unknown; student_ids?: unknown }> = Array.isArray(fields.class_students) ? fields.class_students as Array<{ class_name: string; students?: unknown; student_ids?: unknown }> : [];
       const currentClass = (user?.className || '').replace(/\s+/g, '');
       const recognizedClasses = classes.map((item) => item.replace(/\s+/g, '')).filter(Boolean);
 
-      const matchedClassEntry = classStudents.find((entry) => classTextMatches(entry.class_name, currentClass));
-      const matchedNames: string[] = Array.isArray(matchedClassEntry?.students) ? matchedClassEntry.students.map(String) : [];
-      const matchedIds: string[] = Array.isArray(matchedClassEntry?.student_ids) ? matchedClassEntry.student_ids.map(String) : [];
+      const normalizedClassStudents = classStudents.map((entry) => ({
+        class_name: cleanOcrText(entry.class_name),
+        students: Array.isArray(entry.students)
+          ? entry.students.map((item) => normalizeStudentText([item]).student_name).filter(Boolean)
+          : [],
+        student_ids: Array.isArray(entry.student_ids)
+          ? entry.student_ids.map((item) => normalizeStudentText([item]).student_id).filter(Boolean)
+          : [],
+      })).filter((entry) => isLikelyClassName(entry.class_name));
+      const matchedClassEntry = normalizedClassStudents.find((entry) => classTextMatches(entry.class_name, currentClass));
+      const matchedNames = matchedClassEntry?.students || [];
+      const matchedIds = matchedClassEntry?.student_ids || [];
       const studentsToFill = matchedNames.length ? matchedNames : names;
       const shouldUseMatchedIds = Boolean(matchedClassEntry) && matchedIds.length === studentsToFill.length;
       const singleClassMatches = recognizedClasses.length === 1 && classTextMatches(recognizedClasses[0], currentClass);
@@ -214,7 +289,14 @@ export default function LeaveSlipUploadPage() {
         setStudents((previous) => {
           const existingNames = new Set(previous.map((row) => row.student_name.trim()).filter(Boolean));
           const rows = previous.filter((row) => row.student_id.trim() || row.student_name.trim());
-          const added = studentsToFill.map((name, index) => ({ student_id: shouldUseMatchedIds ? matchedIds[index] || '' : '', student_name: name, class_name: user?.className || '' })).filter((row) => !existingNames.has(row.student_name) && row.student_name.length >= 2);
+          const added = studentsToFill.map((name, index) => {
+            const normalized = normalizeStudentText([shouldUseMatchedIds ? matchedIds[index] || '' : '', name, user?.className || '']);
+            return {
+              student_id: normalized.student_id,
+              student_name: normalized.student_name,
+              class_name: normalized.class_name || user?.className || '',
+            };
+          }).filter((row) => !existingNames.has(row.student_name) && row.student_name.length >= 2);
           return [...rows, ...added];
         });
       }

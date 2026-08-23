@@ -64,6 +64,7 @@ interface NavItem {
   label: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
+  group: '工作台' | '活动管理' | '假条管理' | '考勤与查询' | '系统管理';
   public?: boolean;
   requiredRole?: string;
   requiredPermission?: PermissionKey;
@@ -130,28 +131,51 @@ const NavItemComponent = React.memo(({
 NavItemComponent.displayName = 'NavItemComponent';
 
 const NAV_ITEMS: NavItem[] = [
-  { label: '首页', href: '/', icon: LayoutDashboard },
-  { label: '班级考勤统计', href: '/class-attendance', icon: Users, public: true },
-  { label: '活动总表', href: '/admin?role=admin&tab=activities', icon: ClipboardList, requiredRole: 'admin' },
-  { label: '活动审核', href: '/admin?role=admin&tab=review', icon: FileCheck, requiredPermission: 'canPublish' },
-  { label: '活动赋分', href: '/admin?role=admin&tab=scoring', icon: Award, requiredPermission: 'canScore' },
-  { label: '用户管理', href: '/admin?role=admin&tab=users', icon: Users, requiredRole: 'admin' },
-  { label: '学习竞技部用户管理', href: '/department-users/learning-competition', icon: Users, requiredDepartment: '学习竞技部' },
-  { label: '第二课堂认证中心用户管理', href: '/department-users/certification-center', icon: Users, requiredDepartment: '第二课堂认证中心' },
-  { label: '活动提交', href: '/submit', icon: Send, requiredPermission: 'canSubmitActivity' },
-  { label: '提交状态', href: '/submit/status', icon: FileCheck, requiredPermission: 'canViewSubmissionStatus' },
-  { label: '赋分材料', href: '/submit/scoring', icon: Award, requiredPermission: 'canSubmitScoring' },
-  { label: '其他学院登记', href: '/other-college-registration', icon: Award, requiredPermission: 'canRegisterOtherCollege' },
-  { label: '我的假条', href: '/leave-slip/mine', icon: FileCheck },
-  { label: '假条上传', href: '/leave-slip/upload', icon: FileCheck, requiredPermission: 'canUploadLeave' },
-  { label: '临时请假', href: '/leave-slip/temporary', icon: Send, requiredPermission: 'canStartGroupLeave' },
-  { label: '假条查对', href: '/leave-slip/review', icon: UserCheck, requiredPermission: 'canReviewLeave' },
-  { label: '假条查询', href: '/leave-slip/query', icon: Moon, requiredPermission: 'canQueryLeave' },
-  { label: '提交原假条', href: '/leave-slip/originals/submit', icon: FileCheck, requiredPermission: 'canSubmitOriginalLeave' },
-  { label: '维护原假条', href: '/leave-slip/originals', icon: ClipboardList, requiredPermission: 'canManageOriginalLeave' },
-  { label: '考勤工作安排', href: '/attendance-work', icon: ClipboardList, requiredPermission: 'canManageAttendanceWork' },
-  { label: '晚自习查询', href: '/evening-study', icon: Moon, requiredPermission: 'canViewEveningStudy' },
+  { label: '首页', href: '/', icon: LayoutDashboard, group: '工作台' },
+  { label: '班级考勤统计', href: '/class-attendance', icon: Users, group: '工作台', public: true },
+  { label: '活动提交', href: '/submit', icon: Send, group: '活动管理', requiredPermission: 'canSubmitActivity' },
+  { label: '提交状态', href: '/submit/status', icon: FileCheck, group: '活动管理', requiredPermission: 'canViewSubmissionStatus' },
+  { label: '赋分材料', href: '/submit/scoring', icon: Award, group: '活动管理', requiredPermission: 'canSubmitScoring' },
+  { label: '其他学院登记', href: '/other-college-registration', icon: Award, group: '活动管理', requiredPermission: 'canRegisterOtherCollege' },
+  { label: '我的假条', href: '/leave-slip/mine', icon: FileCheck, group: '假条管理' },
+  { label: '假条上传', href: '/leave-slip/upload', icon: FileCheck, group: '假条管理', requiredPermission: 'canUploadLeave' },
+  { label: '临时请假', href: '/leave-slip/temporary', icon: Send, group: '假条管理', requiredPermission: 'canStartGroupLeave' },
+  { label: '假条查对', href: '/leave-slip/review', icon: UserCheck, group: '假条管理', requiredPermission: 'canReviewLeave' },
+  { label: '假条查询', href: '/leave-slip/query', icon: Moon, group: '假条管理', requiredPermission: 'canQueryLeave' },
+  { label: '提交原假条', href: '/leave-slip/originals/submit', icon: FileCheck, group: '假条管理', requiredPermission: 'canSubmitOriginalLeave' },
+  { label: '维护原假条', href: '/leave-slip/originals', icon: ClipboardList, group: '假条管理', requiredPermission: 'canManageOriginalLeave' },
+  { label: '考勤工作安排', href: '/attendance-work', icon: ClipboardList, group: '考勤与查询', requiredPermission: 'canManageAttendanceWork' },
+  { label: '晚自习查询', href: '/evening-study', icon: Moon, group: '考勤与查询', requiredPermission: 'canViewEveningStudy' },
+  { label: '活动总表', href: '/admin?role=admin&tab=activities', icon: ClipboardList, group: '系统管理', requiredRole: 'admin' },
+  { label: '活动审核', href: '/admin?role=admin&tab=review', icon: FileCheck, group: '系统管理', requiredPermission: 'canPublish' },
+  { label: '活动赋分', href: '/admin?role=admin&tab=scoring', icon: Award, group: '系统管理', requiredPermission: 'canScore' },
+  { label: '用户管理', href: '/admin?role=admin&tab=users', icon: Users, group: '系统管理', requiredRole: 'admin' },
+  { label: '学习竞技部用户管理', href: '/department-users/learning-competition', icon: Users, group: '系统管理', requiredDepartment: '学习竞技部' },
+  { label: '第二课堂认证中心用户管理', href: '/department-users/certification-center', icon: Users, group: '系统管理', requiredDepartment: '第二课堂认证中心' },
 ];
+
+const PERMISSION_HINTS = [
+  ['活动审核权限', '允许查看并审核活动提交材料。'],
+  ['发布权限', '允许查看并审核活动提交材料。'],
+  ['活动赋分权限', '允许进入活动赋分并确认赋分结果。'],
+  ['赋分权限', '允许进入活动赋分并确认赋分结果。'],
+  ['活动提交权限', '允许提交本学院的活动申请与相关材料。'],
+  ['提交状态权限', '允许查询已提交活动的审核进度和结果。'],
+  ['查看提交状态权限', '允许查询已提交活动的审核进度和结果。'],
+  ['赋分材料权限', '允许为活动提交赋分表等赋分材料。'],
+  ['其他学院登记权限', '允许登记其他学院校级活动的备案表和赋分材料。'],
+  ['假条上传权限', '允许代班级学生上传请假材料。'],
+  ['临时请假权限', '允许发起本班学生的临时或集体请假。'],
+  ['集体请假权限', '允许发起本班学生的临时或集体请假。'],
+  ['假条查对权限', '允许核对假条图片与请假信息是否一致。'],
+  ['请假审核权限', '允许核对、审核并处理学生请假申请。'],
+  ['假条查询权限', '允许按学生、班级或学号查询请假记录。'],
+  ['请假查询权限', '允许按学生、班级或学号查询请假记录。'],
+  ['提交原假条权限', '允许提交活动方归档用的原假条。'],
+  ['维护原假条权限', '允许集中查询、核对和维护已归档的活动方原假条。'],
+  ['考勤工作安排权限', '允许安排当天各班考勤人员和考勤工作。'],
+  ['晚自习查询权限', '允许查询晚自习请假及班级考勤情况。'],
+] as const;
 
 export function DashboardLayout({ children, user: providedUser, onLogout, title, activeNavHref }: DashboardLayoutProps) {
   const pathname = usePathname();
@@ -204,15 +228,26 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
 
   const visibleItems = React.useMemo(() => NAV_ITEMS.filter(canAccessItem), [canAccessItem]);
 
-  const getNavGroup = (href: string) => {
-    if (href === '/') return '工作台';
-    if (href.startsWith('/leave-slip')) return '假条管理';
-    if (href.startsWith('/leave')) return '请假';
-    if (href.startsWith('/submit')) return '活动';
-    if (href.startsWith('/admin')) return '管理';
-    if (href.startsWith('/department-users')) return '管理';
-    return '查询';
-  };
+  React.useEffect(() => {
+    const applyPermissionHints = () => {
+      document.querySelectorAll<HTMLElement>('label, button, th, [role="checkbox"]').forEach((element) => {
+        const label = [element.textContent, element.getAttribute('aria-label')]
+          .filter(Boolean)
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        const hint = PERMISSION_HINTS.find(([permission]) => label.includes(permission))?.[1];
+
+        if (hint) element.title = hint;
+      });
+    };
+
+    applyPermissionHints();
+    const observer = new MutationObserver(applyPermissionHints);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
+  }, []);
 
   const roleLabel = React.useMemo(() => {
     if (!user) return '访客';
@@ -334,9 +369,9 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
             const isActive = isItemActive(item.href);
             return (
               <React.Fragment key={item.href}>
-                {!collapsed && (index === 0 || getNavGroup(item.href) !== getNavGroup(visibleItems[index - 1].href)) && (
+                {!collapsed && (index === 0 || item.group !== visibleItems[index - 1].group) && (
                   <li className={cn("px-3 pb-1 text-[10px] font-semibold text-slate-400", index > 0 && "pt-4")}>
-                    {getNavGroup(item.href)}
+                    {item.group}
                   </li>
                 )}
                 <NavItemComponent

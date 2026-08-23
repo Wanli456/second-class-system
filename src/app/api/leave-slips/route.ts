@@ -45,6 +45,21 @@ function parseStudentInput(value: unknown): StudentInput[] {
   });
 }
 
+function validateStudentIdentityPairs(students: StudentInput[]): string | null {
+  const identitiesByStudentId = new Map<string, string>();
+  const studentIdsByIdentity = new Map<string, string>();
+  for (const student of students) {
+    const identity = student.student_name + "\u0000" + student.class_name;
+    const previousIdentity = identitiesByStudentId.get(student.student_id);
+    if (previousIdentity && previousIdentity !== identity) return "学号 " + student.student_id + " 对应了不同的姓名或班级，请核对后再提交";
+    const previousStudentId = studentIdsByIdentity.get(identity);
+    if (previousStudentId && previousStudentId !== student.student_id) return "学生 " + student.student_name + "（" + student.class_name + "）对应了不同的学号，请核对后再提交";
+    identitiesByStudentId.set(student.student_id, identity);
+    studentIdsByIdentity.set(identity, student.student_id);
+  }
+  return null;
+}
+
 function parseStringArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
   if (typeof value === 'string') {
@@ -122,7 +137,8 @@ export async function POST(request: NextRequest) {
       ? [...new Set(students.map((student) => student.class_name))]
       : parseStringArray(body.class_names);
 
-    const allowedClass = classroomCondition(user);
+    // 临时请假由获授权人员代为汇总，学生名单可跨班；其余假条仍保持原有班级范围限制。
+    const allowedClass = isTemporaryLeave ? null : classroomCondition(user);
     if (allowedClass && classNames.some((className) => className !== allowedClass)) {
       return NextResponse.json({ success: false, error: `当前账号只能提交本班（${allowedClass}）的假条` }, { status: 403 });
     }
@@ -130,6 +146,8 @@ export async function POST(request: NextRequest) {
     if (!students.length) {
       return NextResponse.json({ success: false, error: '请假学生至少填写一名，且需要学号、姓名、班级完整' }, { status: 400 });
     }
+    const studentIdentityError = validateStudentIdentityPairs(students);
+    if (studentIdentityError) return NextResponse.json({ success: false, error: studentIdentityError }, { status: 400 });
     // 同一假条内的班级数不超过 15 个，防止把全年级并到一张假条上。
     if (classNames.length > 15) return NextResponse.json({ success: false, error: '一张假条最多覆盖 15 个班级' }, { status: 400 });
 

@@ -9,6 +9,7 @@ import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
+import { ImageUploadPreviews } from '@/components/ImageUploadPreviews';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -53,23 +54,72 @@ function parseImageList(value: string | null): Array<{ url: string; name?: strin
   return [];
 }
 
+type StudentEntry = { studentId: string; studentName: string; className: string };
+
+function isStudentId(value: string): boolean {
+  return /^\d{6,18}$/.test(value.trim());
+}
+
+function isClassName(value: string): boolean {
+  const normalized = value.trim();
+  if (/^\d+$/.test(normalized)) return false;
+  // “虚拟2531”“虚拟现实技术应用2531”等无“班”字的专业简称 + 年级班号也属于班级。
+  return /班$/u.test(normalized)
+    || /^[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z（）()·-]{0,30}(?:20|21|22|23|24|25|26)\d{2}$/u.test(normalized);
+}
+
+function normalizeStudentEntry(entry: string): StudentEntry | null {
+  const fields = entry.split(/[｜|，,\t]+/).flatMap((item) => item.trim().split(/\s+/))
+    .map((item) => item.replace(/^(?:学号|姓名|班级)\s*[:：]?\s*/u, '').trim()).filter(Boolean);
+  const studentId = fields.find(isStudentId) || '';
+  const className = fields.find(isClassName) || '';
+  const studentName = fields.find((item) => item !== studentId && item !== className
+    && !/^(?:辅导员|导员|班主任|指导老师|老师|签字|联系电话|电话)/u.test(item)
+    && /^[\u4e00-\u9fff]{2,8}$/u.test(item)) || '';
+  return studentId && studentName && className ? { studentId, studentName, className } : null;
+}
+
 function parseStudentEntries(value: string): string[] {
-  const entries = value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
-  return entries.map((entry, index) => {
-    const fields = entry.split('｜').map((item) => item.trim());
-    if (fields.length !== 3 || fields.some((item) => !item)) {
-      throw new Error('第 ' + (index + 1) + ' 名学生信息不完整，请按“学号｜班级｜姓名”填写');
-    }
-    return fields.join('｜');
+  return value.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean).map((entry, index) => {
+    const student = normalizeStudentEntry(entry);
+    if (!student) throw new Error('第 ' + (index + 1) + ' 名学生信息无法确定学号、姓名、班级；三项可任意排序，但必须完整填写');
+    return formatStudentEntry(student.studentId, student.studentName, student.className);
   });
 }
 
-function formatStudentEntry(studentId: string, className: string, name: string): string {
-  return [studentId.trim(), className.trim(), name.trim()].join('｜');
+async function cropImageToLeftHalf(file: File): Promise<File> {
+  // 仅裁切供自动识别使用的副本；完整原图仍照常保存，避免把右侧导员信息纳入学生名单。
+  if (!file.type.startsWith('image/')) return file;
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = new Image();
+      element.onload = () => resolve(element);
+      element.onerror = () => reject(new Error('图片加载失败'));
+      element.src = objectUrl;
+    });
+    const width = Math.max(1, Math.floor(image.naturalWidth / 2));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d');
+    if (!context) return file;
+    context.drawImage(image, 0, 0, width, image.naturalHeight, 0, 0, width, image.naturalHeight);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, file.type || 'image/png'));
+    return blob ? new File([blob], file.name, { type: blob.type || file.type, lastModified: file.lastModified }) : file;
+  } catch {
+    return file;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function formatStudentEntry(studentId: string, name: string, className: string): string {
+  return [studentId.trim(), name.trim(), className.trim()].join('｜');
 }
 
 function getClassNamesFromStudents(entries: string[]): string[] {
-  return [...new Set(entries.map((entry) => entry.split('｜')[1]).filter(Boolean))];
+  return [...new Set(entries.map((entry) => entry.split('｜')[2]).filter(Boolean))];
 }
 
 export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: 'submit' | 'maintain' }) {
@@ -85,6 +135,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
   const [endTime, setEndTime] = useState('');
   const [notes, setNotes] = useState('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<OriginalSlip | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -94,6 +145,12 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
   const [submitSuccess, setSubmitSuccess] = useState('');
 
   const canAccess = hasPermission(user, 'canManageOriginalLeave');
+
+  useEffect(() => {
+    const urls = imageFiles.map((file) => URL.createObjectURL(file));
+    setImagePreviews(urls);
+    return () => urls.forEach((url) => URL.revokeObjectURL(url));
+  }, [imageFiles]);
 
   const filtered = useMemo(() => {
     if (!keyword.trim()) return originals;
@@ -143,7 +200,8 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
     setOcrError('');
     setOcrLines([]);
     try {
-      const uploaded = await uploadFilesToUrls(files);
+      const ocrFiles = await Promise.all(files.map(cropImageToLeftHalf));
+      const uploaded = await uploadFilesToUrls(ocrFiles);
 
       const res = await apiFetch('/api/ocr/analyze', {
         method: 'POST',
@@ -167,11 +225,11 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
           const className = String(item.class_name || '');
           const classStudentNames = Array.isArray(item.students) ? item.students.map(String).filter(Boolean) : [];
           const classStudentIds = Array.isArray(item.student_ids) ? item.student_ids.map(String) : [];
-          classStudentNames.forEach((name, index) => entries.push(formatStudentEntry(classStudentIds[index] || '', className, name)));
+          classStudentNames.forEach((name, index) => entries.push(formatStudentEntry(classStudentIds[index] || '', name, className)));
         }
         studentText = entries.join('\n');
       } else if (rawStudents.length) {
-        studentText = rawStudents.map((name, index) => formatStudentEntry(rawIds[index] || '', '', name)).join('\n');
+        studentText = rawStudents.map((name, index) => formatStudentEntry(rawIds[index] || '', name, '')).join('\n');
       }
 
       if (fields.activity_name) {
@@ -202,7 +260,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
 
   const handleSubmit = async () => {
     if (!activityId || !activityName.trim()) { alert('原假条一次只能绑定一个活动，请先选择系统活动'); return; }
-    if (!studentNamesText.trim()) { alert('请至少填写一名学生的学号、班级和姓名'); return; }
+    if (!studentNamesText.trim()) { alert('请至少填写一名学生的学号、姓名和班级'); return; }
     let studentEntries: string[] = [];
     try {
       studentEntries = studentNamesText.trim() ? parseStudentEntries(studentNamesText) : [];
@@ -287,8 +345,8 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
               </label>
               <datalist id="original-activity-options">{activityOptions.map((activity) => <option key={activity.id} value={activity.full_name}>{activity.id}</option>)}</datalist>
               <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs tabular-nums text-slate-600">已绑定活动 ID：<span className="font-medium text-slate-800">{activityId || '未选择'}</span></div>
-              <label className="block space-y-2"><span className="text-sm font-medium text-slate-800">涉及学生（学号｜班级｜姓名）</span><textarea aria-label="涉及学生的学号、班级和姓名" placeholder={'每行一名学生，例如：\n20250001｜应化2532｜刘玉\n20250002｜应急2531｜宣锐'} value={studentNamesText} onChange={(event) => setStudentNamesText(event.target.value)} className="min-h-32 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label>
-              <p className="-mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">每行只填写一名学生，按 <span className="font-medium text-slate-800">学号｜班级｜姓名</span> 顺序使用竖线分隔。三项信息会按同一行一一对应保存，缺少任一项不能提交；系统会从每行学生信息自动汇总涉及班级，选图后会自动识别并按此顺序回填。</p>
+              <label className="block space-y-2"><span className="text-sm font-medium text-slate-800">涉及学生（学号｜姓名｜班级）</span><textarea aria-label="涉及学生的学号、姓名和班级" placeholder={'每行一名学生，例如：\n20250001｜刘玉｜应化2532\n20250002｜宣锐｜应急2531'} value={studentNamesText} onChange={(event) => setStudentNamesText(event.target.value)} className="min-h-32 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label>
+              <p className="-mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">每行只填写一名学生，学号、姓名、班级三项可任意排序并用竖线分隔；系统会统一保存为 <span className="font-medium text-slate-800">学号｜姓名｜班级</span>。自动识别只读取图片左半部分的学生名单区，右侧导员信息不会写入学生名单；请人工核对后提交。</p>
               <div className="grid grid-cols-2 gap-2">
                 <input aria-label="开始时间" type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-teal-600" />
                 <input aria-label="结束时间" type="datetime-local" value={endTime} onChange={(event) => setEndTime(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-teal-600" />
@@ -298,6 +356,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
                 <span className="flex items-center gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white text-teal-700 shadow-sm"><Upload className="size-4" /></span><span className="min-w-0 flex-1"><span className="block text-sm font-medium text-slate-800">选择原假条图片</span><span className="mt-1 block truncate text-xs text-slate-500">{imageFiles.length ? `已选择 ${imageFiles.length} 张图片` : '支持一次选择多张截图'}</span></span></span>
                 <input type="file" accept="image/*" multiple className="sr-only" onChange={handleImageChange} />
               </label>
+              <ImageUploadPreviews imageUrls={imagePreviews} altPrefix="原假条图片" onRemove={(index) => setImageFiles((previous) => previous.filter((_, itemIndex) => itemIndex !== index))} />
               <div className="grid gap-3 sm:grid-cols-2">
                 <Button type="button" variant="outline" onClick={() => void runOcrForFiles(imageFiles)} disabled={ocrLoading || !imageFiles.length} className="h-11 bg-white">自动识别</Button>
                 <Button type="button" onClick={handleSubmit} disabled={saving || ocrLoading} className="h-11 bg-teal-700 hover:bg-teal-800"><Plus className="size-4" />{ocrLoading ? '自动识别中...' : saving ? '提交中...' : '提交原假条'}</Button>
