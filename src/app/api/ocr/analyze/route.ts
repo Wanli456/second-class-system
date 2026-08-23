@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { requirePermission } from '@/lib/auth';
+import { assertSafeRemoteImageUrl } from '@/lib/image-url';
 
 function runPythonOcr(pythonPath: string, args: string[]) {
   return new Promise<void>((resolve, reject) => {
@@ -41,21 +42,36 @@ function unique(value: string[]): string[] {
 
 async function resolveInputPath(imageUrl: string, tempDir: string, index: number): Promise<string> {
   if (/^https?:\/\//i.test(imageUrl)) {
-    const response = await fetch(imageUrl);
+    if (!(await assertSafeRemoteImageUrl(imageUrl))) {
+      throw new Error('远程图片地址不合法或指向内网');
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    let response: Response;
+    try {
+      response = await fetch(imageUrl, { signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
     if (!response.ok) throw new Error(`下载图片失败：HTTP ${response.status}`);
+    const contentLength = Number(response.headers.get('content-length') || 0);
+    if (contentLength && contentLength > 8 * 1024 * 1024) {
+      throw new Error('远程图片超过 8MB，拒绝下载');
+    }
     const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length > 8 * 1024 * 1024) throw new Error('远程图片超过 8MB，拒绝下载');
     const ext = imageUrl.includes('.png') ? 'png' : 'jpg';
     const inputPath = path.join(tempDir, `image-${index}.${ext}`);
     await writeFile(inputPath, buffer);
     return inputPath;
   }
-  if (imageUrl.startsWith('/uploads/')) {
+  if (imageUrl.startsWith('/uploads/') && !imageUrl.includes('..')) {
     const fileName = imageUrl.split('/').pop();
     const inputPath = path.join(process.cwd(), 'public', 'uploads', fileName || '');
     if (!existsSync(inputPath)) throw new Error(`找不到本地图片：${imageUrl}`);
     return inputPath;
   }
-  throw new Error('image_url 只支持 /uploads 本地路径或 http(s) 地址');
+  throw new Error('image_url 只支持 /uploads 本地路径或公网 http(s) 图片地址');
 }
 
 type OcrLine = { text: string; score?: number };

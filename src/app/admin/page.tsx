@@ -39,7 +39,7 @@ type LeaveStatus = '待审核' | '已通过' | '已驳回';
 type ScoringStatus = '待赋分' | '已赋分';
 type AdminRole = 'admin' | 'leader' | 'class_leader' | 'student';
 type AdminTab = 'activities' | 'review' | 'scoring' | 'leave' | 'users';
-type UserPermission = 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave' | 'canUploadLeave' | 'canQueryLeave' | 'canManageOriginalLeave' | 'canManageLeaveTemplate';
+type UserPermission = 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave' | 'canManageAttendanceWork' | 'canUploadLeave' | 'canQueryLeave' | 'canManageOriginalLeave';
 
 const USER_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
@@ -122,10 +122,10 @@ interface UserData {
   canReviewLeave: boolean;
   canViewEveningStudy: boolean;
   canStartGroupLeave: boolean;
+  canManageAttendanceWork: boolean;
   canUploadLeave: boolean;
   canQueryLeave: boolean;
   canManageOriginalLeave: boolean;
-  canManageLeaveTemplate: boolean;
   department?: string | null;
   className?: string | null;
   contactPhone?: string | null;
@@ -263,10 +263,10 @@ function AdminPage() {
       canReviewLeave: globalUser.canReviewLeave || false,
       canViewEveningStudy: globalUser.canViewEveningStudy || false,
       canStartGroupLeave: globalUser.canStartGroupLeave || false,
+      canManageAttendanceWork: globalUser.canManageAttendanceWork || false,
       canUploadLeave: globalUser.canUploadLeave || false,
       canQueryLeave: globalUser.canQueryLeave || false,
       canManageOriginalLeave: globalUser.canManageOriginalLeave || false,
-      canManageLeaveTemplate: globalUser.canManageLeaveTemplate || false,
       department: globalUser.department || null,
       className: globalUser.className || null,
       contactPhone: globalUser.contactPhone || null,
@@ -564,10 +564,10 @@ function AdminPage() {
       canReviewLeave: 'canReviewLeave',
       canViewEveningStudy: 'canViewEveningStudy',
       canStartGroupLeave: 'canStartGroupLeave',
+      canManageAttendanceWork: 'canManageAttendanceWork',
       canUploadLeave: 'canUploadLeave',
       canQueryLeave: 'canQueryLeave',
       canManageOriginalLeave: 'canManageOriginalLeave',
-      canManageLeaveTemplate: 'canManageLeaveTemplate',
     };
     const apiField = apiFieldMap[permission];
     try {
@@ -2002,10 +2002,11 @@ function UserManagement({
   const paginatedUsers = filteredUsers.slice((currentUserPage - 1) * userPageSize, currentUserPage * userPageSize);
   const permissions: Array<{ key: UserPermission; label: string }> = [
     { key: 'canUploadLeave', label: '假条上传' },
+    { key: 'canStartGroupLeave', label: '临时请假' },
+    { key: 'canManageAttendanceWork', label: '考勤工作安排' },
     { key: 'canReviewLeave', label: '假条查对' },
     { key: 'canQueryLeave', label: '假条查询' },
     { key: 'canManageOriginalLeave', label: '原假条维护' },
-    { key: 'canManageLeaveTemplate', label: '假条模板管理' },
     { key: 'canPublish', label: '活动审核' },
     { key: 'canScore', label: '活动赋分' },
     { key: 'canSubmitScoring', label: '赋分材料' },

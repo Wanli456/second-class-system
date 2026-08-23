@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth';
 import { query, queryOne } from '@/storage/database/supabase-client';
+import { computeImageHashes } from '@/lib/image-hash';
 
 function parseArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
@@ -91,11 +92,12 @@ export async function POST(request: NextRequest) {
     const images = parseImages(body.images);
     const imageList = images.length ? images : (body.image_url ? [{ url: String(body.image_url), name: String(body.image_name || body.image_url.split('/').pop() || '') }] : []);
     const ocrNames = parseArray(body.ocr_names);
+    const imageHashes = await computeImageHashes(imageList.map((item) => item.url));
     const data = await queryOne(
-      `INSERT INTO original_leave_slips (activity_id, activity_name, class_names, student_names, start_time, end_time, image_url, image_name, image_list, ocr_names, notes, created_by_user_id, created_by_name)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+      `INSERT INTO original_leave_slips (activity_id, activity_name, class_names, student_names, start_time, end_time, image_url, image_name, image_list, ocr_names, image_hashes, notes, created_by_user_id, created_by_name)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING *`,
-      [activityId, activityName, JSON.stringify(classNames), JSON.stringify(studentNames), startTime ? startTime.toISOString() : null, endTime ? endTime.toISOString() : null, imageList.length ? imageList[0].url : null, imageList.length ? imageList[0].name : null, JSON.stringify(imageList), JSON.stringify(ocrNames), body.notes ? String(body.notes) : null, user.id, user.username],
+      [activityId, activityName, JSON.stringify(classNames), JSON.stringify(studentNames), startTime ? startTime.toISOString() : null, endTime ? endTime.toISOString() : null, imageList.length ? imageList[0].url : null, imageList.length ? imageList[0].name : null, JSON.stringify(imageList), JSON.stringify(ocrNames), JSON.stringify(imageHashes), body.notes ? String(body.notes) : null, user.id, user.username],
     );
     return NextResponse.json({ success: true, data });
   } catch (error) {

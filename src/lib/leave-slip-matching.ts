@@ -1,4 +1,9 @@
 import { query, queryOne } from '@/storage/database/supabase-client';
+import {
+  compareImageFingerprints,
+  parseStoredImageFingerprints,
+  type ImageConsistencyResult,
+} from '@/lib/original-image-consistency';
 
 function parseNames(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
@@ -19,6 +24,7 @@ interface SlipRow {
   activity_id?: string | null;
   class_names: string | null;
   ocr_names?: string | null;
+  image_hashes?: string | null;
   original_slip_id?: string | null;
 }
 interface OriginalRow {
@@ -27,12 +33,14 @@ interface OriginalRow {
   activity_name?: string | null;
   student_names?: string | null;
   ocr_names?: string | null;
+  image_hashes?: string | null;
 }
 
 export type AutoMatchResult = {
   action: 'rejected' | 'manual' | 'skipped';
   missing: string[];
   matched: string[];
+  image_consistency?: ImageConsistencyResult;
 };
 
 export async function compareSlipWithOriginals(slipId: string): Promise<AutoMatchResult> {
@@ -53,7 +61,12 @@ export async function compareSlipWithOriginals(slipId: string): Promise<AutoMatc
   if (slip.activity_id) {
     // 先按活动ID锁定原假条，避免不同活动名单同名/交叉时选错。
     const byActivity = originals.filter((original) => original.activity_id === slip.activity_id);
-    if (byActivity.length > 0) candidates = byActivity;
+    if (byActivity.length > 0) {
+      candidates = byActivity;
+    } else {
+      // 没有该活动的原假条时，不要回退到全表猜测，否则容易跨活动误匹配后自动驳回。
+      return { action: 'skipped', missing: [], matched: [] };
+    }
   }
 
   let best: OriginalRow | null = slip.original_slip_id
@@ -77,19 +90,52 @@ export async function compareSlipWithOriginals(slipId: string): Promise<AutoMatc
   const missing = uploadNames.filter((name) => !originalNames.includes(name));
 
   if (missing.length > 0) {
-    await query(
-      `UPDATE leave_slips
-       SET review_status='已驳回',
-           review_note=$1,
-           original_slip_id=$2,
-           updated_at=NOW()
-       WHERE id=$3`,
-      [`自动识别到原假条中没有的同学：${missing.join('、')}，已自动驳回`, best?.id || null, slipId],
-    );
-    return { action: 'rejected', missing, matched };
+    // 只有二课活动请假会要求与原假条名单完全一致；手写假条没有匹配原假条时不能自动驳回。
+    if (slip.slip_type === '二课活动请假' && best) {
+      await query(
+        `UPDATE leave_slips
+         SET review_status='已驳回',
+             review_note=$1,
+             original_slip_id=$2,
+             updated_at=NOW()
+         WHERE id=$3`,
+        [`自动识别到原假条中没有的同学：${missing.join('、')}，已自动驳回`, best.id, slipId],
+      );
+      return { action: 'rejected', missing, matched };
+    }
+    // 手写假条等：列为缺失，但保持待查对，交给人工判断。
+    if (best) {
+      await query(
+        `UPDATE leave_slips
+         SET review_status='待查对',
+             review_note=$1,
+             original_slip_id=$2,
+             updated_at=NOW()
+         WHERE id=$3`,
+        [`自动比对与原假条有 ${missing.length} 名同学不一致，待查对人员人工确认`, best.id, slipId],
+      );
+      return { action: 'manual', missing, matched };
+    }
+    return { action: 'skipped', missing, matched: [] };
   }
 
   if (matched.length === 0) return { action: 'skipped', missing: [], matched: [] };
+
+  let imageConsistency: ImageConsistencyResult | undefined;
+  if (slip.slip_type === '二课活动请假' && best) {
+    imageConsistency = compareImageFingerprints(
+      parseStoredImageFingerprints(slip.image_hashes),
+      parseStoredImageFingerprints(best.image_hashes),
+    );
+    await query(
+      `UPDATE leave_slips
+       SET original_image_similarity=$1,
+           original_image_difference_warning=$2,
+           updated_at=NOW()
+       WHERE id=$3`,
+      [imageConsistency.similarity, imageConsistency.warning, slipId],
+    );
+  }
 
   await query(
     `UPDATE leave_slips
@@ -100,7 +146,7 @@ export async function compareSlipWithOriginals(slipId: string): Promise<AutoMatc
      WHERE id=$2`,
     [best!.id, slipId],
   );
-  return { action: 'manual', missing: [], matched };
+  return { action: 'manual', missing: [], matched, image_consistency: imageConsistency };
 }
 
 function unique(values: string[]): string[] {

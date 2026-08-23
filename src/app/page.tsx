@@ -37,6 +37,8 @@ interface User {
   canSubmitScoring?: boolean;
   canReviewLeave?: boolean;
   canViewEveningStudy?: boolean;
+  canStartGroupLeave?: boolean;
+  canManageAttendanceWork?: boolean;
   canUploadLeave?: boolean;
   canQueryLeave?: boolean;
   canManageOriginalLeave?: boolean;
@@ -74,6 +76,8 @@ export default function Home() {
               canSubmitScoring: true,
               canReviewLeave: true,
               canViewEveningStudy: true,
+              canStartGroupLeave: true,
+              canManageAttendanceWork: true,
               canUploadLeave: true,
               canQueryLeave: true,
               canManageOriginalLeave: true,
@@ -225,38 +229,40 @@ export default function Home() {
     const certificationEntries: PortalEntry[] = [
       { href: '/admin?role=admin&tab=activities', label: '活动总表', detail: '活动管理、审核、赋分、用户管理', icon: ClipboardList, tone: 'bg-teal-50 text-teal-700', show: isAdmin },
       { href: '/admin?role=admin&tab=review', label: '活动审核', detail: '审核活动提交（含策划书、备案表）', icon: FileCheck, tone: 'bg-indigo-50 text-indigo-700', show: isAdmin || user.canPublish === true },
+      { href: '/admin?role=admin&tab=scoring', label: '活动赋分', detail: '活动赋分管理', icon: Award, tone: 'bg-orange-50 text-orange-700', show: isAdmin || user.canScore === true },
+      { href: '/admin?role=admin&tab=users', label: '用户管理', detail: '权限管理、角色分配', icon: Users, tone: 'bg-rose-50 text-rose-700', show: isAdmin },
       { href: '/submit', label: '活动提交', detail: '提交活动基本信息、查看审核状态', icon: Send, tone: 'bg-emerald-50 text-emerald-700', show: isAdmin || user.canSubmitActivity === true },
       { href: '/submit/status', label: '提交状态', detail: '查询活动提交进度和结果', icon: FileCheck, tone: 'bg-slate-100 text-slate-700', show: isAdmin || user.canViewSubmissionStatus === true },
       { href: '/submit/scoring', label: '赋分材料', detail: '上传活动赋分表、备案表照片', icon: Award, tone: 'bg-amber-50 text-amber-700', show: isAdmin || user.canSubmitScoring === true },
-      { href: '/admin?role=admin&tab=scoring', label: '活动赋分', detail: '活动赋分管理', icon: Award, tone: 'bg-orange-50 text-orange-700', show: isAdmin || user.canScore === true },
-      { href: '/admin?role=admin&tab=users', label: '用户管理', detail: '权限管理、角色分配', icon: Users, tone: 'bg-rose-50 text-rose-700', show: isAdmin },
     ].filter((entry) => entry.show);
 
-    // 学习竞技部：假条、晚自习、考勤工作安排。
+    // 学习竞赛部：假条、晚自习、考勤工作安排。
     const departmentEntries: PortalEntry[] = [
       { href: '/leave-slip/mine', label: '我的假条', detail: '查看与自己相关的假条记录', icon: FileCheck, tone: 'bg-sky-50 text-sky-700', show: true },
       { href: '/leave-slip/upload', label: '假条上传', detail: '统一上传本班假条', icon: FileText, tone: 'bg-cyan-50 text-cyan-700', show: isAdmin || user.canUploadLeave === true },
-      { href: '/leave-slip/temporary', label: '临时请假', detail: '提交临时请假，自动审核通过', icon: Send, tone: 'bg-emerald-50 text-emerald-700', show: isAdmin || user.canUploadLeave === true },
+      { href: '/leave-slip/temporary', label: '临时请假', detail: '提交临时请假，自动审核通过', icon: Send, tone: 'bg-emerald-50 text-emerald-700', show: isAdmin || user.canStartGroupLeave === true },
       { href: '/leave-slip/review', label: '假条查对', detail: '人工查对请假条', icon: UserCheck, tone: 'bg-amber-50 text-amber-700', show: isAdmin || user.canReviewLeave === true },
       { href: '/leave-slip/query', label: '假条查询', detail: '按班级/姓名/日期搜索', icon: Moon, tone: 'bg-slate-100 text-slate-700', show: isAdmin || user.canQueryLeave === true },
       { href: '/leave-slip/originals', label: '原假条', detail: '管理活动原假条', icon: FileCheck, tone: 'bg-slate-100 text-slate-700', show: isAdmin || user.canManageOriginalLeave === true },
-      { href: '/evening-study', label: '晚自习查询', detail: '查看晚自习请假与考勤安排', icon: Moon, tone: 'bg-indigo-50 text-indigo-700', show: isAdmin || user.canViewEveningStudy === true },
-      { href: '/attendance-work', label: '考勤工作安排', detail: '按周提交和查对考勤工作安排', icon: ClipboardList, tone: 'bg-teal-50 text-teal-700', show: isAdmin || user.canUploadLeave === true || user.canReviewLeave === true },
+      { href: '/attendance-work', label: '考勤工作安排', detail: '按周提交和查对考勤工作安排', icon: ClipboardList, tone: 'bg-teal-50 text-teal-700', show: isAdmin || user.canManageAttendanceWork === true || user.canReviewLeave === true },
+      { href: '/evening-study', label: '晚自习查询', detail: '查看晚自习请假与考勤安排', icon: Moon, tone: 'bg-indigo-50 text-indigo-700', show: isAdmin || user.canViewEveningStudy === true || user.canQueryLeave === true },
     ].filter((entry) => entry.show);
 
     type EntryWithGroup = PortalEntry & { group: string };
     const visibleEntries: EntryWithGroup[] = [
       ...certificationEntries.map((entry) => ({ ...entry, group: '第二课堂认证中心' })),
-      ...departmentEntries.map((entry) => ({ ...entry, group: '学习竞技部' })),
+      ...departmentEntries.map((entry) => ({ ...entry, group: '学习竞赛部' })),
     ];
 
     // 常用入口：按当前角色权限挑选最常用的功能。
     const quickHrefs = Array.from(new Set([
       '/leave-slip/mine',
-      ...(isAdmin || user.canUploadLeave === true ? ['/leave-slip/upload', '/leave-slip/temporary'] : []),
+      ...(isAdmin || user.canUploadLeave === true ? ['/leave-slip/upload'] : []),
+      ...(isAdmin || user.canStartGroupLeave === true ? ['/leave-slip/temporary'] : []),
+      ...(isAdmin || user.canManageAttendanceWork === true || user.canReviewLeave === true ? ['/attendance-work'] : []),
       ...(isAdmin || user.canReviewLeave === true ? ['/leave-slip/review'] : []),
       ...(isAdmin || user.canQueryLeave === true ? ['/leave-slip/query'] : []),
-      ...(isAdmin || user.canViewEveningStudy === true ? ['/evening-study'] : []),
+      ...(isAdmin || user.canViewEveningStudy === true || user.canQueryLeave === true ? ['/evening-study'] : []),
       ...(isAdmin || user.canSubmitActivity === true ? ['/submit'] : []),
       ...(isAdmin || user.canViewSubmissionStatus === true ? ['/submit/status'] : []),
       ...(isAdmin || user.canSubmitScoring === true ? ['/submit/scoring'] : []),
@@ -390,8 +396,8 @@ export default function Home() {
 
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
               {[
-                { title: '学习竞技部', detail: '活动提交、审核、赋分、状态查询', icon: ShieldCheck },
-                { title: '第二课堂认证中心', detail: '假条、晚自习查询、考勤工作安排', icon: UserCheck },
+                { title: '第二课堂认证中心', detail: '活动提交、审核、赋分、状态查询', icon: ShieldCheck },
+                { title: '学习竞赛部', detail: '假条、临时请假、晚自习查询、考勤工作安排', icon: UserCheck },
               ].map(({ title, detail, icon: Icon }) => (
                 <div key={title} className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
@@ -418,9 +424,8 @@ export default function Home() {
             </div>
             <div className="divide-y divide-slate-100">
               {[
-                { href: '/login?redirect=/leave-slip/upload', label: '假条上传', detail: '班级负责人统一上传本班假条', icon: FileText },
-                { href: '/login?redirect=/leave-slip/query', label: '假条查询', detail: '按班级/姓名/日期搜索与匹配', icon: FileCheck },
-                { href: '/login?redirect=/leave-slip/temporary', label: '临时请假', detail: '提交后自动审核通过', icon: Send },
+                { href: '/login', label: '登录 / 注册', detail: '登录后按角色进入对应功能', icon: LogIn },
+                { href: '/login?redirect=/leave-slip/mine', label: '我的假条', detail: '登录后查看与自己相关的假条记录', icon: FileCheck },
               ].map(({ href, label, detail, icon: Icon }) => (
                 <Link key={href} href={href} className="group flex items-center gap-3 py-4 transition-colors first:pt-5 last:pb-1 hover:text-teal-700">
                   <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">

@@ -20,24 +20,39 @@ interface WorkArrangement {
   review_status: string;
   review_note: string | null;
   reviewed_by_name: string | null;
+  reviewed_by_user_id: string | null;
+  reviewed_at: string | null;
   created_by_name: string | null;
+  created_by_user_id: string | null;
+  ocr_names: string;
   created_at: string;
+  updated_at: string | null;
 }
 
 const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五'] as const;
 
-function parseNames(raw: string): string[] {
+function parseNames(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map(String).map((item) => item.trim()).filter(Boolean);
+  if (typeof raw !== 'string') return [];
+  const text = raw.trim();
   try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed)) return parsed.map(String).map((item) => item.trim()).filter(Boolean);
   } catch { /* ignore */ }
-  return [];
+  return text.split(/[,，、\n]/).map((item) => item.trim()).filter(Boolean);
 }
 
 function parseSchedules(raw: string): ScheduleItem[] {
   try {
     const parsed = JSON.parse(raw || '[]');
-    if (Array.isArray(parsed)) return parsed;
+    if (Array.isArray(parsed)) {
+      return parsed.flatMap((item) => {
+        if (!item || typeof item !== 'object') return [];
+        const candidate = item as { date?: string; weekday?: string; students?: unknown; student_names?: unknown };
+        const students = parseNames(candidate.students ?? candidate.student_names ?? '');
+        return students.length ? [{ date: String(candidate.date || ''), weekday: String(candidate.weekday || ''), students }] : [];
+      });
+    }
   } catch { /* ignore */ }
   return [];
 }
@@ -95,7 +110,7 @@ export default function AttendanceWorkPage() {
   const [listLoading, setListLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const canUpload = Boolean(user && (user.role === 'admin' || user.canUploadLeave === true));
+  const canUpload = Boolean(user && (user.role === 'admin' || user.canManageAttendanceWork === true));
   const canReview = Boolean(user && (user.role === 'admin' || user.canReviewLeave === true));
 
   const loadList = useCallback(async () => {
@@ -158,6 +173,10 @@ export default function AttendanceWorkPage() {
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
+    if (files.some((file) => file.size > 5 * 1024 * 1024)) {
+      setError('单张考勤表图片不能超过 5MB');
+      return;
+    }
     setImageFiles((previous) => [...previous, ...files]);
     files.forEach((file) => {
       const reader = new FileReader();
@@ -220,8 +239,8 @@ export default function AttendanceWorkPage() {
       const date = shiftDate(weekStartDate, WEEKDAY_OFFSET[weekday]);
       return date ? [{ weekday, students, date }] : [];
     });
-    if (!schedules.length) { setError('请至少为某一天填写考勤人员姓名'); return; }
     if (!weekStartDate) { setError('请选择这张考勤表的周一日期（周起始日期）'); return; }
+    if (!schedules.length) { setError('请至少为某一天填写考勤人员姓名'); return; }
     if (!editingId && !imageFiles.length) { setError('请上传考勤工作安排表截图'); return; }
 
     setSubmitting(true);
@@ -303,7 +322,7 @@ export default function AttendanceWorkPage() {
         <div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
           <AlertCircle className="mx-auto size-6 text-amber-600" />
           <h2 className="mt-3 font-semibold text-amber-900">当前账号没有部门考勤工作安排权限</h2>
-          <p className="mt-2 text-sm text-amber-800">请联系系统管理员授予 `canUploadLeave`（提交）或 `canReviewLeave`（查对）权限。</p>
+          <p className="mt-2 text-sm text-amber-800">请联系系统管理员授予 `canManageAttendanceWork`（提交）或 `canReviewLeave`（查对）权限。</p>
         </div>
       </DashboardLayout>
     );
@@ -398,7 +417,7 @@ export default function AttendanceWorkPage() {
                       </div>
                     )}
                     {item.review_note && <p className="mt-2 text-xs text-slate-500">备注：{item.review_note}</p>}
-                    {canUpload && (
+                    {canUpload && (user.role === 'admin' || user.role === 'leader' || item.created_by_user_id === user.id) && (
                       <Button type="button" variant="outline" onClick={() => startEdit(item)} className="mt-3 bg-white">修改（临时换人、改日期）</Button>
                     )}
                     {canReview && item.review_status === '待查对' && (

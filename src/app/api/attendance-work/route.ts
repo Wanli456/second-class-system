@@ -41,10 +41,10 @@ function parseSchedules(value: unknown): Array<{ date: string; weekday: string; 
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
     if (!item || typeof item !== 'object') return [];
-    const candidate = item as { weekday?: unknown; student_names?: unknown };
+    const candidate = item as { weekday?: unknown; students?: unknown; student_names?: unknown };
     const weekday = String(candidate.weekday || '').trim();
     if (!Object.prototype.hasOwnProperty.call(WEEKDAY_OFFSETS, weekday)) return [];
-    const students = parseNames(candidate.student_names);
+    const students = parseNames(candidate.students ?? candidate.student_names);
     if (!students.length) return [];
     return [{ date: '', weekday, students }];
   });
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
   const auth = await requireUser(request);
   if (auth.response) return auth.response;
   const user = auth.user!;
-  const canList = user.role === 'admin' || user.can_upload_leave === true || user.can_query_leave === true || user.can_review_leave === true;
+  const canList = user.role === 'admin' || user.can_manage_attendance_work === true || user.can_review_leave === true || user.can_view_evening_study === true || user.can_query_leave === true;
   if (!canList) return NextResponse.json({ success: false, error: '暂无权限查看考勤工作安排' }, { status: 403 });
 
   const { searchParams } = new URL(request.url);
@@ -73,6 +73,10 @@ export async function GET(request: NextRequest) {
   if (reviewStatus && REVIEW_STATUSES.includes(reviewStatus as (typeof REVIEW_STATUSES)[number])) {
     conditions.push(`review_status = $${index}`);
     values.push(reviewStatus);
+  } else if (!reviewStatus && user.role !== 'admin' && user.can_review_leave !== true && user.can_manage_attendance_work !== true) {
+    // 普通查询/晚自习用户默认只看已通过，避免看到待查对/已驳回内容。
+    conditions.push(`review_status = $${index}`);
+    values.push('已通过');
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -87,7 +91,7 @@ export async function GET(request: NextRequest) {
 // body: { name, start_date, end_date, student_names:[], images:[{url,name}] 或 image_list:[url] }
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requirePermission(request, 'uploadLeave');
+    const auth = await requirePermission(request, 'manageAttendanceWork');
     if (auth.response) return auth.response;
     const user = auth.user!;
 
@@ -96,13 +100,13 @@ export async function POST(request: NextRequest) {
     const weekStartDate = String(body.week_start_date || body.start_date || '').trim();
     const rawSchedules = parseSchedules(body.schedules);
     const legacyStudentNames = parseNames(body.student_names);
+    const legacyEndDate = String(body.end_date || '').trim();
     let schedules = rawSchedules;
     if (schedules.length) {
       schedules = schedules.map((item) => ({ ...item, date: shiftDate(weekStartDate, WEEKDAY_OFFSETS[item.weekday] || 0) })).filter((item) => item.date);
       if (!schedules.length) return NextResponse.json({ success: false, error: '周起始日期不正确，无法换算具体日期' }, { status: 400 });
     } else {
       // 兼容旧版整周名单模式：没有按星期分组时，退化为整周统一名单。
-      const legacyEndDate = String(body.end_date || '').trim();
       if (legacyStudentNames.length && weekStartDate && legacyEndDate && legacyEndDate >= weekStartDate) {
         schedules = [{ date: weekStartDate, weekday: '星期一', students: legacyStudentNames }];
       } else {
@@ -114,7 +118,8 @@ export async function POST(request: NextRequest) {
     if (!allNames.length) return NextResponse.json({ success: false, error: '请至少填写一名考勤人员姓名' }, { status: 400 });
     const dates = schedules.map((item) => item.date).sort();
     const startDate = dates[0];
-    const endDate = dates[dates.length - 1];
+    // 旧版整周名单：保持原始 end_date，避免只生成周一当天。
+    const endDate = rawSchedules.length ? dates[dates.length - 1] : (legacyEndDate || startDate);
 
     const images = parseImages(body.images);
     const fallbackUrl = body.leave_image_url ? String(body.leave_image_url) : (Array.isArray(body.image_list) ? body.image_list[0] : '');
@@ -153,11 +158,14 @@ export async function PUT(request: NextRequest) {
       if (!id || !REVIEW_STATUSES.includes(reviewStatus as (typeof REVIEW_STATUSES)[number])) {
         return NextResponse.json({ success: false, error: '参数不合法' }, { status: 400 });
       }
-      const existing = await queryOne<{ review_status?: string }>(
-        'SELECT review_status FROM attendance_work_arrangements WHERE id=$1',
+      const existing = await queryOne<{ review_status?: string; created_by_user_id?: string | null }>(
+        'SELECT review_status, created_by_user_id FROM attendance_work_arrangements WHERE id=$1',
         [id],
       );
       if (!existing) return NextResponse.json({ success: false, error: '考勤工作安排不存在' }, { status: 404 });
+      if (existing.created_by_user_id && existing.created_by_user_id === user.id && user.role !== 'admin' && user.role !== 'leader') {
+        return NextResponse.json({ success: false, error: '不能查对自己提交的考勤工作安排' }, { status: 403 });
+      }
       if (existing.review_status !== '待查对') {
         return NextResponse.json({ success: false, error: '只有待查对的安排可以查对' }, { status: 400 });
       }
@@ -173,7 +181,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // 修改模式
-    const auth = await requirePermission(request, 'uploadLeave');
+    const auth = await requirePermission(request, 'manageAttendanceWork');
     if (auth.response) return auth.response;
     const user = auth.user!;
 
@@ -182,7 +190,7 @@ export async function PUT(request: NextRequest) {
       [id],
     );
     if (!existing) return NextResponse.json({ success: false, error: '考勤工作安排不存在' }, { status: 404 });
-    if (user.role !== 'admin' && existing.created_by_user_id && existing.created_by_user_id !== user.id) {
+    if (user.role !== 'admin' && user.role !== 'leader' && existing.created_by_user_id && existing.created_by_user_id !== user.id) {
       return NextResponse.json({ success: false, error: '只能修改自己提交的安排' }, { status: 403 });
     }
 
@@ -207,8 +215,17 @@ export async function PUT(request: NextRequest) {
     const endDate = dates[dates.length - 1];
 
     const images = parseImages(body.images);
-    const imageList = images.length ? images : (existing.image_list ? JSON.parse(existing.image_list) : []);
-    if (!Array.isArray(imageList) || !imageList.length) {
+    let existingImages: ImageInput[] = [];
+    if (existing.image_list) {
+      try {
+        const parsed = JSON.parse(existing.image_list);
+        if (Array.isArray(parsed)) existingImages = parsed;
+      } catch {
+        existingImages = [];
+      }
+    }
+    const imageList = images.length ? images : existingImages;
+    if (!imageList.length) {
       return NextResponse.json({ success: false, error: '请上传考勤工作安排表截图' }, { status: 400 });
     }
 

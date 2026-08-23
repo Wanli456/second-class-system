@@ -38,10 +38,10 @@ interface User {
   canReviewLeave?: boolean;
   canViewEveningStudy?: boolean;
   canStartGroupLeave?: boolean;
+  canManageAttendanceWork?: boolean;
   canUploadLeave?: boolean;
   canQueryLeave?: boolean;
   canManageOriginalLeave?: boolean;
-  canManageLeaveTemplate?: boolean;
 }
 
 interface DashboardLayoutProps {
@@ -58,6 +58,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   requiredRole?: string;
   requiredPermission?: keyof User;
+  requiredAnyPermissions?: Array<keyof User>;
 }
 
 // 独立的导航项组件，使用 React.memo 避免不必要的重新渲染
@@ -129,12 +130,12 @@ const NAV_ITEMS: NavItem[] = [
   { label: '赋分材料', href: '/submit/scoring', icon: Award, requiredPermission: 'canSubmitScoring' },
   { label: '我的假条', href: '/leave-slip/mine', icon: FileCheck },
   { label: '假条上传', href: '/leave-slip/upload', icon: FileCheck, requiredPermission: 'canUploadLeave' },
-  { label: '临时请假', href: '/leave-slip/temporary', icon: Send, requiredPermission: 'canUploadLeave' },
+  { label: '临时请假', href: '/leave-slip/temporary', icon: Send, requiredPermission: 'canStartGroupLeave' },
   { label: '假条查对', href: '/leave-slip/review', icon: UserCheck, requiredPermission: 'canReviewLeave' },
   { label: '假条查询', href: '/leave-slip/query', icon: Moon, requiredPermission: 'canQueryLeave' },
   { label: '原假条', href: '/leave-slip/originals', icon: FileCheck, requiredPermission: 'canManageOriginalLeave' },
-  { label: '考勤工作安排', href: '/attendance-work', icon: ClipboardList },
-  { label: '晚自习查询', href: '/evening-study', icon: Moon, requiredPermission: 'canViewEveningStudy' },
+  { label: '考勤工作安排', href: '/attendance-work', icon: ClipboardList, requiredAnyPermissions: ['canManageAttendanceWork', 'canReviewLeave'] },
+  { label: '晚自习查询', href: '/evening-study', icon: Moon, requiredAnyPermissions: ['canViewEveningStudy', 'canQueryLeave'] },
 ];
 
 export function DashboardLayout({ children, user: providedUser, onLogout, title, activeNavHref }: DashboardLayoutProps) {
@@ -166,12 +167,13 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
 
   const canAccessItem = React.useCallback((item: NavItem): boolean => {
     if (!user) {
-      // Public items
-      return !item.requiredRole && !item.requiredPermission;
+      // 未登录时只保留首页，避免公开侧边栏展示权限敏感或需登录的项目。
+      return item.label === '首页';
     }
 
     const roleAllowed = !item.requiredRole || user.role === 'admin' || user.role === item.requiredRole;
     const permissionAllowed = !item.requiredPermission || user.role === 'admin' || user[item.requiredPermission] === true;
+    const anyPermissionAllowed = !item.requiredAnyPermissions?.length || user.role === 'admin' || item.requiredAnyPermissions.some((permission) => user[permission] === true);
 
     // A role or its matching permission is enough. This lets an admin grant
     // a capability to a student without changing the student's base role.
@@ -179,7 +181,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
       return roleAllowed || permissionAllowed;
     }
 
-    return roleAllowed && permissionAllowed;
+    return roleAllowed && permissionAllowed && anyPermissionAllowed;
   }, [user]);
 
   const visibleItems = React.useMemo(() => NAV_ITEMS.filter(canAccessItem), [canAccessItem]);
@@ -267,8 +269,8 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
               <ClipboardList className="h-4 w-4" strokeWidth={2.4} />
             </div>
             <div>
-              <div className="text-sm font-bold tracking-tight text-slate-950">二课活动管理</div>
-              <div className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-slate-400">Activity Operations</div>
+              <div className="text-sm font-bold text-slate-950">二课活动管理</div>
+              <div className="mt-0.5 text-[10px] font-medium uppercase text-slate-400">Activity Operations</div>
             </div>
           </div>
         )}
@@ -281,7 +283,7 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-5">
-        <div className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+        <div className="mb-3 px-3 text-[10px] font-bold uppercase text-slate-400">
           工作区
         </div>
         <ul className="space-y-1">
@@ -407,8 +409,8 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
               </Button>
             )}
             <div>
-              <p className="mb-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-teal-600">二课工作台</p>
-              <h1 className="text-lg font-bold tracking-tight text-slate-950">{title || '二课活动管理系统'}</h1>
+              <p className="mb-0.5 text-[10px] font-bold uppercase text-teal-600">二课工作台</p>
+              <h1 className="text-lg font-bold text-slate-950">{title || '二课活动管理系统'}</h1>
             </div>
           </div>
           <div className="flex items-center gap-2">

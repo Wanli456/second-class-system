@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
   can_review_leave BOOLEAN NOT NULL DEFAULT false,
   can_view_evening_study BOOLEAN NOT NULL DEFAULT false,
   can_start_group_leave BOOLEAN NOT NULL DEFAULT false,
+  can_manage_attendance_work BOOLEAN NOT NULL DEFAULT false,
  department TEXT,
  class_name TEXT,
   contact_phone TEXT,
@@ -28,6 +29,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_phone TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS can_start_group_leave BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS can_manage_attendance_work BOOLEAN NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS departments (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,

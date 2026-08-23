@@ -60,13 +60,15 @@ export default function EveningStudyPage() {
   const [persons, setPersons] = useState<Record<'approved' | 'pending' | 'rejected', PersonRow[]>>({ approved: [], pending: [], rejected: [] });
   const [dutyNames, setDutyNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [expanded, setExpanded] = useState<'approved' | 'pending' | 'rejected' | 'duty' | null>(null);
   const canView = Boolean(user && (user.role === 'admin' || user.canViewEveningStudy || user.canQueryLeave));
 
   useEffect(() => { if (user?.className) setClassName(user.className); }, [user?.className]);
 
   const search = async () => {
-    if (!className.trim() || !date) { alert('请选择班级和查询日期'); return; }
+    if (!className.trim() || !date) { setError('请选择班级和查询日期'); return; }
+    setError('');
     setLoading(true);
     try {
       const response = await apiFetch(`/api/leave-slips?class=${encodeURIComponent(className.trim())}&date=${encodeURIComponent(date)}`);
@@ -104,8 +106,11 @@ export default function EveningStudyPage() {
               try {
                 const schedules = JSON.parse(rawSchedules);
                 if (Array.isArray(schedules)) {
-                  const matched = schedules.find((schedule: { date?: string; students?: unknown }) => schedule.date === date);
-                  if (Array.isArray(matched?.students)) dayNames = matched.students.map(String).filter(Boolean);
+                  const matched = schedules.find((schedule: { date?: string; students?: unknown; student_names?: unknown }) => schedule.date === date);
+                  if (matched) {
+                    const matchStudents = matched.students ?? matched.student_names;
+                    if (Array.isArray(matchStudents)) dayNames = matchStudents.map(String).filter(Boolean);
+                  }
                 }
               } catch { dayNames = []; }
             }
@@ -123,16 +128,37 @@ export default function EveningStudyPage() {
       }
 
       setExpanded(null);
-    } catch (error) {
-      alert(error instanceof Error ? error.message : '查询失败');
+    } catch (searchError) {
+      setError(searchError instanceof Error ? searchError.message : '查询失败');
     } finally {
       setLoading(false);
     }
   };
 
   if (!initialized) return <AuthLoadingScreen />;
-  if (!user) return <div className="flex min-h-dvh items-center justify-center p-4"><div className="rounded-lg border bg-white p-6 text-center"><LogIn className="mx-auto mb-3 h-8 w-8 text-teal-700" /><h2 className="font-semibold">请先登录</h2><p className="my-4 text-sm text-gray-500">登录后才能查询晚自习请假考勤。</p><Link href="/login?redirect=/evening-study" className="rounded-md bg-teal-700 px-4 py-2 text-sm text-white">登录/注册</Link></div></div>;
-  if (!canView) return <div className="flex min-h-dvh items-center justify-center p-4"><div className="rounded-lg border bg-white p-6 text-center"><h2 className="font-semibold">暂无晚自习查询权限</h2><p className="my-4 text-sm text-gray-500">请联系管理员开通查询权限。</p><Link href="/" className="text-sm text-teal-700">返回首页</Link></div></div>;
+  if (!user) {
+    return (
+      <DashboardLayout user={user} title="晚自习请假查询" activeNavHref="/evening-study">
+        <div className="mx-auto max-w-xl rounded-xl border bg-white p-8 text-center">
+          <LogIn className="mx-auto mb-3 size-8 text-teal-700" />
+          <h2 className="font-semibold">请先登录</h2>
+          <p className="my-4 text-sm text-gray-500">登录后才能查询晚自习请假考勤。</p>
+          <Link href="/login?redirect=/evening-study" className="rounded-md bg-teal-700 px-4 py-2 text-sm text-white">登录/注册</Link>
+        </div>
+      </DashboardLayout>
+    );
+  }
+  if (!canView) {
+    return (
+      <DashboardLayout user={user} title="晚自习请假查询" activeNavHref="/evening-study">
+        <div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-8 text-center">
+          <h2 className="font-semibold text-amber-900">暂无晚自习查询权限</h2>
+          <p className="my-4 text-sm text-amber-800">请联系管理员开通查询权限。</p>
+          <Link href="/" className="text-sm text-teal-700">返回首页</Link>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   const approved = persons.approved;
   const pending = persons.pending;
@@ -140,7 +166,7 @@ export default function EveningStudyPage() {
   const people = expanded === 'duty' ? [] : expanded === 'approved' ? approved : expanded === 'pending' ? pending : rejected;
 
   return <DashboardLayout title="晚自习请假查询" user={user}><div className="mx-auto max-w-4xl space-y-4">
-    <div className="rounded-lg border bg-white p-5 shadow-sm"><div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-teal-700" /><h2 className="font-semibold">按日期和班级查询</h2></div><div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px_auto]"><label className="text-sm font-medium">班级<input value={className} onChange={(e) => setClassName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void search()} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" placeholder="例如：计算机2101" /></label><label className="text-sm font-medium">日期<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" /></label><button onClick={() => void search()} disabled={loading} className="mt-auto inline-flex h-10 items-center justify-center gap-2 rounded-md bg-slate-900 px-4 text-sm text-white disabled:opacity-50"><Search className="h-4 w-4" />{loading ? '查询中' : '查询'}</button></div></div>
+    <div className="rounded-lg border bg-white p-5 shadow-sm"><div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-teal-700" /><h2 className="font-semibold">按日期和班级查询</h2></div><div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px_auto]"><label className="text-sm font-medium">班级<input value={className} onChange={(e) => setClassName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void search()} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" placeholder="例如：计算机2101" /></label><label className="text-sm font-medium">日期<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" /></label><button onClick={() => void search()} disabled={loading} className="mt-auto inline-flex h-10 items-center justify-center gap-2 rounded-md bg-slate-900 px-4 text-sm text-white disabled:opacity-50"><Search className="h-4 w-4" />{loading ? '查询中' : '查询'}</button></div>{error && <p role="alert" className="mt-3 text-sm text-rose-600">{error}</p>}</div>
     <div className="rounded-lg border bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-sm text-gray-600"><Users className="h-4 w-4" />{date} · {className} · 点击人数查看名单</div><div className="mt-4 grid gap-3 sm:grid-cols-4"><CountButton label="已通过" count={approved.length} active={expanded === 'approved'} onClick={() => setExpanded(expanded === 'approved' ? null : 'approved')} color="text-emerald-700" /><CountButton label="待查对" count={pending.length} active={expanded === 'pending'} onClick={() => setExpanded(expanded === 'pending' ? null : 'pending')} color="text-amber-700" /><CountButton label="已驳回" count={rejected.length} active={expanded === 'rejected'} onClick={() => setExpanded(expanded === 'rejected' ? null : 'rejected')} color="text-gray-500" /><CountButton label="考勤工作" count={dutyNames.length} active={expanded === 'duty'} onClick={() => setExpanded(expanded === 'duty' ? null : 'duty')} color="text-sky-700" /></div></div>
     {expanded === 'duty' ? (
       <div className="rounded-lg border bg-white p-5 shadow-sm">

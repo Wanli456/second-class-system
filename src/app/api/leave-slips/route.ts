@@ -67,7 +67,7 @@ function classroomCondition(auth: AuthUser) {
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requirePermission(request, 'uploadLeave');
+    const auth = await requireUser(request);
     if (auth.response) return auth.response;
     const user = auth.user!;
 
@@ -76,6 +76,13 @@ export async function POST(request: NextRequest) {
     const normalizedSlipType = slipType;
     const defaultLeaveType = (slipType === '其他请假' ? '社团' : slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条' ? '活动公假' : '事假');
     const leaveType = String(body.leave_type || defaultLeaveType);
+    const isTemporaryLeave = slipType === '其他请假' && leaveType === '临时请假';
+    if (user.role !== 'admin' && (isTemporaryLeave ? !user.can_start_group_leave : !user.can_upload_leave)) {
+      return NextResponse.json(
+        { success: false, error: isTemporaryLeave ? '暂无临时请假提交权限' : '暂无假条上传权限' },
+        { status: 403 },
+      );
+    }
     if (!SLIP_TYPES.includes(normalizedSlipType as (typeof SLIP_TYPES)[number])) {
       return NextResponse.json({ success: false, error: '假条类型只能是手写假条、二课活动请假、校级（且不为数经举办）假条、手机假条或其他请假' }, { status: 400 });
     }
@@ -191,6 +198,7 @@ export async function POST(request: NextRequest) {
     const warnings = isLate ? ['上传时间已超过 18:30，已标记为迟到假条'] : [];
     if (autoApprove) warnings.push('临时请假已自动审核通过');
     if (duplicateCheck?.found && duplicateCheck.warning) warnings.push(duplicateCheck.warning);
+    if (autoMatch?.image_consistency?.warning) warnings.push(autoMatch.image_consistency.warning);
 
     return NextResponse.json({
       success: true,
@@ -280,8 +288,14 @@ export async function GET(request: NextRequest) {
       where.push(`original_slip_id = $${paramIndex++}`);
     }
     if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      params.push(`${date}%`);
-      where.push(`(start_time::text LIKE $${paramIndex} OR created_at::text LIKE $${paramIndex++})`);
+      const startDate = `${date}T00:00:00.000Z`;
+      // 自动计算下一天 0 点，避免依赖 pg-mem 的 timestamp::text。
+      const parsed = new Date(startDate);
+      parsed.setUTCDate(parsed.getUTCDate() + 1);
+      const nextDate = parsed.toISOString().slice(0, 10);
+      params.push(startDate, `${nextDate}T00:00:00.000Z`);
+      where.push(`(start_time >= $${paramIndex} AND start_time < $${paramIndex + 1} OR created_at >= $${paramIndex} AND created_at < $${paramIndex + 1})`);
+      paramIndex += 2;
     }
 
     if (!canQueryAll) {

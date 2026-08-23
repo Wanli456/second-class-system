@@ -99,6 +99,10 @@ export function canStartGroupLeave(user: Pick<AuthUser, 'role' | 'can_start_grou
   return Boolean(user.class_name) && (user.role === 'admin' || user.can_start_group_leave);
 }
 
+export function canManageAttendanceWork(user: Pick<AuthUser, 'role' | 'can_manage_attendance_work'>) {
+  return user.role === 'admin' || user.can_manage_attendance_work;
+}
+
 export function canOpenAdminTab(
   user: Pick<AuthUser, 'role' | 'can_publish' | 'can_score' | 'can_review_leave'>,
   tab: string | null | undefined,

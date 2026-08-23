@@ -34,6 +34,7 @@ export async function detectDuplicateSlip(slipId: string, newHashes: ImageHash[]
   for (const row of rows) {
     const oldHashes = parseHashes(row.image_hashes);
     for (const current of newHashes) {
+      if (!current.dhash) continue;
       for (const old of oldHashes) {
         const distance = hammingDistance(current.dhash, old.dhash);
         if (distance <= DUPLICATE_DISTANCE_THRESHOLD) {

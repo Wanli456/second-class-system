@@ -111,6 +111,8 @@ export interface LeaveSlip {
   reviewed_by_name: string | null;
   reviewed_at: string | null;
   original_slip_id: string | null;
+  original_image_similarity?: number | null;
+  original_image_difference_warning?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -121,6 +123,32 @@ export interface LeaveSlipStudent {
   student_id: string;
   student_name: string;
   class_name: string;
+}
+
+export interface AttendanceWorkSchedule {
+  date: string;
+  weekday: '星期一' | '星期二' | '星期三' | '星期四' | '星期五' | '星期六' | '星期日';
+  students: string[];
+}
+
+export interface AttendanceWorkArrangement {
+  id: string;
+  name: string;
+  start_date: string | null;
+  end_date: string | null;
+  student_names: string;
+  schedules: string;
+  image_list: string;
+  ocr_names: string;
+  review_status: '待查对' | '已通过' | '已驳回';
+  review_note: string | null;
+  reviewed_by_user_id: string | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  created_by_user_id: string;
+  created_by_name: string;
+  created_at: string;
+  updated_at: string | null;
 }
 
 export interface OriginalLeaveSlip {
@@ -218,8 +246,8 @@ export interface UserData {
   canReviewLeave: boolean;
   canViewEveningStudy: boolean;
   canStartGroupLeave: boolean;
+  canManageAttendanceWork: boolean;
   canUploadLeave: boolean;
   canQueryLeave: boolean;
   canManageOriginalLeave: boolean;
-  canManageLeaveTemplate: boolean;
 }

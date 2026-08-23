@@ -36,7 +36,7 @@ export default function TemporaryLeavePage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const canUpload = Boolean(user && (user.role === 'admin' || user.canUploadLeave === true));
+  const canStart = Boolean(user && (user.role === 'admin' || user.canStartGroupLeave === true));
   const canChooseClass = Boolean(user && (user.role === 'admin' || user.role === 'leader'));
 
   useEffect(() => {
@@ -51,12 +51,12 @@ export default function TemporaryLeavePage() {
       </DashboardLayout>
     );
   }
-  if (!canUpload) {
+  if (!canStart) {
     return (
       <DashboardLayout user={user} title="临时请假" activeNavHref="/leave-slip/temporary">
         <div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
           <h2 className="font-semibold text-amber-900">当前账号没有临时请假提交权限</h2>
-          <p className="mt-2 text-sm text-amber-800">请联系系统管理员授予 `canUploadLeave` 权限。</p>
+          <p className="mt-2 text-sm text-amber-800">请联系系统管理员授予 `canStartGroupLeave` 权限。</p>
         </div>
       </DashboardLayout>
     );
@@ -65,6 +65,10 @@ export default function TemporaryLeavePage() {
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
+    if (files.some((file) => file.size > 5 * 1024 * 1024)) {
+      setError('单张临时请假图片不能超过 5MB');
+      return;
+    }
     setImageFiles((previous) => [...previous, ...files]);
     files.forEach((file) => {
       const reader = new FileReader();
@@ -76,7 +80,7 @@ export default function TemporaryLeavePage() {
   const submit = async () => {
     setError(null);
     setSuccess(null);
-    if (!className.trim()) { setError('请填写班级'); return; }
+    if (!className.trim()) { setError(!canChooseClass && !user?.className ? '当前账号未设置班级，无法提交临时请假，请联系管理员设置班级' : '请填写班级'); return; }
     if (!startTime || !endTime) { setError('请选择开始和结束时间'); return; }
     if (endTime <= startTime) { setError('结束时间必须晚于开始时间'); return; }
     const students = parseStudentLines(studentsText, className.trim());

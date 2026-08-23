@@ -51,10 +51,10 @@ if (localDb && shouldInitializeLocalDb) {
       can_review_leave BOOLEAN NOT NULL DEFAULT false,
       can_view_evening_study BOOLEAN NOT NULL DEFAULT false,
       can_start_group_leave BOOLEAN NOT NULL DEFAULT false,
+      can_manage_attendance_work BOOLEAN NOT NULL DEFAULT false,
       can_upload_leave BOOLEAN NOT NULL DEFAULT false,
       can_query_leave BOOLEAN NOT NULL DEFAULT false,
       can_manage_original_leave BOOLEAN NOT NULL DEFAULT false,
-      can_manage_leave_template BOOLEAN NOT NULL DEFAULT false,
       department TEXT,
       class_name TEXT,
       contact_phone TEXT,
@@ -243,14 +243,14 @@ if (localDb && shouldInitializeLocalDb) {
       id, username, password, student_id, role,
       can_publish, can_score, can_review_leave,
       can_submit_activity, can_view_submission_status, can_submit_scoring,
-      can_start_group_leave, department, class_name
+      can_start_group_leave, can_manage_attendance_work, department, class_name
     ) VALUES
-      ('local-admin', '本地管理员', 'test123', '9000000001', 'admin', false, false, false, false, false, false, true, '学生会', '计算机2101'),
-      ('local-publisher', '本地活动审核员', 'test123', '9000000002', 'student', true, false, false, false, false, false, false, '学生会', '计算机2101'),
-      ('local-scorer', '本地活动赋分员', 'test123', '9000000003', 'student', false, true, false, false, false, false, false, '学生会', '计算机2101'),
-      ('local-leave-reviewer', '本地请假审核员', 'test123', '9000000004', 'student', false, false, true, false, false, false, false, '学生会', '计算机2101'),
-      ('local-leader', '本地负责人', 'test123', '9000000005', 'leader', false, false, false, true, true, true, true, '学生会', '计算机2101'),
-      ('local-student', '本地学生', 'test123', '9000000006', 'student', false, false, false, false, false, false, false, '学生会', '计算机2101');
+      ('local-admin', '本地管理员', 'test123', '9000000001', 'admin', false, false, false, false, false, false, true, true, '学生会', '计算机2101'),
+      ('local-publisher', '本地活动审核员', 'test123', '9000000002', 'student', true, false, false, false, false, false, false, false, '学生会', '计算机2101'),
+      ('local-scorer', '本地活动赋分员', 'test123', '9000000003', 'student', false, true, false, false, false, false, false, false, '学生会', '计算机2101'),
+      ('local-leave-reviewer', '本地请假审核员', 'test123', '9000000004', 'student', false, false, true, false, false, false, false, false, '学生会', '计算机2101'),
+      ('local-leader', '本地负责人', 'test123', '9000000005', 'leader', false, false, false, true, true, true, true, true, '学生会', '计算机2101'),
+      ('local-student', '本地学生', 'test123', '9000000006', 'student', false, false, false, false, false, false, false, false, '学生会', '计算机2101');
 
     INSERT INTO class_roster (class_name, student_id, student_name) VALUES
       ('计算机2101', '9000000001', '本地管理员'),
@@ -322,10 +322,10 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_review_leave BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_evening_study BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_start_group_leave BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_manage_attendance_work BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_upload_leave BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_query_leave BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_manage_original_leave BOOLEAN NOT NULL DEFAULT false;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_manage_leave_template BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_phone TEXT;
@@ -507,6 +507,8 @@ async function migrateDatabaseSchema(): Promise<void> {
         duplicate_of_slip_id TEXT,
         duplicate_score INT,
         duplicate_warning TEXT,
+        original_image_similarity INT,
+        original_image_difference_warning TEXT,
         counselor_signature BOOLEAN NOT NULL DEFAULT false,
         official_seal BOOLEAN NOT NULL DEFAULT false,
         teacher_signature BOOLEAN NOT NULL DEFAULT false,
@@ -536,6 +538,8 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS duplicate_of_slip_id TEXT;
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS duplicate_score INT;
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS duplicate_warning TEXT;
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS original_image_similarity INT;
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS original_image_difference_warning TEXT;
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS reviewed_by_user_id TEXT;
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS reviewed_by_name TEXT;
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP;
@@ -567,6 +571,7 @@ async function migrateDatabaseSchema(): Promise<void> {
         image_name TEXT,
         image_list TEXT NOT NULL DEFAULT '[]',
         ocr_names TEXT NOT NULL DEFAULT '[]',
+        image_hashes TEXT NOT NULL DEFAULT '[]',
         notes TEXT,
         created_by_user_id TEXT,
         created_by_name TEXT,
@@ -579,6 +584,7 @@ async function migrateDatabaseSchema(): Promise<void> {
   await executeSchemaSql(`
     ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS image_list TEXT NOT NULL DEFAULT '[]';
     ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS ocr_names TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS image_hashes TEXT NOT NULL DEFAULT '[]';
   `);
 
   if (!(await tableExists('attendance_work_arrangements'))) {

@@ -57,6 +57,7 @@ export default function LeaveSlipUploadPage() {
   const [error, setError] = useState<string | null>(null);
 
   const canAccess = user?.role === 'admin' || user?.canUploadLeave === true;
+  const canChooseClass = Boolean(user && (user.role === 'admin' || user.role === 'leader'));
 
   useEffect(() => {
     if (!user || !canAccess) return;
@@ -81,6 +82,10 @@ export default function LeaveSlipUploadPage() {
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
+    if (files.some((file) => file.size > 5 * 1024 * 1024)) {
+      setError('单张假条图片不能超过 5MB');
+      return;
+    }
     const allFiles = [...imageFiles, ...files];
     setImageFiles(allFiles);
     files.forEach((file) => {
@@ -184,6 +189,9 @@ export default function LeaveSlipUploadPage() {
     const cleanedStudents = students.filter((student) => student.student_id.trim() && student.student_name.trim() && student.class_name.trim());
     if (!cleanedStudents.length) { setError('请至少填写一名学生的学号、姓名和班级'); return; }
     if (cleanedStudents.some((student) => !student.student_id.trim() || !student.student_name.trim() || !student.class_name.trim())) { setError('学生信息不完整：学号、姓名、班级都要填写'); return; }
+    if (!canChooseClass && cleanedStudents.some((student) => student.class_name.trim() !== user?.className)) {
+      setError(`当前账号只能提交本班（${user?.className || '未设置班级'}）的假条`); return;
+    }
     if (!startTime || !endTime) { setError('请填写请假开始和结束时间'); return; }
     if (new Date(endTime) <= new Date(startTime)) { setError('结束时间必须晚于开始时间'); return; }
     if (!imageFiles.length) { setError('请上传假条图片（可多选截图）'); return; }
@@ -331,7 +339,7 @@ export default function LeaveSlipUploadPage() {
                 <div key={index} className="grid gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-[1fr_1fr_1fr_auto]">
                   <input aria-label="学生学号" placeholder="学号" value={student.student_id} onChange={(event) => updateStudent(index, { student_id: event.target.value })} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-teal-600" />
                   <input aria-label="学生姓名" placeholder="姓名" value={student.student_name} onChange={(event) => updateStudent(index, { student_name: event.target.value })} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-teal-600" />
-                  <input aria-label="学生班级" placeholder="班级" value={student.class_name} onChange={(event) => updateStudent(index, { class_name: event.target.value })} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-teal-600" />
+                  <input aria-label="学生班级" placeholder="班级" value={student.class_name} onChange={(event) => updateStudent(index, { class_name: event.target.value })} disabled={!canChooseClass} className={`h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-teal-600 ${!canChooseClass ? 'bg-slate-50 text-slate-500' : ''}`} />
                   <Button type="button" variant="ghost" size="icon" onClick={() => removeStudent(index)} disabled={students.length === 1} aria-label={`删除第${index + 1}名学生`}><Trash2 className="size-4" /></Button>
                 </div>
               ))}

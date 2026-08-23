@@ -77,14 +77,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: '文件大小不能超过5MB' }, { status: 400 });
     }
 
-    // 生成唯一文件名
-    const ext = file.name.split('.').pop();
+    // 只允许图片，避免任意文件上传 / 存储型 XSS
+    const originalName = path.basename(file.name).replace(/[\\/]/g, '');
+    const ext = (originalName.split('.').pop() || '').toLowerCase();
+    const allowedExtensions = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif']);
+    if (!allowedExtensions.has(ext)) {
+      return NextResponse.json({ success: false, error: '仅支持常见图片格式（jpg/jpeg/png/gif/webp/bmp/heic/heif）' }, { status: 400 });
+    }
+    if (!file.type.toLowerCase().startsWith('image/')) {
+      return NextResponse.json({ success: false, error: '仅支持上传图片文件' }, { status: 400 });
+    }
+
+    // 生成唯一文件名，杜绝路径穿越
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const cloudUrl = await uploadToCloudStorage(fileName, file, buffer);
     if (cloudUrl) {
-      return NextResponse.json({ success: true, url: cloudUrl, file_name: file.name });
+      return NextResponse.json({ success: true, url: cloudUrl, file_name: originalName });
     }
 
     if (process.env.PGDATABASE_URL) {
@@ -105,7 +115,7 @@ export async function POST(request: NextRequest) {
     // 返回公开URL
     const publicUrl = `/uploads/${fileName}`;
 
-    return NextResponse.json({ success: true, url: publicUrl, file_name: file.name });
+    return NextResponse.json({ success: true, url: publicUrl, file_name: originalName });
   } catch (err) {
     const message = err instanceof Error ? err.message : '未知错误';
     return NextResponse.json({ success: false, error: message }, { status: 500 });

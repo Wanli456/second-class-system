@@ -28,6 +28,8 @@ interface Slip {
   duplicate_of_slip_id: string | null;
   duplicate_score: number | null;
   duplicate_warning: string | null;
+  original_image_similarity: number | null;
+  original_image_difference_warning: string | null;
   counselor_signature: boolean;
   official_seal: boolean;
   teacher_signature: boolean;
@@ -175,6 +177,7 @@ export default function LeaveSlipReviewPage() {
                       {slip.duplicate_warning && <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700">疑似重复图片（相似度 {slip.duplicate_score ?? '-'}%）</span>}
                     </div>
                     {slip.duplicate_warning && <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{slip.duplicate_warning}</p>}
+                    {slip.original_image_difference_warning && <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">图片一致性风险{slip.original_image_similarity !== null ? `（最低匹配相似度 ${slip.original_image_similarity}%）` : ''}：{slip.original_image_difference_warning}</p>}
                     <p className="mt-3 text-sm font-semibold text-slate-900">班级：{classNames.join('、')}</p>
                     <p className="mt-1 text-sm text-slate-600">上传：{slip.applicant_name || '-'}（{slip.applicant_student_id || '-'}） · {slip.start_time ? new Date(slip.start_time).toLocaleString('zh-CN') : '-'} 至 {slip.end_time ? new Date(slip.end_time).toLocaleString('zh-CN') : '-'}</p>
                     {slip.activity_name && <p className="mt-1 text-sm text-slate-600">活动：{slip.activity_name}</p>}
