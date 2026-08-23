@@ -21,18 +21,18 @@ type PermissionKey =
   | 'canManageOriginalLeave';
 
 const PERMISSION_LABELS: Record<PermissionKey, string> = {
-  canPublish: '活动审核',
-  canScore: '活动赋分',
-  canSubmitActivity: '活动提交',
-  canViewSubmissionStatus: '查看提交状态',
-  canSubmitScoring: '提交赋分材料',
-  canReviewLeave: '假条查对',
-  canViewEveningStudy: '晚自习查询',
-  canStartGroupLeave: '发起集体请假',
-  canManageAttendanceWork: '考勤工作安排',
-  canUploadLeave: '上传请假',
-  canQueryLeave: '请假查询',
-  canManageOriginalLeave: '原始假条管理',
+  canPublish: '活动审核权限',
+  canScore: '活动赋分权限',
+  canSubmitActivity: '活动提交权限',
+  canViewSubmissionStatus: '查看提交状态权限',
+  canSubmitScoring: '提交赋分材料权限',
+  canReviewLeave: '假条查对权限',
+  canViewEveningStudy: '晚自习查询权限',
+  canStartGroupLeave: '发起集体请假权限',
+  canManageAttendanceWork: '考勤工作安排权限',
+  canUploadLeave: '上传请假权限',
+  canQueryLeave: '请假查询权限',
+  canManageOriginalLeave: '原始假条管理权限',
 };
 
 type ManagedUser = {
