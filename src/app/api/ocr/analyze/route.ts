@@ -6,11 +6,14 @@ import os from 'os';
 import path from 'path';
 import { requirePermission } from '@/lib/auth';
 import { assertSafeRemoteImageUrl } from '@/lib/image-url';
+import { query } from '@/storage/database/supabase-client';
 
 function runPythonOcr(pythonPath: string, args: string[]) {
   return new Promise<void>((resolve, reject) => {
-    // stdio 使用 ignore：本机沙箱可能禁止通过 pipe 捕获子进程输出。
-    const child = spawn(pythonPath, args, { windowsHide: true, stdio: 'ignore' });
+    // 保留 stderr：运行环境出错时返回真实原因，不能只显示无意义的退出码。
+    const child = spawn(pythonPath, args, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+    const stderr: Uint8Array[] = [];
+    child.stderr?.on('data', (chunk: Uint8Array) => stderr.push(chunk));
     const timer = setTimeout(() => {
       child.kill();
       reject(new Error('自动识别超时'));
@@ -22,7 +25,10 @@ function runPythonOcr(pythonPath: string, args: string[]) {
     child.once('close', (code) => {
       clearTimeout(timer);
       if (code === 0) resolve();
-      else reject(new Error(`OCR 脚本退出码：${code}`));
+      else {
+        const details = Buffer.concat(stderr).toString('utf8').trim();
+        reject(new Error(`OCR 脚本退出码：${code}${details ? `（${details.slice(-500)}）` : ''}`));
+      }
     });
   });
 }
@@ -83,30 +89,88 @@ type OcrPatch = {
   fields: Record<string, unknown>;
 };
 
+type OcrClassStudentGroup = { class_name?: unknown; students?: unknown; student_ids?: unknown };
+type RosterStudent = { class_name: string; student_id: string; student_name: string };
+
+function classStudentGroups(value: unknown): Array<{ class_name: string; students: string[]; student_ids: string[] }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const group = item as OcrClassStudentGroup;
+    const class_name = String(group.class_name || '').trim();
+    const students = Array.isArray(group.students)
+      ? group.students.map((name) => String(name).trim()).filter(Boolean)
+      : [];
+    if (!class_name || !students.length) return [];
+    const rawIds = Array.isArray(group.student_ids) ? group.student_ids : [];
+    const student_ids = students.map((_, index) => String(rawIds[index] || '').trim());
+    return [{ class_name, students, student_ids }];
+  });
+}
+
+async function validateClassStudentsAgainstRoster(perImage: OcrPatch[]): Promise<OcrPatch[]> {
+  return Promise.all(perImage.map(async (patch) => {
+    const groups = classStudentGroups(patch.fields.class_students);
+    if (!groups.length) return patch;
+
+    const validatedGroups = await Promise.all(groups.map(async (group) => {
+      const unresolvedNames = group.students;
+      try {
+        const matches = await query<RosterStudent>(
+          `SELECT class_name, student_id, student_name FROM class_roster WHERE class_name=$1 AND student_name = ANY($2::text[])
+           UNION ALL
+           SELECT class_name, student_id, username AS student_name FROM users WHERE class_name=$1 AND username = ANY($2::text[])`,
+          [group.class_name, unresolvedNames],
+        );
+        const idsByName = new Map<string, string[]>();
+        for (const match of matches) {
+          const name = String(match.student_name || '').trim();
+          const studentId = String(match.student_id || '').trim();
+          if (!name || !studentId) continue;
+          idsByName.set(name, [...new Set([...(idsByName.get(name) || []), studentId])]);
+        }
+        return {
+          ...group,
+          student_ids: group.students.map((name, index) => {
+            const candidates = idsByName.get(name) || [];
+            const ocrStudentId = group.student_ids[index];
+            // 同班可能存在同名学生。若 OCR 已识别到且花名册中存在该学号，
+            // 仍可安全保留；只有 OCR 未取得学号且候选唯一时，才自动补全。
+            if (ocrStudentId) return candidates.includes(ocrStudentId) ? ocrStudentId : '';
+            return candidates.length === 1 ? candidates[0] : '';
+          }),
+        };
+      } catch (error) {
+        console.warn('按花名册补全 OCR 学号失败，将保留人工补全：', error);
+        return group;
+      }
+    }));
+
+    return { ...patch, fields: { ...patch.fields, class_students: validatedGroups } };
+  }));
+}
+
 function mergeClassStudents(perImage: OcrPatch[]): Array<{ class_name: string; students: string[]; student_ids: string[] }> {
-  const merged = new Map<string, { students: string[]; student_ids: string[] }>();
+  const merged = new Map<string, Array<{ student: string; studentId: string }>>();
   for (const patch of perImage) {
-    const raw = patch.fields.class_students;
-    if (!Array.isArray(raw)) continue;
-    for (const item of raw) {
-      const class_name = String(item && (item as { class_name?: unknown }).class_name || '').trim();
-      if (!class_name) continue;
-      const studentsRaw = (item as { students?: unknown }).students;
-      const idsRaw = (item as { student_ids?: unknown }).student_ids;
-      const students = Array.isArray(studentsRaw)
-        ? studentsRaw.map((name) => String(name).trim()).filter(Boolean)
-        : [];
-      const student_ids = Array.isArray(idsRaw)
-        ? idsRaw.map((id) => String(id).trim()).filter(Boolean)
-        : [];
-      const existing = merged.get(class_name) || { students: [], student_ids: [] };
-      merged.set(class_name, {
-        students: [...new Set([...existing.students, ...students])],
-        student_ids: [...new Set([...existing.student_ids, ...student_ids])],
+    for (const group of classStudentGroups(patch.fields.class_students)) {
+      const existing = merged.get(group.class_name) || [];
+      group.students.forEach((student, index) => {
+        const studentId = group.student_ids[index] || '';
+        // 姓名不是唯一键：同班同名而学号不同的学生必须分别保留。
+        // 没有学号的 OCR 初稿才按姓名去重，避免多图重复录入同一个人。
+        const alreadyExists = studentId
+          ? existing.some((item) => item.studentId === studentId)
+          : existing.some((item) => item.student === student && !item.studentId);
+        if (!alreadyExists) existing.push({ student, studentId });
       });
+      merged.set(group.class_name, existing);
     }
   }
-  return [...merged].map(([class_name, value]) => ({ class_name, students: value.students, student_ids: value.student_ids }));
+  return [...merged].map(([class_name, students]) => ({
+    class_name,
+    students: students.map((item) => item.student),
+    student_ids: students.map((item) => item.studentId),
+  }));
 }
 
 // POST /api/ocr/analyze
@@ -117,7 +181,13 @@ export async function POST(request: NextRequest) {
     let auth = await requirePermission(request, 'manageOriginalLeave');
     if (auth.response) {
       auth = await requirePermission(request, 'uploadLeave');
-      if (auth.response) return auth.response;
+      if (auth.response) {
+        auth = await requirePermission(request, 'submitOriginalLeave');
+        if (auth.response) {
+          auth = await requirePermission(request, 'startGroupLeave');
+          if (auth.response) return auth.response;
+        }
+      }
     }
 
     const body = await request.json();
@@ -146,32 +216,40 @@ export async function POST(request: NextRequest) {
         perImage.push({ image: index, url: imageUrl, lines: result.lines || [], fields: result.fields || {} });
       }
 
-      const lines = perImage.flatMap((result) => result.lines.map((line) => ({ ...line, image: result.image })));
+        const enrichedPerImage = await validateClassStudentsAgainstRoster(perImage);
+      const lines = enrichedPerImage.flatMap((result) => result.lines.map((line) => ({ ...line, image: result.image })));
 
       const firstNonEmpty = (selector: (fields: Record<string, unknown>) => string) => (
-        perImage.map((patch) => selector(patch.fields)).find((value) => Boolean(value)) || ''
+        enrichedPerImage.map((patch) => selector(patch.fields)).find((value) => Boolean(value)) || ''
       );
 
-      const timeSourceIndex = perImage.findIndex((patch) => Boolean(String(patch.fields.start_time || '')));
+      const timeSourceIndex = enrichedPerImage.findIndex((patch) => Boolean(String(patch.fields.start_time || '')));
+      const mergedClassStudents = mergeClassStudents(enrichedPerImage);
+      // Keep the legacy flat list safe for cached/older page bundles: when a
+      // table is present, it must be derived from the left-side structured rows,
+      // never from ungrouped OCR text that also contains counsellor columns.
+      const structuredStudents = mergedClassStudents.flatMap((group) => group.students);
       const fields = {
         activity_name: firstNonEmpty((patch) => String(patch.activity_name || '')),
-        classes: unique(perImage.flatMap((patch) => Array.isArray(patch.fields.classes) ? patch.fields.classes.map(String) : [])),
-        students: unique(perImage.flatMap((patch) => Array.isArray(patch.fields.students) ? patch.fields.students.map(String) : [])),
-        student_ids: unique(perImage.flatMap((patch) => Array.isArray(patch.fields.student_ids) ? patch.fields.student_ids.map(String) : [])),
-        class_students: mergeClassStudents(perImage),
+        classes: unique(enrichedPerImage.flatMap((patch) => Array.isArray(patch.fields.classes) ? patch.fields.classes.map(String) : [])),
+        students: unique(structuredStudents.length
+          ? structuredStudents
+          : enrichedPerImage.flatMap((patch) => Array.isArray(patch.fields.students) ? patch.fields.students.map(String) : [])),
+        student_ids: unique(mergedClassStudents.flatMap((group) => group.student_ids)),
+        class_students: mergedClassStudents,
         start_time: firstNonEmpty((patch) => String(patch.start_time || '')),
         end_time: firstNonEmpty((patch) => String(patch.end_time || '')),
         time_source_image: timeSourceIndex >= 0 ? timeSourceIndex : null,
-        counselor_signature: perImage.some((patch) => patch.fields.counselor_signature === true),
-        official_seal: perImage.some((patch) => patch.fields.official_seal === true),
-        teacher_signature: perImage.some((patch) => patch.fields.teacher_signature === true),
-        cover_line: perImage.map((patch) => String(patch.fields.cover_line || '')).filter(Boolean).join('\n'),
+        counselor_signature: enrichedPerImage.some((patch) => patch.fields.counselor_signature === true),
+        official_seal: enrichedPerImage.some((patch) => patch.fields.official_seal === true),
+        teacher_signature: enrichedPerImage.some((patch) => patch.fields.teacher_signature === true),
+        cover_line: enrichedPerImage.map((patch) => String(patch.fields.cover_line || '')).filter(Boolean).join('\n'),
         suggested_notes: timeSourceIndex >= 0
           ? `多张截图：请假时间取自第 ${timeSourceIndex + 1} 张截图；公章/签字按整份材料的侧面（骑缝章）核验，任一张截图识别到即视为有。`
           : 'OCR 多图初稿，请人工核对班级、姓名、时间后再保存。',
       };
 
-      return NextResponse.json({ success: true, data: { lines, fields, perImage } });
+      return NextResponse.json({ success: true, data: { lines, fields, perImage: enrichedPerImage } });
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
     }

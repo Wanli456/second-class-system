@@ -87,33 +87,6 @@ function parseStudentEntries(value: string): string[] {
   });
 }
 
-async function cropImageToLeftHalf(file: File): Promise<File> {
-  // 仅裁切供自动识别使用的副本；完整原图仍照常保存，避免把右侧导员信息纳入学生名单。
-  if (!file.type.startsWith('image/')) return file;
-  const objectUrl = URL.createObjectURL(file);
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const element = new Image();
-      element.onload = () => resolve(element);
-      element.onerror = () => reject(new Error('图片加载失败'));
-      element.src = objectUrl;
-    });
-    const width = Math.max(1, Math.floor(image.naturalWidth / 2));
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = image.naturalHeight;
-    const context = canvas.getContext('2d');
-    if (!context) return file;
-    context.drawImage(image, 0, 0, width, image.naturalHeight, 0, 0, width, image.naturalHeight);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, file.type || 'image/png'));
-    return blob ? new File([blob], file.name, { type: blob.type || file.type, lastModified: file.lastModified }) : file;
-  } catch {
-    return file;
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-}
-
 function formatStudentEntry(studentId: string, name: string, className: string): string {
   return [studentId.trim(), name.trim(), className.trim()].join('｜');
 }
@@ -142,9 +115,18 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrError, setOcrError] = useState('');
   const [ocrLines, setOcrLines] = useState<Array<{ text: string; score?: number }>>([]);
+
+  const clearAutomaticRecognition = () => {
+    // 已选原图、活动和时间保持不变，只清除自动写入的名单、文字和提示。
+    setStudentNamesText('');
+    setOcrLines([]);
+    setOcrError('');
+  };
   const [submitSuccess, setSubmitSuccess] = useState('');
 
-  const canAccess = hasPermission(user, 'canManageOriginalLeave');
+  const canAccess = isSubmitMode
+    ? hasPermission(user, 'canSubmitOriginalLeave')
+    : hasPermission(user, 'canManageOriginalLeave');
 
   useEffect(() => {
     const urls = imageFiles.map((file) => URL.createObjectURL(file));
@@ -200,8 +182,9 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
     setOcrError('');
     setOcrLines([]);
     try {
-      const ocrFiles = await Promise.all(files.map(cropImageToLeftHalf));
-      const uploaded = await uploadFilesToUrls(ocrFiles);
+      // 所有假条图片均交给服务端统一做 OpenCV 矫正、表头分列和花名册校验。
+      // 前端预裁切会截掉倾斜拍摄时的学号列，且无法可靠排除右侧辅导员列。
+      const uploaded = await uploadFilesToUrls(files);
 
       const res = await apiFetch('/api/ocr/analyze', {
         method: 'POST',
@@ -346,7 +329,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
               <datalist id="original-activity-options">{activityOptions.map((activity) => <option key={activity.id} value={activity.full_name}>{activity.id}</option>)}</datalist>
               <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs tabular-nums text-slate-600">已绑定活动 ID：<span className="font-medium text-slate-800">{activityId || '未选择'}</span></div>
               <label className="block space-y-2"><span className="text-sm font-medium text-slate-800">涉及学生（学号｜姓名｜班级）</span><textarea aria-label="涉及学生的学号、姓名和班级" placeholder={'每行一名学生，例如：\n20250001｜刘玉｜应化2532\n20250002｜宣锐｜应急2531'} value={studentNamesText} onChange={(event) => setStudentNamesText(event.target.value)} className="min-h-32 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm leading-6 outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-100" /></label>
-              <p className="-mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">每行只填写一名学生，学号、姓名、班级三项可任意排序并用竖线分隔；系统会统一保存为 <span className="font-medium text-slate-800">学号｜姓名｜班级</span>。自动识别只读取图片左半部分的学生名单区，右侧导员信息不会写入学生名单；请人工核对后提交。</p>
+              <p className="-mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">每行只填写一名学生，学号、姓名、班级三项可任意排序并用竖线分隔；系统会统一保存为 <span className="font-medium text-slate-800">学号｜姓名｜班级</span>。上传后自动识别原图：班级、姓名会先带入；只有花名册唯一匹配时才带入学号，否则学号留空，请人工补全并核对后提交。辅导员姓名不会写入学生名单。</p>
               <div className="grid grid-cols-2 gap-2">
                 <input aria-label="开始时间" type="datetime-local" value={startTime} onChange={(event) => setStartTime(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-teal-600" />
                 <input aria-label="结束时间" type="datetime-local" value={endTime} onChange={(event) => setEndTime(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-teal-600" />
@@ -359,6 +342,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
               <ImageUploadPreviews imageUrls={imagePreviews} altPrefix="原假条图片" onRemove={(index) => setImageFiles((previous) => previous.filter((_, itemIndex) => itemIndex !== index))} />
               <div className="grid gap-3 sm:grid-cols-2">
                 <Button type="button" variant="outline" onClick={() => void runOcrForFiles(imageFiles)} disabled={ocrLoading || !imageFiles.length} className="h-11 bg-white">自动识别</Button>
+                <Button type="button" variant="outline" onClick={clearAutomaticRecognition} disabled={ocrLoading} className="h-11 bg-white">清除自动识别数据</Button>
                 <Button type="button" onClick={handleSubmit} disabled={saving || ocrLoading} className="h-11 bg-teal-700 hover:bg-teal-800"><Plus className="size-4" />{ocrLoading ? '自动识别中...' : saving ? '提交中...' : '提交原假条'}</Button>
               </div>
               {ocrError && <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{ocrError}</p>}

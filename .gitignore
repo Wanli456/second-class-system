@@ -42,8 +42,9 @@ storybook-static
 bin/
 *.test
 
-# 本地 Python OCR 虚拟环境
-.ocr-venv/
+# 本地 Python OCR 运行时（可从项目脚本重建，不纳入版本控制）
+/.ocr-venv*/
+/local-ocr/.python-runtime/
 
 # 本地临时目录
 con_hf/

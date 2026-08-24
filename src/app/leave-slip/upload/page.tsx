@@ -98,32 +98,6 @@ function normalizeStudentText(values: unknown[]): { student_id: string; student_
   };
 }
 
-async function cropImageToLeftHalf(file: File): Promise<File> {
-  if (!file.type.startsWith('image/')) return file;
-  const objectUrl = URL.createObjectURL(file);
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const element = new Image();
-      element.onload = () => resolve(element);
-      element.onerror = reject;
-      element.src = objectUrl;
-    });
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.floor(image.naturalWidth / 2));
-    canvas.height = image.naturalHeight;
-    const context = canvas.getContext('2d');
-    if (!context) return file;
-    context.drawImage(image, 0, 0, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, file.type || 'image/jpeg', 0.95));
-    return blob ? new File([blob], file.name, { type: blob.type || file.type, lastModified: file.lastModified }) : file;
-  } catch {
-    // 不能在浏览器中裁切的格式（例如个别 HEIC）仍交给服务端识别，避免阻断上传。
-    return file;
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-}
-
 export default function LeaveSlipUploadPage() {
   const { user, initialized } = useUser();
   const [slipType, setSlipType] = useState<(typeof SLIP_TYPES)[number]['value']>('手写假条');
@@ -141,6 +115,14 @@ export default function LeaveSlipUploadPage() {
   const [ocrError, setOcrError] = useState('');
   const [ocrLines, setOcrLines] = useState<Array<{ text: string; score?: number; image?: number }>>([]);
   const [ocrNotice, setOcrNotice] = useState('');
+
+  const clearAutomaticRecognition = () => {
+    // 图片保留用于再次识别；只清除 OCR 自动写入的名单、预览和错误提示。
+    setStudents([]);
+    setOcrLines([]);
+    setOcrNotice('');
+    setOcrError('');
+  };
   const [counselorSignature, setCounselorSignature] = useState(false);
   const [officialSeal, setOfficialSeal] = useState(false);
   const [teacherSignature, setTeacherSignature] = useState(false);
@@ -231,9 +213,9 @@ export default function LeaveSlipUploadPage() {
     setOcrLoading(true);
     setOcrLines([]);
     try {
-      // 原图仍用于最终提交；只有送去自动识别的临时副本裁取左半边，避免导员信息混入学生名单。
-      const ocrFiles = await Promise.all(files.map(cropImageToLeftHalf));
-      const uploaded = await uploadFilesToUrls(ocrFiles);
+      // 服务端统一执行 OpenCV 照片矫正和按表头分列。前端裁切会截断
+      // 倾斜图片的学号列，也会让不同假条的列比例失去一致性。
+      const uploaded = await uploadFilesToUrls(files);
       const res = await apiFetch('/api/ocr/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -243,7 +225,9 @@ export default function LeaveSlipUploadPage() {
       if (!data.success) throw new Error(data.error || '自动识别失败');
 
       const fields = data.data.fields || {};
-      const names: string[] = Array.isArray(fields.students)
+      // The flat OCR name list can include the right-side counsellor column.
+      // Prefer it only when the service found no structured table groups.
+      const names: string[] = Array.isArray(fields.students) && Array.isArray(fields.class_students) && fields.class_students.length === 0
         ? fields.students.map((item: unknown) => normalizeStudentText([item]).student_name).filter(Boolean)
         : [];
       const classes: string[] = Array.isArray(fields.classes)
@@ -256,17 +240,20 @@ export default function LeaveSlipUploadPage() {
       const normalizedClassStudents = classStudents.map((entry) => ({
         class_name: cleanOcrText(entry.class_name),
         students: Array.isArray(entry.students)
-          ? entry.students.map((item) => normalizeStudentText([item]).student_name).filter(Boolean)
+          ? entry.students.map((item) => normalizeStudentText([item]).student_name)
           : [],
         student_ids: Array.isArray(entry.student_ids)
-          ? entry.student_ids.map((item) => normalizeStudentText([item]).student_id).filter(Boolean)
+          ? entry.student_ids.map((item) => normalizeStudentText([item]).student_id)
           : [],
       })).filter((entry) => isLikelyClassName(entry.class_name));
       const matchedClassEntry = normalizedClassStudents.find((entry) => classTextMatches(entry.class_name, currentClass));
-      const matchedNames = matchedClassEntry?.students || [];
-      const matchedIds = matchedClassEntry?.student_ids || [];
+      const matchedRows = (matchedClassEntry?.students || []).map((student_name, index) => ({
+        student_name,
+        student_id: matchedClassEntry?.student_ids[index] || '',
+      })).filter((row) => isLikelyStudentName(row.student_name));
+      const matchedNames = matchedRows.map((row) => row.student_name);
       const studentsToFill = matchedNames.length ? matchedNames : names;
-      const shouldUseMatchedIds = Boolean(matchedClassEntry) && matchedIds.length === studentsToFill.length;
+      const shouldUseMatchedIds = Boolean(matchedClassEntry) && matchedRows.length > 0;
       const singleClassMatches = recognizedClasses.length === 1 && classTextMatches(recognizedClasses[0], currentClass);
       const shouldAutoFill = Boolean(currentClass)
         && (matchedClassEntry ? matchedNames.length > 0 : singleClassMatches);
@@ -286,18 +273,22 @@ export default function LeaveSlipUploadPage() {
       }
 
       if (shouldAutoFill && studentsToFill.length) {
-        setStudents((previous) => {
-          const existingNames = new Set(previous.map((row) => row.student_name.trim()).filter(Boolean));
-          const rows = previous.filter((row) => row.student_id.trim() || row.student_name.trim());
+        setStudents(() => {
           const added = studentsToFill.map((name, index) => {
-            const normalized = normalizeStudentText([shouldUseMatchedIds ? matchedIds[index] || '' : '', name, user?.className || '']);
+            const normalized = normalizeStudentText([
+              shouldUseMatchedIds ? matchedRows[index]?.student_id || '' : '',
+              name,
+              user?.className || '',
+            ]);
             return {
               student_id: normalized.student_id,
               student_name: normalized.student_name,
               class_name: normalized.class_name || user?.className || '',
             };
-          }).filter((row) => !existingNames.has(row.student_name) && row.student_name.length >= 2);
-          return [...rows, ...added];
+          }).filter((row) => isLikelyStudentName(row.student_name));
+          // A second upload is a new OCR attempt, not an append operation: retaining
+          // prior auto-filled rows is how a previously misread counsellor stayed visible.
+          return added.length ? added : [{ student_id: '', student_name: '', class_name: user?.className || '' }];
         });
       }
       if (slipType === '二课活动请假' && fields.activity_name && !activityName) {
@@ -530,6 +521,7 @@ export default function LeaveSlipUploadPage() {
             <>
               {ocrLoading && <p className="mt-3 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-700">图片自动识别中，请稍候…</p>}
               <Button type="button" variant="outline" onClick={() => void runOcrForFiles(imageFiles)} disabled={ocrLoading || !imageFiles.length} className="bg-white">自动识别</Button>
+              <Button type="button" variant="outline" onClick={clearAutomaticRecognition} disabled={ocrLoading} className="bg-white">清除自动识别数据</Button>
               {ocrError && <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{ocrError}（识别失败可手动填写，不影响提交）</p>}
               {ocrLines.length > 0 && (
                 <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">

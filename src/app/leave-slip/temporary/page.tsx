@@ -12,8 +12,23 @@ import { Button } from '@/components/ui/button';
 import { ImageUploadPreviews } from '@/components/ImageUploadPreviews';
 
 type ParsedStudent = { student_id: string; student_name: string; class_name: string };
+type OcrStudentDraft = { student_id: string; student_name: string; class_name: string };
 type UploadedImage = { url: string; name: string };
-type OcrPayload = { success?: boolean; error?: string; data?: { lines?: unknown; fields?: { student_ids?: unknown; students?: unknown; classes?: unknown; cover_line?: unknown } } };
+type OcrClassStudents = { class_name?: unknown; students?: unknown; student_ids?: unknown };
+type OcrPayload = {
+  success?: boolean;
+  error?: string;
+  data?: {
+    lines?: unknown;
+    fields?: {
+      student_ids?: unknown;
+      students?: unknown;
+      classes?: unknown;
+      class_students?: unknown;
+      cover_line?: unknown;
+    };
+  };
+};
 
 function isStudentId(value: string): boolean {
   return /^\d{6,18}$/.test(value.trim());
@@ -42,45 +57,66 @@ function parseStudentLines(text: string): ParsedStudent[] {
   return text.split(/\r?\n/).map((line) => parseStudentFields(line.trim())).filter((student): student is ParsedStudent => Boolean(student));
 }
 
-async function cropImageToLeftHalf(file: File): Promise<File> {
-  // 仅裁切供自动识别使用的副本；完整原图仍照常保存，避免把右侧导员信息纳入学生名单。
-  if (!file.type.startsWith('image/')) return file;
-  const objectUrl = URL.createObjectURL(file);
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const element = new Image();
-      element.onload = () => resolve(element);
-      element.onerror = () => reject(new Error('图片加载失败'));
-      element.src = objectUrl;
-    });
-    const width = Math.max(1, Math.floor(image.naturalWidth / 2));
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = image.naturalHeight;
-    const context = canvas.getContext('2d');
-    if (!context) return file;
-    context.drawImage(image, 0, 0, width, image.naturalHeight, 0, 0, width, image.naturalHeight);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, file.type || 'image/png'));
-    return blob ? new File([blob], file.name, { type: blob.type || file.type, lastModified: file.lastModified }) : file;
-  } catch {
-    return file;
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-}
-
 function stringList(value: unknown): string[] {
   return Array.isArray(value) ? value.map((item) => String(item).trim()).filter(Boolean) : [];
 }
 
+function alignedStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((item) => String(item).trim()) : [];
+}
+
+function studentsFromClassGroups(value: unknown): OcrStudentDraft[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item): ParsedStudent[] => {
+    const group = item as OcrClassStudents;
+    const className = String(group?.class_name || '').trim();
+    const ids = alignedStringList(group?.student_ids);
+    const names = stringList(group?.students);
+    if (!className) return [];
+
+    return names.flatMap((studentName, index) => {
+      const studentId = ids[index] || '';
+      return studentName ? [{ student_id: studentId, student_name: studentName, class_name: className }] : [];
+    });
+  });
+}
+
+function ocrLineTexts(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((line) => {
+    if (typeof line === 'string') return [line.trim()];
+    if (line && typeof line === 'object' && typeof (line as { text?: unknown }).text === 'string') {
+      return [(line as { text: string }).text.trim()];
+    }
+    return [];
+  }).filter(Boolean);
+}
+
 function formatOcrStudents(payload: OcrPayload): string[] {
   const fields = payload.data?.fields;
-  const fromLines = parseStudentLines(stringList(payload.data?.lines).join('\n'));
+  const fromClassGroups = studentsFromClassGroups(fields?.class_students);
+  const fromLines = parseStudentLines(ocrLineTexts(payload.data?.lines).join('\n'));
   const ids = stringList(fields?.student_ids);
   const names = stringList(fields?.students);
   const classes = stringList(fields?.classes);
-  const fromFields = ids.map((id, index) => ({ student_id: id, student_name: names[index] || '', class_name: classes[index] || classes[0] || '' })).filter((student) => student.student_name);
-  return [...fromLines, ...fromFields].filter((student, index, all) => all.findIndex((item) => item.student_id === student.student_id) === index).map((student) => [student.student_id, student.student_name, student.class_name].filter(Boolean).join(' '));
+  // 扁平字段缺失班级配对关系时不能用 classes[0] 猜测，避免跨班假条错填。
+  const fromFields = ids.flatMap((id, index) => {
+    const studentName = names[index] || '';
+    const className = classes[index] || '';
+    return studentName && className ? [{ student_id: id, student_name: studentName, class_name: className }] : [];
+  });
+  const candidates: OcrStudentDraft[] = fromClassGroups.length ? fromClassGroups : [...fromLines, ...fromFields];
+  return candidates
+    .filter((student) => student.student_name && student.class_name)
+    .filter((student, index, all) => {
+      const key = student.student_id || `${student.student_name}\u0000${student.class_name}`;
+      return all.findIndex((item) => (item.student_id || `${item.student_name}\u0000${item.class_name}`) === key) === index;
+    })
+    // 学号未出现在原图时保留左侧空位：工作人员可直接在姓名前补录学号。
+    .map((student) => student.student_id
+      ? `${student.student_id} ${student.student_name} ${student.class_name}`
+      : ` ${student.student_name} ${student.class_name}`);
 }
 
 export default function TemporaryLeavePage() {
@@ -92,6 +128,13 @@ export default function TemporaryLeavePage() {
   const [previews, setPreviews] = useState<string[]>([]);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [ocrText, setOcrText] = useState('');
+
+  const clearAutomaticRecognition = () => {
+    // 保留原图和时间，仅清除自动识别写入的名单、文字和提示，方便立即重新识别。
+    setStudentsText('');
+    setOcrText('');
+    setError(null);
+  };
   const [recognizing, setRecognizing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
@@ -145,9 +188,9 @@ export default function TemporaryLeavePage() {
       setUploadedImages((previous) => [...previous, ...uploaded]);
       files.forEach((file) => { const reader = new FileReader(); reader.onload = () => setPreviews((previous) => [...previous, String(reader.result)]); reader.readAsDataURL(file); });
       imagesUploaded = true;
-      const ocrFiles = await Promise.all(files.map(cropImageToLeftHalf));
       const ocrUploads: UploadedImage[] = [];
-      for (const file of ocrFiles) {
+      // 交由服务端按“辅导员”表头的实际横坐标分列。前端预裁切会在倾斜拍摄时截掉姓名后方的学号列。
+      for (const file of files) {
         const body = new FormData();
         body.append('file', file);
         const response = await apiFetch('/api/upload', { method: 'POST', body });
@@ -161,9 +204,18 @@ export default function TemporaryLeavePage() {
       const payload = await response.json() as OcrPayload;
       if (!payload.success) throw new Error(payload.error || '自动识别失败');
       const rows = formatOcrStudents(payload);
-      if (rows.length) setStudentsText((previous) => [...previous.split('\n').filter(Boolean), ...rows].join('\n'));
-      setOcrText(stringList(payload.data?.lines).slice(0, 30).join('\n') || String(payload.data?.fields?.cover_line || ''));
-      if (!rows.length) setError('未能完整识别学生信息，请按“学号、姓名、班级”每行一名手工补全，三项顺序不限。');
+      // 重新自动识别时必须以本次图片结果覆盖旧识别内容。否则修复前误识别进来的
+      // 辅导员会一直留在文本框内，即使服务端已经返回了正确的学生名单。
+      if (rows.length) setStudentsText(rows.join('\n'));
+      setOcrText(ocrLineTexts(payload.data?.lines).slice(0, 30).join('\n') || String(payload.data?.fields?.cover_line || ''));
+      if (!rows.length) {
+        const identifiedStudents = (Array.isArray(payload.data?.fields?.class_students)
+          ? payload.data.fields.class_students.reduce((count, group) => count + stringList((group as OcrClassStudents)?.students).length, 0)
+          : 0);
+        setError(identifiedStudents
+          ? `已识别 ${identifiedStudents} 名学生的姓名和班级，但原图“联系方式”列不含学号，且花名册未找到唯一对应学号，请补全后提交。`
+          : '未能识别学生信息，请按“学号、姓名、班级”每行一名手工补全，三项顺序不限。');
+      }
     } catch (recognitionError) {
       setError((imagesUploaded ? '图片已上传，但自动识别未完成：' : '图片上传失败：') + (recognitionError instanceof Error ? recognitionError.message : '请手工填写名单'));
     } finally {
@@ -253,9 +305,10 @@ export default function TemporaryLeavePage() {
           />
           <label className="mt-4 block text-xs font-semibold text-slate-700">请假学生（每行：学号 姓名 班级）
             <textarea value={studentsText} onChange={(event) => setStudentsText(event.target.value)} rows={5} className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder={'2024010101 张三 计算机2101\n2024010102 李四 软件2102'} />
-            <span className="mt-1 block text-xs font-normal text-slate-500">名单可跨班；识别不全或不准确时直接在此补充、修改。</span>
+            <span className="mt-1 block text-xs font-normal text-slate-500">名单可跨班；若原图只有“联系方式”而没有学号，系统会先填好姓名、班级并在行首留出学号位置，请直接补录学号。</span>
           </label>
           {ocrText && <label className="mt-4 block text-xs font-semibold text-slate-700">自动识别文字（含请假内容，最终以原图为准）<textarea value={ocrText} onChange={(event) => setOcrText(event.target.value)} rows={4} className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-600" /></label>}
+          <Button type="button" variant="outline" onClick={clearAutomaticRecognition} disabled={recognizing || !imageFiles.length} className="mt-3">清除自动识别数据</Button>
 
           <div className="mt-5">
             <Button type="button" onClick={() => void submit()} disabled={submitting || recognizing} className="bg-slate-950 hover:bg-slate-800">
