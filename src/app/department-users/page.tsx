@@ -5,6 +5,7 @@ import { ArrowLeft, Check, Loader2, ShieldCheck, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DepartmentClassRosterManager } from '@/components/DepartmentClassRosterManager';
+import { apiFetch } from '@/lib/client-api';
 import type { DepartmentUserManagementDepartment } from '@/lib/department-user-management';
 
 type PermissionKey =
@@ -81,10 +82,15 @@ export default function DepartmentUsersPage({ managedDepartment }: { managedDepa
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
+  const redirectToLogin = () => {
+    window.localStorage.removeItem('user');
+    router.replace(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+  };
+
   useEffect(() => {
     const storedUser = window.localStorage.getItem('user');
     if (!storedUser) {
-      router.replace('/login?redirect=/department-users');
+      redirectToLogin();
       return;
     }
 
@@ -92,9 +98,13 @@ export default function DepartmentUsersPage({ managedDepartment }: { managedDepa
       ? '/api/department-users?department=' + encodeURIComponent(managedDepartment)
       : '/api/department-users';
 
-    fetch(endpoint)
+    apiFetch(endpoint)
       .then(async (res) => {
         const data = await res.json();
+        if (res.status === 401) {
+          redirectToLogin();
+          return;
+        }
         if (!res.ok || !data.success) throw new Error(data.error || '加载失败');
         setDepartment(data.data.department || '');
         setPermissionKeys(data.data.permissionKeys || []);
@@ -118,12 +128,16 @@ export default function DepartmentUsersPage({ managedDepartment }: { managedDepa
     setError('');
     setMessage('');
     try {
-      const res = await fetch('/api/department-users', {
+      const res = await apiFetch('/api/department-users', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, permissions: user.permissions, department: managedDepartment }),
       });
       const data = await res.json();
+      if (res.status === 401) {
+        redirectToLogin();
+        return;
+      }
       if (!res.ok || !data.success) throw new Error(data.error || '保存失败');
       if (data.data) {
         setUsers((current) => current.map((item) => item.id === user.id ? data.data : item));
@@ -185,7 +199,7 @@ export default function DepartmentUsersPage({ managedDepartment }: { managedDepa
             ))}
           </div>
         )}
-        {managedDepartment === '学习竞技部' && <DepartmentClassRosterManager />}
+        {managedDepartment === '学习竞技部' && <DepartmentClassRosterManager onUnauthorized={redirectToLogin} />}
       </div>
     </main>
   );

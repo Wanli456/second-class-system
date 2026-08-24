@@ -635,9 +635,14 @@ function AdminPage() {
         alert(data.error || '更新部门失败');
         return;
       }
-      setUsers(previous => previous.map(item => item.id === userId ? { ...item, department } : item));
+      // 接口返回的是服务端计算后的完整用户信息。部门负责人切换部门时，
+      // 必须同步其中的部门默认权限，否则页面会继续显示旧的权限状态。
+      setUsers(previous => previous.map(item => item.id === userId
+        ? { ...item, ...(data.data || { department }) }
+        : item
+      ));
       if (user?.id === userId && data.data) {
-        const updatedUser = { ...user, department };
+        const updatedUser = { ...user, ...data.data };
         setUser(updatedUser);
         localStorage.setItem('user', JSON.stringify({ ...JSON.parse(localStorage.getItem('user') || '{}'), ...data.data }));
       }

@@ -4,6 +4,7 @@ import { ChangeEvent, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { BookOpen, Loader2, Save, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { apiFetch } from '@/lib/client-api';
 
 type RosterStudent = { studentId: string; studentName: string };
 
@@ -41,7 +42,7 @@ function parseWorkbook(file: File): Promise<{ className: string; students: Roste
   });
 }
 
-export function DepartmentClassRosterManager() {
+export function DepartmentClassRosterManager({ onUnauthorized }: { onUnauthorized?: () => void }) {
   const [className, setClassName] = useState('');
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
@@ -56,8 +57,12 @@ export function DepartmentClassRosterManager() {
     if (!normalizedClassName) return setError('请先输入班级名称');
     setLoading(true);
     try {
-      const response = await fetch('/api/department-class-roster?className=' + encodeURIComponent(normalizedClassName));
+      const response = await apiFetch('/api/department-class-roster?className=' + encodeURIComponent(normalizedClassName));
       const payload = await response.json();
+      if (response.status === 401) {
+        onUnauthorized?.();
+        return;
+      }
       if (!response.ok || !payload.success) throw new Error(payload.error || '读取花名册失败');
       const students = (payload.data as Array<{ student_id: string; student_name: string }>).map((student) => ({ studentId: student.student_id, studentName: student.student_name }));
       setContent(students.map((student) => `${student.studentId},${student.studentName}`).join('\n'));
@@ -78,12 +83,16 @@ export function DepartmentClassRosterManager() {
     if (!students.length) return setError('请按“学号,姓名”格式至少填写一名学生');
     setSaving(true);
     try {
-      const response = await fetch('/api/department-class-roster', {
+      const response = await apiFetch('/api/department-class-roster', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ className: normalizedClassName, students }),
       });
       const payload = await response.json();
+      if (response.status === 401) {
+        onUnauthorized?.();
+        return;
+      }
       if (!response.ok || !payload.success) throw new Error(payload.error || '保存花名册失败');
       setMessage(`已保存 ${payload.count} 名学生的花名册。`);
     } catch (saveError) {
