@@ -73,7 +73,8 @@ export function canManageTargetUser(
 
   const targetDepartment = normalizedDepartment(target.department);
   if (scope.department === '学习竞技部') {
-    return targetDepartment === scope.department && (target.role === 'class_leader' || target.role === 'student');
+    // 学习竞技部负责维护班级负责人；目标学生不需要属于学习竞技部。
+    return target.role === 'class_leader' || target.role === 'student';
   }
 
   // 认证中心可管理本部门成员，也可给其他部门负责人授予认证中心业务权限。

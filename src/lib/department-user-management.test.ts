@@ -19,6 +19,8 @@ assert.equal(isDepartmentUserManager({ role: 'leader', department: '其他部门
 
 assert.equal(canManageTargetUser(learningManager, { id: 'class-leader', role: 'class_leader', department: '学习竞技部' }), true);
 assert.equal(canManageTargetUser(learningManager, { id: 'student', role: 'student', department: '学习竞技部' }), true);
+assert.equal(canManageTargetUser(learningManager, { id: 'other-student', role: 'student', department: '其他部门' }), true);
+assert.equal(canManageTargetUser(learningManager, { id: 'other-class-leader', role: 'class_leader', department: null }), true);
 assert.equal(canManageTargetUser(learningManager, { id: 'other-leader', role: 'leader', department: '其他部门' }), false);
 assert.equal(canManageTargetUser(learningManager, { id: 'admin', role: 'admin', department: '学习竞技部' }), false);
 assert.equal(canManageTargetUser(learningManager, { id: 'learning-manager', role: 'leader', department: '学习竞技部' }), false);
