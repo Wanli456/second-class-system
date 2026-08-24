@@ -10,12 +10,10 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const FALLBACK_SECRET = 'second-class-local-development-secret';
 
 function sessionCookieOptions() {
-  // Coze renders previews in an embedded cross-site frame. Production cookies
-  // must opt into that context or protected API requests lose the session.
   const isProduction = process.env.NODE_ENV === 'production';
   return {
     httpOnly: true,
-    sameSite: isProduction ? 'none' as const : 'lax' as const,
+    sameSite: 'lax' as const,
     secure: isProduction,
     path: '/',
   };

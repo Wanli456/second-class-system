@@ -3,6 +3,7 @@ import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { requireUser } from '@/lib/auth';
 import { getUploadFileKind, UPLOAD_FILE_FORMAT_HINT } from '@/lib/upload-file-validation';
+import { publicUploadError } from '@/lib/upload-error';
 
 // POST /api/upload - 上传文件到雨云服务器本地存储
 export async function POST(request: NextRequest) {
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, url: publicUrl, file_name: originalName });
   } catch (err) {
-    const message = err instanceof Error ? err.message : '未知错误';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    console.error('文件上传失败:', err);
+    return NextResponse.json({ success: false, error: publicUploadError(err) }, { status: 500 });
   }
 }

@@ -8,6 +8,9 @@ cd "${WORKSPACE_PATH}"
 echo "Installing dependencies..."
 pnpm install --prefer-frozen-lockfile --prefer-offline --loglevel debug --reporter=append-only
 
+echo "Preparing the local OCR runtime..."
+bash ./scripts/setup-ocr.sh
+
 echo "Building the Next.js project..."
 pnpm next build
 
