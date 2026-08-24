@@ -1,6 +1,6 @@
 'use client';
 
-import { DepartmentUsers } from '@/app/department-users/page';
+import { DepartmentUsers } from '@/components/DepartmentUsers';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
