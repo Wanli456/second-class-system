@@ -72,7 +72,7 @@ function roleLabel(role: string | null) {
   return role === 'leader' ? '部门负责人' : role === 'class_leader' ? '班级负责人' : '成员';
 }
 
-export default function DepartmentUsersPage({ managedDepartment }: { managedDepartment?: DepartmentUserManagementDepartment }) {
+export function DepartmentUsers({ managedDepartment }: { managedDepartment?: DepartmentUserManagementDepartment }) {
   const router = useRouter();
   const [department, setDepartment] = useState('');
   const [permissionKeys, setPermissionKeys] = useState<PermissionKey[]>([]);
@@ -203,4 +203,8 @@ export default function DepartmentUsersPage({ managedDepartment }: { managedDepa
       </div>
     </main>
   );
+}
+
+export default function DepartmentUsersPage() {
+  return <DepartmentUsers />;
 }

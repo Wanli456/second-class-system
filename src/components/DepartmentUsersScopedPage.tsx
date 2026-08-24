@@ -1,6 +1,6 @@
 'use client';
 
-import DepartmentUsersPage from '@/app/department-users/page';
+import { DepartmentUsers } from '@/app/department-users/page';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
@@ -27,7 +27,7 @@ export function DepartmentUsersScopedPage({ department, title }: DepartmentUsers
   return (
     <DashboardLayout user={user} onLogout={handleLogout} title={title}>
       {canAccess ? (
-        <DepartmentUsersPage managedDepartment={department} />
+        <DepartmentUsers managedDepartment={department} />
       ) : (
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-balance text-lg font-semibold text-slate-950">无权访问该部门页面</h2>
