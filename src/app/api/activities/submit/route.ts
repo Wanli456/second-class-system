@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/storage/database/supabase-client';
 import { requirePermission } from '@/lib/auth';
 import { canSelectActivityLeader } from '@/lib/activity-leader-rules';
-import { getActivityScopes, hasAnyScopePermission, normalizeIds, normalizeScopes, serializeIds, serializeScopes, validateHostingScope } from '@/lib/business-rules';
+import { getActivityScopes, hasAnyScopePermission, normalizeIds, normalizeScopes, serializeIds, serializeScopes, validateActivityTimes, validateHostingScope } from '@/lib/business-rules';
 import { mergeActivityStatusRecords, type ActivityStatusRecord } from '@/lib/activity-status';
 import { isValidCategoryPath } from '@/lib/types';
 import { serializeActivityLeaderDetails } from '@/lib/activity-leader-details';
@@ -95,6 +95,8 @@ export async function POST(request: NextRequest) {
     const fallbackScope = scopeFromUser(user);
     const scopes = normalizeScopes(body.scope_names, body.scope_type || fallbackScope.scopeType, body.scope_name || fallbackScope.scopeName);
     if (!full_name || !start_time || !end_time || !registration_start_time || !registration_end_time || !category || !category_primary || !category_secondary || !isValidCategoryPath(category, category_primary, category_secondary) || !level) return NextResponse.json({ success: false, error: '请填写活动报名时间、活动举办时间、完整二课分类和活动级别' }, { status: 400 });
+    const timeValidation = validateActivityTimes({ start_time, end_time, registration_start_time, registration_end_time });
+    if (!timeValidation.valid) return NextResponse.json({ success: false, error: timeValidation.error }, { status: 400 });
 
     if (submission_id) {
       const existing = await queryOne('SELECT id, review_status, activity_submitter_id, scope_names, scope_type, scope_name FROM activity_submissions WHERE id=$1', [submission_id]);
@@ -105,7 +107,10 @@ export async function POST(request: NextRequest) {
       // 驳回重提沿用原联办范围；联办成员不必恰好属于原主办单位。
       const leader = await resolveLeaders(normalizeIds(body.leader_ids), leader_name, leader_phone, originalScopes, user);
       const firstScope = originalScopes[0];
-      const data = await queryOne(`UPDATE activity_submissions SET full_name=$1,start_time=$2,end_time=$3,registration_start_time=$4,registration_end_time=$5,category=$6,category_primary=$7,category_secondary=$8,level=$9,plan_file_url=$10,plan_file_name=$11,record_file_url=$12,record_file_name=$13,leader_name=$14,leader_phone=$15,scope_type=$16,scope_name=$17,scope_names=$18,leader_ids=$19,activity_submitter_id=$20,activity_submitter_name=$21,activity_submitter_student_id=$22,review_status='待审核',review_note=NULL,updated_at=NOW() WHERE id=$23 RETURNING *`, [full_name, start_time, end_time, registration_start_time, registration_end_time, category, category_primary || null, category_secondary || null, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader.name, leader.phone, firstScope.type, firstScope.name, serializeScopes(originalScopes), serializeIds(leader.ids), user.id, user.username, user.student_id, submission_id]);
+      // 用 WHERE review_status<>'已通过' 做原子守卫：如果在读取校验和这次写入之间，
+      // 该提交已被管理员审核通过（正式活动已生成），这里必须失败，不能把状态强行改回待审核。
+      const data = await queryOne(`UPDATE activity_submissions SET full_name=$1,start_time=$2,end_time=$3,registration_start_time=$4,registration_end_time=$5,category=$6,category_primary=$7,category_secondary=$8,level=$9,plan_file_url=$10,plan_file_name=$11,record_file_url=$12,record_file_name=$13,leader_name=$14,leader_phone=$15,scope_type=$16,scope_name=$17,scope_names=$18,leader_ids=$19,activity_submitter_id=$20,activity_submitter_name=$21,activity_submitter_student_id=$22,review_status='待审核',review_note=NULL,updated_at=NOW() WHERE id=$23 AND review_status<>'已通过' RETURNING *`, [full_name, start_time, end_time, registration_start_time, registration_end_time, category, category_primary || null, category_secondary || null, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader.name, leader.phone, firstScope.type, firstScope.name, serializeScopes(originalScopes), serializeIds(leader.ids), user.id, user.username, user.student_id, submission_id]);
+      if (!data) return NextResponse.json({ success: false, error: '该活动已审核通过，不能重新提交' }, { status: 409 });
       await query('UPDATE activity_submissions SET leader_details=$1 WHERE id=$2', [serializeActivityLeaderDetails(leader.details), submission_id]);
       const updated = await queryOne('SELECT * FROM activity_submissions WHERE id=$1', [submission_id]);
       return NextResponse.json({ success: true, data: updated || data });

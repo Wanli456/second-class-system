@@ -7,6 +7,7 @@ import {
 } from '@/lib/class-attendance-summary';
 import { uniqueLookup } from '@/lib/unique-lookup';
 import { query } from '@/storage/database/supabase-client';
+import { requireUser } from '@/lib/auth';
 
 interface AttendanceDateRow {
   class_name: string | null;
@@ -109,6 +110,9 @@ function attendanceWorkerNames(rows: AttendanceWorkRow[], requestedDate: string)
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  const auth = await requireUser(request);
+  if (auth.response) return auth.response;
+
   const requestedDate = new URL(request.url).searchParams.get('date')?.trim() || businessToday();
   if (!isValidDate(requestedDate)) {
     return NextResponse.json({ success: false, error: '日期格式无效，应为 YYYY-MM-DD' }, { status: 400 });

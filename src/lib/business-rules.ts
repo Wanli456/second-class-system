@@ -213,3 +213,22 @@ export function hasScopePermission(user: AuthUser, permission: 'submitActivity' 
 export function parseDateOnly(value: string | null) {
   return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
 }
+
+export function validateActivityTimes(input: {
+  start_time: unknown;
+  end_time: unknown;
+  registration_start_time: unknown;
+  registration_end_time: unknown;
+}): { valid: boolean; error?: string } {
+  const start = new Date(String(input.start_time)).getTime();
+  const end = new Date(String(input.end_time)).getTime();
+  const registrationStart = new Date(String(input.registration_start_time)).getTime();
+  const registrationEnd = new Date(String(input.registration_end_time)).getTime();
+  if ([start, end, registrationStart, registrationEnd].some((value) => Number.isNaN(value))) {
+    return { valid: false, error: '活动时间格式不正确' };
+  }
+  if (end <= start) return { valid: false, error: '活动结束时间必须晚于开始时间' };
+  if (registrationStart > registrationEnd) return { valid: false, error: '活动报名开始时间不能晚于报名结束时间' };
+  if (registrationEnd > start) return { valid: false, error: '活动报名结束时间不能晚于活动开始时间' };
+  return { valid: true };
+}

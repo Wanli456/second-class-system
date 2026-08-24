@@ -23,3 +23,33 @@ export function getUploadContentType(fileName: string, suppliedType: string): st
 }
 
 export const UPLOAD_FILE_FORMAT_HINT = '图片（jpg/jpeg/png/gif/webp/bmp/heic/heif）或常用文档（pdf/doc/docx/xls/xlsx/ppt/pptx/csv）';
+
+// 仅校验文件头的“魔数”，防止把可执行文件等危险内容改个扩展名伪装成图片/文档上传。
+// office 新格式(docx/xlsx/pptx)和部分旧格式内部都是 zip 容器，只能识别到 zip 级别，无法细分。
+const MAGIC_SIGNATURES: Array<{ kind: UploadFileKind; bytes: number[]; offset?: number }> = [
+  { kind: 'image', bytes: [0xff, 0xd8, 0xff] }, // jpg/jpeg
+  { kind: 'image', bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] }, // png
+  { kind: 'image', bytes: [0x47, 0x49, 0x46, 0x38] }, // gif
+  { kind: 'image', bytes: [0x42, 0x4d] }, // bmp
+  { kind: 'image', bytes: [0x52, 0x49, 0x46, 0x46] }, // webp (RIFF....WEBP)
+  { kind: 'image', bytes: [0x66, 0x74, 0x79, 0x70], offset: 4 }, // heic/heif (ftyp box)
+  { kind: 'document', bytes: [0x25, 0x50, 0x44, 0x46] }, // pdf
+  { kind: 'document', bytes: [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1] }, // legacy doc/xls/ppt (OLE2)
+  { kind: 'document', bytes: [0x50, 0x4b, 0x03, 0x04] }, // docx/xlsx/pptx/zip
+];
+
+function matchesSignature(buffer: Buffer, signature: { bytes: number[]; offset?: number }): boolean {
+  const offset = signature.offset || 0;
+  if (buffer.length < offset + signature.bytes.length) return false;
+  return signature.bytes.every((byte, index) => buffer[offset + index] === byte);
+}
+
+export function detectFileKindFromBytes(buffer: Buffer): UploadFileKind | null {
+  for (const signature of MAGIC_SIGNATURES) {
+    if (matchesSignature(buffer, signature)) return signature.kind;
+  }
+  // csv 是纯文本，没有固定魔数；放宽为不含空字节的可打印内容即可。
+  const sample = buffer.subarray(0, Math.min(buffer.length, 512));
+  if (sample.length > 0 && !sample.includes(0)) return 'document';
+  return null;
+}

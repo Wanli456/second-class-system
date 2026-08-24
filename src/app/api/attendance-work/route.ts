@@ -57,7 +57,8 @@ export async function GET(request: NextRequest) {
   if (auth.response) return auth.response;
   const user = auth.user!;
   const permissions = calculateUserPermissions(user);
-  const canList = permissions.canManageAttendanceWork || permissions.canReviewLeave;
+  const canManage = permissions.canManageAttendanceWork || permissions.canReviewLeave;
+  const canList = canManage || permissions.canViewEveningStudy;
   if (!canList) return NextResponse.json({ success: false, error: '暂无权限查看考勤工作安排' }, { status: 403 });
 
   const { searchParams } = new URL(request.url);
@@ -71,11 +72,11 @@ export async function GET(request: NextRequest) {
     values.push(date);
     index += 1;
   }
-  if (reviewStatus && REVIEW_STATUSES.includes(reviewStatus as (typeof REVIEW_STATUSES)[number])) {
+  if (reviewStatus && REVIEW_STATUSES.includes(reviewStatus as (typeof REVIEW_STATUSES)[number]) && canManage) {
     conditions.push(`review_status = $${index}`);
     values.push(reviewStatus);
-  } else if (!reviewStatus && !permissions.canReviewLeave && !permissions.canManageAttendanceWork) {
-    // 普通查询/晚自习用户默认只看已通过，避免看到待查对/已驳回内容。
+  } else if (!canManage) {
+    // 仅有晚自习查询权限（或无审核/管理权限）的用户，无论请求什么状态，只能看到已通过的安排。
     conditions.push(`review_status = $${index}`);
     values.push('已通过');
   }
@@ -171,12 +172,16 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ success: false, error: '只有待查对的安排可以查对' }, { status: 400 });
       }
 
-      await query(
+      // 用 WHERE review_status='待查对' 做原子守卫，避免两次并发查对同一条记录时，
+      // 后一次的更新在没有冲突提示的情况下悄悄覆盖前一次的查对结果。
+      const reviewed = await queryOne(
         `UPDATE attendance_work_arrangements
          SET review_status=$1, review_note=$2, reviewed_by_user_id=$3, reviewed_by_name=$4, reviewed_at=NOW(), updated_at=NOW()
-         WHERE id=$5`,
+         WHERE id=$5 AND review_status='待查对'
+         RETURNING id`,
         [reviewStatus, String(body.review_note || '').trim() || null, user.id, user.username, id],
       );
+      if (!reviewed) return NextResponse.json({ success: false, error: '该安排已被其他操作查对，请刷新后重试' }, { status: 409 });
 
       return NextResponse.json({ success: true, data: { id, review_status: reviewStatus } });
     }

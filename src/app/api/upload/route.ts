@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { requireUser } from '@/lib/auth';
-import { getUploadFileKind, UPLOAD_FILE_FORMAT_HINT } from '@/lib/upload-file-validation';
+import { detectFileKindFromBytes, getUploadFileKind, UPLOAD_FILE_FORMAT_HINT } from '@/lib/upload-file-validation';
 import { publicUploadError } from '@/lib/upload-error';
 
 // POST /api/upload - 上传文件到雨云服务器本地存储
@@ -27,7 +27,8 @@ export async function POST(request: NextRequest) {
     // 限制为业务需要的图片和常用文档，避免任意文件上传。
     const originalName = path.basename(file.name).replace(/[\\/]/g, '');
     const ext = (originalName.split('.').pop() || '').toLowerCase();
-    if (!getUploadFileKind(originalName)) {
+    const extKind = getUploadFileKind(originalName);
+    if (!extKind) {
       return NextResponse.json({ success: false, error: '仅支持' + UPLOAD_FILE_FORMAT_HINT }, { status: 400 });
     }
 
@@ -35,6 +36,12 @@ export async function POST(request: NextRequest) {
     const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+
+    // 扩展名之外再校验文件头，防止把可执行文件等危险内容改扩展名伪装成图片/文档绕过上面的校验。
+    const actualKind = detectFileKindFromBytes(buffer);
+    if (!actualKind || actualKind !== extKind) {
+      return NextResponse.json({ success: false, error: '文件内容与扩展名不匹配，请重新选择文件' }, { status: 400 });
+    }
     const uploadDir = path.join(process.cwd(), 'public', 'uploads');
     
     // 确保目录存在

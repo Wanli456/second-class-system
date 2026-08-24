@@ -47,6 +47,15 @@ export const DEPARTMENT_AUTO_PERMISSIONS: Record<string, Partial<Record<Permissi
     canViewSubmissionStatus: true,
     canSubmitActivity: true,
   },
+  // 兼容线上部门维护中已存在的历史名称，两个名称属于同一业务部门。
+  第二课认证中心: {
+    canPublish: true,
+    canScore: true,
+    canSubmitScoring: true,
+    canRegisterOtherCollege: true,
+    canViewSubmissionStatus: true,
+    canSubmitActivity: true,
+  },
 };
 
 /**

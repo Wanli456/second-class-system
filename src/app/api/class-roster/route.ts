@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { calculateUserPermissions, requirePermission, requireUser } from '@/lib/auth';
-import { ensureDatabaseSchema, query, queryOne } from '@/storage/database/supabase-client';
+import { ensureDatabaseSchema, query, queryOne, withTransaction } from '@/storage/database/supabase-client';
 
 type NormalizedRosterStudent = { className: string; studentId: string; studentName: string };
 
@@ -62,21 +62,32 @@ export async function POST(request: NextRequest) {
         .map((student) => [`${student.className}\u0000${student.studentId}`, student]),
     ).values()];
     if (!students.length) return NextResponse.json({ success: false, error: '请提供班级、学号和姓名' }, { status: 400 });
-    const data = [];
-    for (const student of students) {
-      const existing = await queryOne<{ class_name: string }>('SELECT class_name FROM class_roster WHERE student_id=$1 AND class_name<>$2 LIMIT 1', [student.studentId, student.className]);
-      if (existing) {
-        return NextResponse.json({ success: false, error: `学号 ${student.studentId} 已属于班级 ${existing.class_name}` }, { status: 409 });
+    const data = await withTransaction(async (client) => {
+      // 同一批学号的校验和写入必须串行，避免并发请求把同一学号同时分配到两个班级。
+      const lockKeys = [...new Set(students.map((student) => student.studentId))].sort();
+      for (const lockKey of lockKeys) {
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [lockKey]);
       }
-      const row = await queryOne(
-        `INSERT INTO class_roster (class_name,student_id,student_name) VALUES ($1,$2,$3)
-         ON CONFLICT (class_name,student_id) DO UPDATE SET student_name=EXCLUDED.student_name,updated_at=NOW()
-         RETURNING id,class_name,student_id,student_name`,
-        [student.className, student.studentId, student.studentName],
-      );
-      if (row) data.push(row);
-      await query('UPDATE users SET class_name=$1 WHERE student_id=$2', [student.className, student.studentId]);
-    }
+      const rows: Record<string, unknown>[] = [];
+      for (const student of students) {
+        const conflict = await client.query<{ class_name: string }>(
+          'SELECT class_name FROM class_roster WHERE student_id=$1 AND class_name<>$2 LIMIT 1',
+          [student.studentId, student.className],
+        );
+        if (conflict.rows.length) {
+          throw new Error(`学号 ${student.studentId} 已属于班级 ${conflict.rows[0].class_name}`);
+        }
+        const inserted = await client.query(
+          `INSERT INTO class_roster (class_name,student_id,student_name) VALUES ($1,$2,$3)
+           ON CONFLICT (class_name,student_id) DO UPDATE SET student_name=EXCLUDED.student_name,updated_at=NOW()
+           RETURNING id,class_name,student_id,student_name`,
+          [student.className, student.studentId, student.studentName],
+        );
+        if (inserted.rows[0]) rows.push(inserted.rows[0]);
+        await client.query('UPDATE users SET class_name=$1 WHERE student_id=$2', [student.className, student.studentId]);
+      }
+      return rows;
+    });
     return NextResponse.json({ success: true, data });
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '保存花名册失败' }, { status: 500 });

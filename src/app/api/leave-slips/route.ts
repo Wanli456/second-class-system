@@ -173,7 +173,9 @@ export async function POST(request: NextRequest) {
     }
     const studentIdentityError = validateStudentIdentityPairs(students);
     if (studentIdentityError) return NextResponse.json({ success: false, error: studentIdentityError }, { status: 400 });
-    if (!isTemporaryLeave) {
+    // 临时请假名单也必须命中花名册三字段核验：跨班汇总不代表可以免核验，
+    // 否则任何拿到 canStartGroupLeave 权限的账号都能伪造任意学生的请假记录。
+    {
       const rosterRows = await query<{ student_id: string; student_name: string; class_name: string }>('SELECT student_id, student_name, class_name FROM class_roster WHERE student_id = ANY($1::text[])', [students.map((student) => student.student_id)]);
       const rosterByStudentId = new Map(rosterRows.map((row) => [row.student_id, row]));
       const mismatches = students.filter((student) => {
@@ -219,8 +221,9 @@ export async function POST(request: NextRequest) {
     const chinaNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
     const isLate = chinaNow.getUTCHours() > 18 || (chinaNow.getUTCHours() === 18 && chinaNow.getUTCMinutes() > 30);
 
-    const autoApprove = slipType === '其他请假' && leaveType === '临时请假';
-    const initialReviewStatus = autoApprove ? '已通过' : '待查对';
+    // 临时请假曾经免审自动通过，但花名册以外没有任何人工核实环节，可被用来伪造他人请假记录；
+    // 现在统一走待查对，由学习竞技部负责人或管理员人工查对（提交人不能查对自己提交的记录）。
+    const initialReviewStatus = '待查对';
 
     const result = await withTransaction(async (client) => {
       const slip = (await client.query(
@@ -237,13 +240,6 @@ export async function POST(request: NextRequest) {
       }
       return slip;
     });
-
-    if (autoApprove && result?.id) {
-      await query(
-        `UPDATE leave_slips SET review_status='已通过', review_note='临时请假自动审核通过', reviewed_by_user_id=$1, reviewed_by_name='自动审核', reviewed_at=NOW() WHERE id=$2`,
-        [user.id, String(result.id)],
-      );
-    }
 
     const isCollectiveActivitySlip = slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条';
     let duplicateCheck: Awaited<ReturnType<typeof detectDuplicateSlip>> | null = null;
@@ -264,7 +260,6 @@ export async function POST(request: NextRequest) {
     }
 
     const warnings = isLate ? ['上传时间已超过 18:30，已标记为迟到假条'] : [];
-    if (autoApprove) warnings.push('临时请假已自动审核通过');
 
     return NextResponse.json({
       success: true,
@@ -426,8 +421,8 @@ export async function PUT(request: NextRequest) {
     }
     if (endTime <= startTime) return NextResponse.json({ success: false, error: '结束时间必须晚于开始时间' }, { status: 400 });
 
-    const current = await queryOne<{ id: string; slip_type: string; counselor_signature: boolean; official_seal: boolean; teacher_signature: boolean }>(
-      'SELECT id, slip_type, counselor_signature, official_seal, teacher_signature FROM leave_slips WHERE id=$1',
+    const current = await queryOne<{ id: string; slip_type: string; counselor_signature: boolean; official_seal: boolean; teacher_signature: boolean; review_status: string }>(
+      'SELECT id, slip_type, counselor_signature, official_seal, teacher_signature, review_status FROM leave_slips WHERE id=$1',
       [id],
     );
     if (!current) return NextResponse.json({ success: false, error: '假条不存在或已删除' }, { status: 404 });
@@ -465,10 +460,13 @@ export async function PUT(request: NextRequest) {
     const classNames = [...new Set(studentRows.map((student) => student.class_name.trim()).filter(Boolean))];
     if (!classNames.length) return NextResponse.json({ success: false, error: '该假条学生明细缺少班级，不能修改；请重新提交假条' }, { status: 400 });
 
+    // 用乐观锁（WHERE review_status=读取时的状态）避免覆盖并发查对结果：如果查对人在
+    // 读取校验和这次写入之间已经查对过该假条，这里必须失败并提示刷新，而不是静默改回待查对。
     const updated = await queryOne(
-      "UPDATE leave_slips SET activity_id=$1, activity_name=$2, class_names=$3, leave_type=$4, start_time=$5, end_time=$6, original_slip_id=NULL, review_status='待查对', review_note=NULL, reviewed_by_user_id=NULL, reviewed_by_name=NULL, reviewed_at=NULL WHERE id=$7 RETURNING *",
-      [activityId, activityName || null, JSON.stringify(classNames), leaveType, startTime.toISOString(), endTime.toISOString(), id],
+      "UPDATE leave_slips SET activity_id=$1, activity_name=$2, class_names=$3, leave_type=$4, start_time=$5, end_time=$6, original_slip_id=NULL, review_status='待查对', review_note=NULL, reviewed_by_user_id=NULL, reviewed_by_name=NULL, reviewed_at=NULL WHERE id=$7 AND review_status=$8 RETURNING *",
+      [activityId, activityName || null, JSON.stringify(classNames), leaveType, startTime.toISOString(), endTime.toISOString(), id, current.review_status],
     );
+    if (!updated) return NextResponse.json({ success: false, error: '假条状态已被其他操作更新，请刷新后重试' }, { status: 409 });
     return NextResponse.json({ success: true, data: updated, message: '假条已修改，已解除原对比关联并回到待查对' });
   } catch (error) {
     console.error('修改假条失败:', error);

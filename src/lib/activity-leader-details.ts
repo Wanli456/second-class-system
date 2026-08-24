@@ -78,8 +78,8 @@ export function getActivityLeaderDetails(record: ActivityLeaderRecord, leaderRec
     return [{
       id: '',
       name: names[0] || '未命名负责人',
-      studentId: text(record.leader_phone) || '未填写',
-      contactPhone: null,
+      studentId: '未填写',
+      contactPhone: text(record.leader_phone) || null,
     }];
   }
   return ids.map((id, index) => {
@@ -87,8 +87,8 @@ export function getActivityLeaderDetails(record: ActivityLeaderRecord, leaderRec
     return {
       id,
       name: text(leader?.username) || names[index] || '未命名负责人',
-      studentId: text(leader?.student_id) || (index === 0 ? text(record.leader_phone) : '未填写'),
-      contactPhone: text(leader?.contact_phone) || null,
+      studentId: text(leader?.student_id) || '未填写',
+      contactPhone: text(leader?.contact_phone) || (index === 0 && !leader ? text(record.leader_phone) : '') || null,
     };
   });
 }

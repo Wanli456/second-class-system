@@ -1,4 +1,4 @@
-import { pgTable, serial, timestamp, varchar, text, index, uniqueIndex } from "drizzle-orm/pg-core"
+import { pgTable, serial, integer, timestamp, varchar, text, index, uniqueIndex } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 export const healthCheck = pgTable("health_check", {
@@ -201,9 +201,9 @@ export const evening_study_attendance = pgTable(
     schedule_id: varchar("schedule_id", { length: 36 }).notNull(), // 关联的安排ID
     date: varchar("date", { length: 10 }).notNull(), // 日期
     class_name: varchar("class_name", { length: 50 }).notNull(), // 班级
-    total_count: serial("total_count").notNull(), // 应到人数
-    present_count: serial("present_count").notNull(), // 实到人数
-    absent_count: serial("absent_count").notNull().default(0), // 缺勤人数
+    total_count: integer("total_count").notNull(), // 应到人数
+    present_count: integer("present_count").notNull(), // 实到人数
+    absent_count: integer("absent_count").notNull().default(0), // 缺勤人数
     discipline_status: varchar("discipline_status", { length: 20 }).notNull().default("良好"), // 纪律状况：优秀/良好/一般/较差
     notes: text("notes"), // 备注
     checker_name: varchar("checker_name", { length: 50 }).notNull(), // 检查人员

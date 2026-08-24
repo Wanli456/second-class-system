@@ -252,7 +252,7 @@ export default function TemporaryLeavePage() {
       const data = await res.json();
       if (!data.success) throw new Error(data.error || '提交失败');
       const warningText = Array.isArray(data.warnings) && data.warnings.length ? `（${data.warnings.join('；')}）` : '';
-      setSuccess(`临时请假已提交并通过自动审核，立即生效。${warningText}`);
+      setSuccess(`临时请假已提交，等待人工查对。${warningText}`);
       setStudentsText('');
       setImageFiles([]);
       setUploadedImages([]);
@@ -270,8 +270,8 @@ export default function TemporaryLeavePage() {
       <div className="mx-auto w-full max-w-4xl">
         <header className="mb-6">
           <p className="text-xs font-semibold uppercase text-teal-700">其他请假 / 临时请假</p>
-          <h2 className="mt-2 text-2xl font-bold text-slate-950">临时请假（自动审核）</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">适用于临时性、无需人工查对的请假。提交后自动通过并立即生效，请确保名单和图片真实有效。</p>
+          <h2 className="mt-2 text-2xl font-bold text-slate-950">临时请假</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">适用于临时性、跨班汇总的请假。提交后需经人工查对通过才会生效，请确保名单和图片真实有效。</p>
         </header>
 
         {success && <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"><span>{success}</span><Button type="button" variant="outline" className="border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100" onClick={() => setSuccess(null)}>重新提交</Button></div>}
@@ -312,7 +312,7 @@ export default function TemporaryLeavePage() {
 
           <div className="mt-5">
             <Button type="button" onClick={() => void submit()} disabled={submitting || recognizing} className="bg-slate-950 hover:bg-slate-800">
-              {submitting ? '提交中...' : recognizing ? '正在自动识别...' : '提交并通过自动审核'}
+              {submitting ? '提交中...' : recognizing ? '正在自动识别...' : '提交，等待查对'}
             </Button>
           </div>
         </div>

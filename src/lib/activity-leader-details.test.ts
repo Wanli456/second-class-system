@@ -21,8 +21,9 @@ assert.deepEqual(legacy, [
   { id: 'leader-2', name: '乙', studentId: '10002', contactPhone: null },
 ]);
 
-assert.deepEqual(getActivityLeaderDetails({ leader_name: '丙', leader_phone: '10003', leader_details: '[]' }), [
-  { id: '', name: '丙', studentId: '10003', contactPhone: null },
+// leader_phone 是联系电话，不是学号；没有 leader_ids（无法关联用户记录）时不应把电话误标为学号。
+assert.deepEqual(getActivityLeaderDetails({ leader_name: '丙', leader_phone: '13800000003', leader_details: '[]' }), [
+  { id: '', name: '丙', studentId: '未填写', contactPhone: '13800000003' },
 ]);
 
 console.log('activity leader details tests passed');

@@ -73,7 +73,10 @@ export async function PUT(request: NextRequest) {
     if (slip.review_status && slip.review_status !== '待查对') {
       return NextResponse.json({ success: false, error: '假条已处理，请刷新后重试' }, { status: 409 });
     }
-    if (slip.applicant_user_id === reviewer.id) {
+    // 管理员和学习竞技部负责人可以查对自己提交的假条（常见于临时请假由其本人代为汇总提交）；
+    // 其余人员仍不能自己批自己，避免利益冲突。
+    const canSelfReview = reviewer.role === 'admin' || (reviewer.role === 'leader' && reviewer.department === '学习竞技部');
+    if (!canSelfReview && slip.applicant_user_id === reviewer.id) {
       return NextResponse.json({ success: false, error: '不能查对自己上传的假条' }, { status: 403 });
     }
 

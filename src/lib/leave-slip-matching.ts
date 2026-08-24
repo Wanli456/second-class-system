@@ -55,6 +55,7 @@ type GroupCheck = {
   missingBySlip: Map<string, string[]>;
   duplicateBySlip: Map<string, string[]>;
   overCapacityNames: string[];
+  overCapacityBySlip: Map<string, string[]>;
   exceedsOriginalCount: boolean;
 };
 
@@ -126,6 +127,7 @@ export async function compareSlipWithOriginals(slipId: string): Promise<AutoMatc
   const groupCheck = await checkOriginalGroup(best);
   const missing = groupCheck.missingBySlip.get(slipId) || [];
   const duplicates = groupCheck.duplicateBySlip.get(slipId) || [];
+  const overCapacityForSlip = groupCheck.overCapacityBySlip.get(slipId) || [];
   const originalNames = originalMemberNames(best);
   const matched = uploadNames.filter((name) => originalNames.includes(name));
 
@@ -150,7 +152,7 @@ export async function compareSlipWithOriginals(slipId: string): Promise<AutoMatc
   if (missing.length) problems.push(`原假条中未找到：${missing.join('、')}`);
   if (duplicates.length) problems.push(`与其他班级负责人重复提交：${duplicates.join('、')}`);
   if (groupCheck.exceedsOriginalCount) problems.push(`各班已提交学生按学号去重后共 ${groupCheck.submittedCount} 人，超过原假条 ${groupCheck.originalCount} 人`);
-  if (groupCheck.overCapacityNames.length) problems.push(`原名单同名人数不足：${groupCheck.overCapacityNames.join('、')}`);
+  if (overCapacityForSlip.length) problems.push(`原名单同名人数不足：${overCapacityForSlip.join('、')}`);
 
   const reviewNote = problems.length
     ? `待查对：原假条共 ${groupCheck.originalCount} 人，当前各班已提交学生按学号去重共 ${groupCheck.submittedCount} 人；${problems.join('；')}。请人工核对后决定是否驳回。`
@@ -205,6 +207,12 @@ async function checkOriginalGroup(original: OriginalRow): Promise<GroupCheck> {
   const overCapacityNames = [...submittedByName.entries()]
     .filter(([name, count]) => count > (originalCapacity.get(name) || 0))
     .map(([name]) => name);
+  const overCapacitySet = new Set(overCapacityNames);
+  const overCapacityBySlip = new Map<string, string[]>();
+  for (const member of uniqueMembers) {
+    if (!overCapacitySet.has(member.name)) continue;
+    overCapacityBySlip.set(member.slipId, [...(overCapacityBySlip.get(member.slipId) || []), member.name]);
+  }
   const missingBySlip = new Map<string, string[]>();
   for (const member of allMembers) {
     if (!originalCapacity.has(member.name)) missingBySlip.set(member.slipId, [...(missingBySlip.get(member.slipId) || []), member.name]);
@@ -216,6 +224,7 @@ async function checkOriginalGroup(original: OriginalRow): Promise<GroupCheck> {
     missingBySlip,
     duplicateBySlip,
     overCapacityNames,
+    overCapacityBySlip,
     exceedsOriginalCount: uniqueMembers.length > originalNames.length,
   };
 }

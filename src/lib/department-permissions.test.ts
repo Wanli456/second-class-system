@@ -27,6 +27,14 @@ const certificationLeader = {
   canUploadLeave: false,
 };
 
+// 线上部门维护中已存在的历史名称也必须命中认证中心自动授权。
+const legacyCertificationLeader = {
+  role: 'leader',
+  department: '第二课认证中心',
+  canSubmitActivity: false,
+  canUploadLeave: false,
+};
+
 assert.equal(hasPermission(null, 'canUploadLeave'), false);
 assert.equal(hasPermission({ role: 'admin' }, 'canUploadLeave'), true);
 
@@ -46,6 +54,13 @@ assert.equal(hasPermission(certificationLeader, 'canSubmitScoring'), true);
 assert.equal(hasPermission(certificationLeader, 'canPublish'), true);
 assert.equal(hasPermission(certificationLeader, 'canScore'), true);
 assert.equal(hasPermission(certificationLeader, 'canUploadLeave'), false);
+
+assert.equal(hasPermission(legacyCertificationLeader, 'canSubmitActivity'), true);
+assert.equal(hasPermission(legacyCertificationLeader, 'canViewSubmissionStatus'), true);
+assert.equal(hasPermission(legacyCertificationLeader, 'canPublish'), true);
+assert.equal(hasPermission(legacyCertificationLeader, 'canScore'), true);
+assert.equal(hasPermission(legacyCertificationLeader, 'canSubmitScoring'), true);
+assert.equal(hasPermission(legacyCertificationLeader, 'canRegisterOtherCollege'), true);
 
 // 学生只能使用手动勾选字段。
 assert.equal(hasPermission(student, 'canUploadLeave'), false);
