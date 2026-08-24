@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft, Check, Loader2, ShieldCheck, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { DepartmentClassRosterManager } from '@/components/DepartmentClassRosterManager';
 import type { DepartmentUserManagementDepartment } from '@/lib/department-user-management';
 
 type PermissionKey =
@@ -36,7 +37,7 @@ const PERMISSION_LABELS: Record<PermissionKey, string> = {
   canUploadLeave: '假条上传权限',
   canQueryLeave: '请假查询权限',
   canSubmitOriginalLeave: '提交原假条权限',
-  canManageOriginalLeave: '维护原假条权限',
+  canManageOriginalLeave: '假条对比权限',
 };
 
 const PERMISSION_HINTS: Record<PermissionKey, string> = {
@@ -51,9 +52,9 @@ const PERMISSION_HINTS: Record<PermissionKey, string> = {
   canStartGroupLeave: '允许发起本班学生的临时或集体请假。',
   canManageAttendanceWork: '允许安排当天各班考勤人员和考勤工作。',
   canUploadLeave: '允许代班级学生上传请假材料。',
-  canQueryLeave: '允许按学生、班级或学号查询请假记录。',
+  canQueryLeave: '允许查看和查询系统内全部已提交假条。',
   canSubmitOriginalLeave: '允许提交活动方归档用的原假条。',
-  canManageOriginalLeave: '允许集中查询、核对和维护已归档的活动方原假条。',
+  canManageOriginalLeave: '允许将上传假条与已归档的活动方原假条进行对比，并维护原假条。',
 };
 
 type ManagedUser = {
@@ -184,6 +185,7 @@ export default function DepartmentUsersPage({ managedDepartment }: { managedDepa
             ))}
           </div>
         )}
+        {managedDepartment === '学习竞技部' && <DepartmentClassRosterManager />}
       </div>
     </main>
   );

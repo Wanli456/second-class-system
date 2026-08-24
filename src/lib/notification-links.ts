@@ -23,7 +23,7 @@ export function getNotificationHref(notification: NotificationLinkInput): string
   switch (notification.type) {
     case 'leave_approved':
     case 'leave_rejected':
-      return `/leave-slip/query?keyword=${encodedId}`;
+      return `/leave-slip/records?tab=view&keyword=${encodedId}`;
     case 'activity_approved':
       return `/submit/status?activityId=${encodedId}`;
     case 'activity_rejected':

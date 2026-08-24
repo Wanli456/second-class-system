@@ -258,7 +258,7 @@ export async function GET(request: NextRequest) {
       auth = await requireUser(request);
       if (auth.response) return auth.response;
       if (!selfOnly) {
-        return NextResponse.json({ success: false, error: '没有假条查询权限' }, { status: 403 });
+        return NextResponse.json({ success: false, error: '没有假条查看权限' }, { status: 403 });
       }
     }
     const user = auth.user!;

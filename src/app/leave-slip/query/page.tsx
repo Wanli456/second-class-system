@@ -2,7 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, Search } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { AlertCircle, ArrowLeft, Search } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch } from '@/lib/client-api';
@@ -41,8 +42,13 @@ function parseJsonArray(value: string | null): string[] {
 }
 
 export default function LeaveSlipQueryPage() {
+  return <React.Suspense fallback={<AuthLoadingScreen />}><LeaveSlipQueryContent /></React.Suspense>;
+}
+
+function LeaveSlipQueryContent() {
   const { user, initialized } = useUser();
-  const [keyword, setKeyword] = useState('');
+  const searchParams = useSearchParams();
+  const [keyword, setKeyword] = useState(() => searchParams.get('keyword')?.trim() || '');
   const [status, setStatus] = useState('');
   const [className, setClassName] = useState('');
   const [slips, setSlips] = useState<Slip[]>([]);
@@ -51,6 +57,7 @@ export default function LeaveSlipQueryPage() {
   const [loading, setLoading] = useState(false);
 
   const canAccess = hasPermission(user, 'canQueryLeave');
+  const canCompare = hasPermission(user, 'canManageOriginalLeave');
 
   const studentsBySlip = useMemo(() => {
     const map = new Map<string, SlipStudent[]>();
@@ -91,16 +98,21 @@ export default function LeaveSlipQueryPage() {
   if (!initialized) return <AuthLoadingScreen />;
   if (!user) return <div className="flex min-h-dvh items-center justify-center bg-slate-50 p-4"><div className="rounded-xl border bg-white p-6 text-center"><h2 className="font-semibold">请先登录</h2><p className="mt-2 text-sm text-slate-500">登录后才能查询。</p><Link href="/login?redirect=/leave-slip/query" className="mt-4 inline-block rounded-md bg-slate-950 px-4 py-2 text-sm text-white">登录/注册</Link></div></div>;
   if (!canAccess) {
-    return <DashboardLayout user={user} title="假条查询" activeNavHref="/leave-slip/query"><div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center"><AlertCircle className="mx-auto size-6 text-amber-600" /><h2 className="mt-3 font-semibold text-amber-900">当前账号没有假条查询权限</h2><p className="mt-2 text-sm text-amber-800">请联系系统管理员授予 `canQueryLeave` 权限。</p></div></DashboardLayout>;
+    return <DashboardLayout user={user} title="假条查看与对比" activeNavHref="/leave-slip/records"><div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center"><AlertCircle className="mx-auto size-6 text-amber-600" /><h2 className="mt-3 font-semibold text-amber-900">当前账号没有假条查看权限</h2><p className="mt-2 text-sm text-amber-800">请联系系统管理员授予 `canQueryLeave` 权限。</p></div></DashboardLayout>;
   }
 
   return (
-    <DashboardLayout user={user} title="假条查询" activeNavHref="/leave-slip/query">
+    <DashboardLayout user={user} title="假条查看与对比" activeNavHref="/leave-slip/records">
       <div className="mx-auto w-full max-w-6xl">
+        <Link href="/leave-slip/records" className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-950"><ArrowLeft className="size-4" />返回假条查看与对比</Link>
         <header className="mb-6">
           <p className="text-xs font-semibold uppercase text-teal-700">假条管理</p>
-          <h2 className="mt-2 text-2xl font-bold text-balance text-slate-950">查询上传假条</h2>
-          <p className="mt-2 max-w-2xl text-sm text-pretty text-slate-600">按班级、姓名、学号、活动名称搜索已上传假条；这里只显示原假条关联状态，原假条的查询、查看和维护请进入“维护原假条”。</p>
+          <h2 className="mt-2 text-2xl font-bold text-balance text-slate-950">查询全部假条</h2>
+          <p className="mt-2 max-w-2xl text-sm text-pretty text-slate-600">这里统一查询系统内每一张已提交假条，包括班级负责人上传、临时请假和活动公假；可按班级、学生姓名、学号、活动名称和审核状态筛选。已归档的活动方原假条可在“对比假条”中与其关联假条核对。</p>
+          <nav className="mt-4 inline-flex rounded-lg border border-slate-200 bg-white p-1" aria-label="假条查看与对比功能">
+            <Link href="/leave-slip/query" aria-current="page" className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white">查看假条</Link>
+            {canCompare ? <Link href="/leave-slip/records/compare" className="rounded-md px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-950">对比假条</Link> : null}
+          </nav>
         </header>
 
         <div className="mb-6 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-[1fr_140px_140px_auto]">
@@ -119,13 +131,13 @@ export default function LeaveSlipQueryPage() {
         </div>
 
         <div className="items-start">
-          <section aria-label="班级负责人上传的假条">
+          <section aria-label="全部已提交假条">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-950">
               <span className="flex size-6 items-center justify-center rounded-full bg-slate-950 text-xs text-white">1</span>
-              班级负责人上传假条（{slips.length}）
+              全部已提交假条（{slips.length}）
             </h3>
             <div className="space-y-4">
-              {slips.length === 0 && searched ? <div className="rounded-xl border border-dashed border-slate-300 bg-white py-12 text-center text-sm text-slate-400">没有匹配的假条</div> : null}
+              {slips.length === 0 && searched ? <div className="rounded-xl border border-dashed border-slate-300 bg-white py-12 text-center text-sm text-slate-400">没有匹配的假条。请调整班级、姓名、学号、活动名称或状态后重试。</div> : null}
               {slips.map((slip) => {
                 const rows = studentsBySlip.get(slip.id) || [];
                 const classNames = parseJsonArray(slip.class_names);

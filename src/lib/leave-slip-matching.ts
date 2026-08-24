@@ -36,6 +36,28 @@ interface OriginalRow {
   image_hashes?: string | null;
 }
 
+interface SubmittedStudentRow {
+  slip_id: string;
+  student_id: string;
+  student_name: string;
+  class_name: string;
+}
+
+interface LinkedSlipRow {
+  id: string;
+  ocr_names?: string | null;
+  review_status: string;
+}
+
+type GroupCheck = {
+  originalCount: number;
+  submittedCount: number;
+  missingBySlip: Map<string, string[]>;
+  duplicateBySlip: Map<string, string[]>;
+  overCapacityNames: string[];
+  exceedsOriginalCount: boolean;
+};
+
 export type AutoMatchResult = {
   action: 'rejected' | 'manual' | 'skipped';
   missing: string[];
@@ -49,11 +71,14 @@ export async function compareSlipWithOriginals(slipId: string): Promise<AutoMatc
   // 外院/非本学院举办的校级活动、手机假条和其他请假，都没有系统活动记录或原假条可比，跳过自动名单比对。
   if (slip.slip_type === '校级（且不为数经举办）假条' || slip.slip_type === '手机假条' || slip.slip_type === '其他请假') return { action: 'skipped', missing: [], matched: [] };
 
-  const studentRows = await query<{ student_name: string }>(
-    'SELECT student_name FROM leave_slip_students WHERE slip_id=$1',
+  const studentRows = await query<SubmittedStudentRow>(
+    'SELECT slip_id, student_id, student_name, class_name FROM leave_slip_students WHERE slip_id=$1',
     [slipId],
   );
-  const uploadNames = unique([...parseNames(slip.ocr_names), ...studentRows.map((row) => row.student_name.trim()).filter(Boolean)]);
+  // 人工确认的学生表优先于 OCR；OCR 仅在尚未形成学生表时作为临时比对名单。
+  const uploadNames = studentRows.length
+    ? studentRows.map((row) => normalizeName(row.student_name)).filter(Boolean)
+    : parseNames(slip.ocr_names).map(normalizeName).filter(Boolean);
   const originals = await query<OriginalRow>('SELECT * FROM original_leave_slips');
   if (!originals.length) return { action: 'skipped', missing: [], matched: [] };
 
@@ -75,55 +100,37 @@ export async function compareSlipWithOriginals(slipId: string): Promise<AutoMatc
 
   if (!best) {
     const scored = candidates.map((original) => {
-      const originalNames = unique([...parseNames(original.student_names), ...parseNames(original.ocr_names)]);
+      const originalNames = originalMemberNames(original);
       const overlap = uploadNames.filter((name) => originalNames.includes(name)).length;
       return { original, overlap };
     }).filter((entry) => entry.overlap > 0).sort((left, right) => right.overlap - left.overlap);
     best = scored[0]?.original || null;
+
+    // 同一活动只有一张归档原假条时，多个班级负责人可分别上传本班假条。
+    // 即使该班学生尚未被 OCR 完整识别，也先关联唯一候选，交由查对人员核实，
+    // 而不是因为没有姓名重叠而遗漏整张班级假条。
+    if (!best && candidates.length === 1 && slip.activity_id) best = candidates[0];
   }
 
-  const originalNames = best
-    ? unique([...parseNames(best.student_names), ...parseNames(best.ocr_names)])
-    : [];
+  if (!best) return { action: 'skipped', missing: [], matched: [] };
 
+  // 关联只用于把同一活动的多张班级假条放进同一个人工核对组，绝不代表自动通过。
+  // 后续按原假条名单逐人校验：学生必须在原名单中、跨班不得重复，且去重总人数不能超过原名单人数。
+  await query(
+    `UPDATE leave_slips
+     SET original_slip_id=$1, review_status='待查对', updated_at=NOW()
+     WHERE id=$2`,
+    [best.id, slipId],
+  );
+
+  const groupCheck = await checkOriginalGroup(best);
+  const missing = groupCheck.missingBySlip.get(slipId) || [];
+  const duplicates = groupCheck.duplicateBySlip.get(slipId) || [];
+  const originalNames = originalMemberNames(best);
   const matched = uploadNames.filter((name) => originalNames.includes(name));
-  const missing = uploadNames.filter((name) => !originalNames.includes(name));
-
-  if (missing.length > 0) {
-    // 只有二课活动请假会要求与原假条名单完全一致；但不自动驳回，
-    // 改为“待查对”并写明建议驳回原因，由有权限的人在假条查对里人工确认。
-    if (slip.slip_type === '二课活动请假' && best) {
-      await query(
-        `UPDATE leave_slips
-         SET review_status='待查对',
-             review_note=$1,
-             original_slip_id=$2,
-             updated_at=NOW()
-         WHERE id=$3`,
-        [`系统建议驳回：原假条中没有这些同学——${missing.join('、')}，请人工核实后决定是否驳回`, best.id, slipId],
-      );
-      return { action: 'manual', missing, matched };
-    }
-    // 手写假条等：列为缺失，但保持待查对，交给人工判断。
-    if (best) {
-      await query(
-        `UPDATE leave_slips
-         SET review_status='待查对',
-             review_note=$1,
-             original_slip_id=$2,
-             updated_at=NOW()
-         WHERE id=$3`,
-        [`自动比对与原假条有 ${missing.length} 名同学不一致，待查对人员人工确认`, best.id, slipId],
-      );
-      return { action: 'manual', missing, matched };
-    }
-    return { action: 'skipped', missing, matched: [] };
-  }
-
-  if (matched.length === 0) return { action: 'skipped', missing: [], matched: [] };
 
   let imageConsistency: ImageConsistencyResult | undefined;
-  if (slip.slip_type === '二课活动请假' && best) {
+  if (slip.slip_type === '二课活动请假') {
     imageConsistency = compareImageFingerprints(
       parseStoredImageFingerprints(slip.image_hashes),
       parseStoredImageFingerprints(best.image_hashes),
@@ -138,20 +145,98 @@ export async function compareSlipWithOriginals(slipId: string): Promise<AutoMatc
     );
   }
 
+  const problems: string[] = [];
+  if (groupCheck.originalCount === 0) problems.push('原假条尚未识别到可核验的学生名单，请先补全原假条名单');
+  if (missing.length) problems.push(`原假条中未找到：${missing.join('、')}`);
+  if (duplicates.length) problems.push(`与其他班级负责人重复提交：${duplicates.join('、')}`);
+  if (groupCheck.exceedsOriginalCount) problems.push(`各班已提交学生按学号去重后共 ${groupCheck.submittedCount} 人，超过原假条 ${groupCheck.originalCount} 人`);
+  if (groupCheck.overCapacityNames.length) problems.push(`原名单同名人数不足：${groupCheck.overCapacityNames.join('、')}`);
+
+  const reviewNote = problems.length
+    ? `待查对：原假条共 ${groupCheck.originalCount} 人，当前各班已提交学生按学号去重共 ${groupCheck.submittedCount} 人；${problems.join('；')}。请人工核对后决定是否驳回。`
+    : `名单校验通过：原假条共 ${groupCheck.originalCount} 人，当前各班已提交学生按学号去重共 ${groupCheck.submittedCount} 人；仍待考勤组长人工核对照片。`;
   await query(
     `UPDATE leave_slips
-     SET review_status='待查对',
-         review_note='文字名单与原假条一致，待考勤组长人工核对照片',
-         original_slip_id=$1,
-         updated_at=NOW()
+     SET review_status='待查对', review_note=$1, updated_at=NOW()
      WHERE id=$2`,
-    [best!.id, slipId],
+    [reviewNote, slipId],
   );
-  return { action: 'manual', missing: [], matched, image_consistency: imageConsistency };
+  return { action: 'manual', missing, matched, image_consistency: imageConsistency };
 }
 
-function unique(values: string[]): string[] {
-  return [...new Set(values.map(stripClassSuffix).map((item) => item.trim()).filter(Boolean))];
+async function checkOriginalGroup(original: OriginalRow): Promise<GroupCheck> {
+  const linkedSlips = await query<LinkedSlipRow>(
+    `SELECT id, ocr_names, review_status FROM leave_slips
+     WHERE original_slip_id=$1 AND review_status <> '已驳回'`,
+    [original.id],
+  );
+  const linkedIds = linkedSlips.map((slip) => slip.id);
+  const students = linkedIds.length
+    ? await query<SubmittedStudentRow>(
+      `SELECT slip_id, student_id, student_name, class_name FROM leave_slip_students
+       WHERE slip_id IN (${linkedIds.map((_, index) => `$${index + 1}`).join(',')})`,
+      linkedIds,
+    )
+    : [];
+  const membersBySlip = new Map<string, SubmittedStudentRow[]>();
+  for (const row of students) membersBySlip.set(row.slip_id, [...(membersBySlip.get(row.slip_id) || []), row]);
+
+  const originalNames = originalMemberNames(original);
+  const originalCapacity = countBy(originalNames);
+  const allMembers: Array<{ slipId: string; identity: string; name: string }> = [];
+  for (const slip of linkedSlips) {
+    const manualRows = membersBySlip.get(slip.id) || [];
+    const members = manualRows.length
+      ? manualRows.map((row) => ({ identity: studentIdentity(row.student_id, row.student_name, row.class_name), name: normalizeName(row.student_name) }))
+      : parseNames(slip.ocr_names).map((name) => ({ identity: `ocr:${normalizeName(name)}`, name: normalizeName(name) }));
+    for (const member of members) if (member.name) allMembers.push({ slipId: slip.id, ...member });
+  }
+
+  const identities = new Map<string, Array<{ slipId: string; name: string }>>();
+  for (const member of allMembers) identities.set(member.identity, [...(identities.get(member.identity) || []), member]);
+  const duplicateBySlip = new Map<string, string[]>();
+  for (const entries of identities.values()) {
+    if (entries.length < 2) continue;
+    for (const entry of entries) duplicateBySlip.set(entry.slipId, [...(duplicateBySlip.get(entry.slipId) || []), entry.name]);
+  }
+
+  const uniqueMembers = [...identities.values()].map((entries) => entries[0]);
+  const submittedByName = countBy(uniqueMembers.map((member) => member.name));
+  const overCapacityNames = [...submittedByName.entries()]
+    .filter(([name, count]) => count > (originalCapacity.get(name) || 0))
+    .map(([name]) => name);
+  const missingBySlip = new Map<string, string[]>();
+  for (const member of allMembers) {
+    if (!originalCapacity.has(member.name)) missingBySlip.set(member.slipId, [...(missingBySlip.get(member.slipId) || []), member.name]);
+  }
+
+  return {
+    originalCount: originalNames.length,
+    submittedCount: uniqueMembers.length,
+    missingBySlip,
+    duplicateBySlip,
+    overCapacityNames,
+    exceedsOriginalCount: uniqueMembers.length > originalNames.length,
+  };
+}
+
+function originalMemberNames(original: OriginalRow): string[] {
+  // 原假条人工确认名单优先；尚未人工确认时才使用 OCR 名单。这里保留重复姓名，避免把 5 人误算成 4 人。
+  const names = parseNames(original.student_names);
+  return (names.length ? names : parseNames(original.ocr_names)).map(normalizeName).filter(Boolean);
+}
+
+function countBy(values: string[]): Map<string, number> {
+  return values.reduce((counts, value) => counts.set(value, (counts.get(value) || 0) + 1), new Map<string, number>());
+}
+
+function studentIdentity(studentId: string, name: string, className: string): string {
+  const normalizedId = studentId.trim();
+  return normalizedId ? `id:${normalizedId}` : `name-class:${normalizeName(name)}|${className.trim()}`;
+}
+
+function normalizeName(value: string): string {
+  return stripClassSuffix(value).replace(/\s+/g, '').trim();
 }
 
 function stripClassSuffix(value: string): string {

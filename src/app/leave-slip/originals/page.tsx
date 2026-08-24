@@ -308,11 +308,11 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
   if (!initialized) return <AuthLoadingScreen />;
   if (!user) return <div className="flex min-h-dvh items-center justify-center bg-slate-50 p-4"><div className="rounded-xl border bg-white p-6 text-center"><h2 className="font-semibold">请先登录</h2><p className="mt-2 text-sm text-slate-500">登录后才能维护原假条。</p><Link href="/login?redirect=/leave-slip/originals" className="mt-4 inline-block rounded-md bg-slate-950 px-4 py-2 text-sm text-white">登录/注册</Link></div></div>;
   if (!canAccess) {
-    return <DashboardLayout user={user} title="原假条维护" activeNavHref="/leave-slip/originals"><div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center"><AlertCircle className="mx-auto size-6 text-amber-600" /><h2 className="mt-3 font-semibold text-amber-900">当前账号没有原假条维护权限</h2><p className="mt-2 text-sm text-amber-800">请联系系统管理员授予 `canManageOriginalLeave` 权限。</p></div></DashboardLayout>;
+    return <DashboardLayout user={user} title="假条查看与对比" activeNavHref="/leave-slip/records"><div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center"><AlertCircle className="mx-auto size-6 text-amber-600" /><h2 className="mt-3 font-semibold text-amber-900">当前账号没有原假条维护权限</h2><p className="mt-2 text-sm text-amber-800">请联系系统管理员授予 `canManageOriginalLeave` 权限。</p></div></DashboardLayout>;
   }
 
   return (
-    <DashboardLayout user={user} title={isSubmitMode ? '提交原假条' : '原假条维护'} activeNavHref={isSubmitMode ? '/leave-slip/originals/submit' : '/leave-slip/originals'}>
+    <DashboardLayout user={user} title={isSubmitMode ? '提交原假条' : '假条查看与对比'} activeNavHref={isSubmitMode ? '/leave-slip/originals/submit' : '/leave-slip/records'}>
       <div className={isSubmitMode ? 'mx-auto w-full max-w-2xl' : 'mx-auto w-full max-w-6xl'}>
         <header className="mb-6 rounded-2xl border border-slate-200 bg-white px-5 py-6 shadow-sm sm:px-7">
           <div className={isSubmitMode ? 'flex items-start gap-4' : ''}>
