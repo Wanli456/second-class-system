@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/storage/database/supabase-client';
-import { createNotification } from '@/app/api/notifications/route';
+import { createNotification } from '@/lib/notifications';
 import { requirePermission } from '@/lib/auth';
 import { getActivityScopes, newActivityId, normalizeIds, scopeMatchesUser } from '@/lib/business-rules';
 import { hydrateActivityLeaderDetails } from '@/lib/hydrate-activity-leaders';

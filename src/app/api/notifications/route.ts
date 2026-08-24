@@ -100,23 +100,3 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: false, error: '删除通知失败' }, { status: 500 });
   }
 }
-
-// 创建通知的辅助函数（供其他 API 调用）
-export async function createNotification(
-  userId: string,
-  type: string,
-  title: string,
-  content: string,
-  relatedId?: string
-) {
-  try {
-    await query(
-      `INSERT INTO notifications (user_id, type, title, content, related_id) VALUES ($1, $2, $3, $4, $5)`,
-      [userId, type, title, content, relatedId || null]
-    );
-    return true;
-  } catch (error) {
-    console.error("创建通知失败:", error);
-    return false;
-  }
-}
