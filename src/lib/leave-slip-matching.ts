@@ -221,9 +221,16 @@ async function checkOriginalGroup(original: OriginalRow): Promise<GroupCheck> {
 }
 
 function originalMemberNames(original: OriginalRow): string[] {
-  // 原假条人工确认名单优先；尚未人工确认时才使用 OCR 名单。这里保留重复姓名，避免把 5 人误算成 4 人。
+  // 原假条人工确认名单通常按“学号｜姓名｜班级”保存；旧数据和 OCR 名单可能只有姓名。
+  // 这里保留重复姓名，避免把 5 人误算成 4 人。
   const names = parseNames(original.student_names);
-  return (names.length ? names : parseNames(original.ocr_names)).map(normalizeName).filter(Boolean);
+  return (names.length ? names : parseNames(original.ocr_names))
+    .map((value) => {
+      const parts = value.split(/[｜|]/).map((part) => part.trim());
+      return parts.length >= 3 ? parts[1] : value;
+    })
+    .map(normalizeName)
+    .filter(Boolean);
 }
 
 function countBy(values: string[]): Map<string, number> {

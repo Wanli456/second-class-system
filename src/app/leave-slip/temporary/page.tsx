@@ -274,7 +274,7 @@ export default function TemporaryLeavePage() {
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">适用于临时性、无需人工查对的请假。提交后自动通过并立即生效，请确保名单和图片真实有效。</p>
         </header>
 
-        {success && <div role="status" className="sr-only">{success}</div>}
+        {success && <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"><span>{success}</span><Button type="button" variant="outline" className="border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100" onClick={() => setSuccess(null)}>重新提交</Button></div>}
 
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="grid gap-4 sm:grid-cols-2">

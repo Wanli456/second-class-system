@@ -420,7 +420,7 @@ export default function LeaveSlipUploadPage() {
           </ul>
         </div>
 
-        {success && <div role="status" className="sr-only">{success}</div>}
+        {success && <div role="status" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"><span>{success}</span><Button type="button" variant="outline" className="border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100" onClick={() => setSuccess(null)}>重新提交</Button></div>}
 
         <div className="space-y-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
           <fieldset>

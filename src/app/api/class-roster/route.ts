@@ -64,6 +64,10 @@ export async function POST(request: NextRequest) {
     if (!students.length) return NextResponse.json({ success: false, error: '请提供班级、学号和姓名' }, { status: 400 });
     const data = [];
     for (const student of students) {
+      const existing = await queryOne<{ class_name: string }>('SELECT class_name FROM class_roster WHERE student_id=$1 AND class_name<>$2 LIMIT 1', [student.studentId, student.className]);
+      if (existing) {
+        return NextResponse.json({ success: false, error: `学号 ${student.studentId} 已属于班级 ${existing.class_name}` }, { status: 409 });
+      }
       const row = await queryOne(
         `INSERT INTO class_roster (class_name,student_id,student_name) VALUES ($1,$2,$3)
          ON CONFLICT (class_name,student_id) DO UPDATE SET student_name=EXCLUDED.student_name,updated_at=NOW()
@@ -88,6 +92,12 @@ export async function PUT(request: NextRequest) {
     const id = String(body.id || '').trim();
     const student = normalizeStudent(body);
     if (!id || !student) return NextResponse.json({ success: false, error: '请填写完整的学号和姓名' }, { status: 400 });
+    const current = await queryOne<{ class_name: string }>('SELECT class_name FROM class_roster WHERE id=$1', [id]);
+    if (!current) return NextResponse.json({ success: false, error: '花名册学生不存在' }, { status: 404 });
+    const existing = await queryOne<{ class_name: string }>('SELECT class_name FROM class_roster WHERE student_id=$1 AND class_name<>$2 AND id<>$3 LIMIT 1', [student.studentId, current.class_name, id]);
+    if (existing) {
+      return NextResponse.json({ success: false, error: `学号 ${student.studentId} 已属于班级 ${existing.class_name}` }, { status: 409 });
+    }
     const data = await queryOne('UPDATE class_roster SET student_id=$1,student_name=$2,updated_at=NOW() WHERE id=$3 RETURNING id,class_name,student_id,student_name', [student.studentId, student.studentName, id]);
     if (!data) return NextResponse.json({ success: false, error: '花名册学生不存在' }, { status: 404 });
     return NextResponse.json({ success: true, data });

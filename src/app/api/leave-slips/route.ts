@@ -11,6 +11,7 @@ const OTHER_LEAVE_TYPES = ['社团', '比赛', '培训', '虚拟工作室', '临
 const REVIEW_STATUSES = ['待查对', '已通过', '已驳回'] as const;
 
 type StudentInput = { student_id: string; student_name: string; class_name: string };
+type StudentParseResult = { students: StudentInput[]; incompleteRows: number[] };
 
 function withoutInternalReviewFields(slip: Record<string, unknown>): Record<string, unknown> {
   const {
@@ -32,17 +33,26 @@ class LeaveSlipValidationError extends Error {
   }
 }
 
-function parseStudentInput(value: unknown): StudentInput[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((item) => {
-    if (!item || typeof item !== 'object') return [];
+function parseStudentInput(value: unknown): StudentParseResult {
+  if (!Array.isArray(value)) return { students: [], incompleteRows: [] };
+  const students: StudentInput[] = [];
+  const incompleteRows: number[] = [];
+  value.forEach((item, index) => {
+    if (!item || typeof item !== 'object') {
+      incompleteRows.push(index + 1);
+      return;
+    }
     const candidate = item as { student_id?: unknown; student_name?: unknown; class_name?: unknown };
     const studentId = String(candidate.student_id || '').trim();
     const studentName = String(candidate.student_name || '').trim();
     const className = String(candidate.class_name || '').trim();
-    if (!studentId || !studentName || !className) return [];
-    return [{ student_id: studentId, student_name: studentName, class_name: className }];
+    if (!studentId || !studentName || !className) {
+      incompleteRows.push(index + 1);
+      return;
+    }
+    students.push({ student_id: studentId, student_name: studentName, class_name: className });
   });
+  return { students, incompleteRows };
 }
 
 function validateStudentIdentityPairs(students: StudentInput[]): string | null {
@@ -129,10 +139,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: '二课活动假条一次只能关联一个活动，请选择活动' }, { status: 400 });
     }
     // 校级（且不为数经举办）假条不关联系统活动：即使前端误传也强制置空。
-    const activityId = slipType === '二课活动请假' ? (body.activity_id ? String(body.activity_id) : null) : null;
-    const activityName = slipType === '二课活动请假' ? (body.activity_name ? String(body.activity_name) : null) : null;
+    const requestedActivityId = slipType === '二课活动请假' ? (body.activity_id ? String(body.activity_id).trim() : null) : null;
+    const requestedActivityName = slipType === '二课活动请假' ? (body.activity_name ? String(body.activity_name).trim() : null) : null;
+    let activityId: string | null = null;
+    let activityName: string | null = null;
+    if (requestedActivityId) {
+      const activity = await queryOne<{ id: string; full_name: string }>('SELECT id, full_name FROM activities WHERE id=$1', [requestedActivityId]);
+      if (!activity) return NextResponse.json({ success: false, error: '活动不存在或已删除，请重新选择活动' }, { status: 400 });
+      if (requestedActivityName !== activity.full_name) {
+        return NextResponse.json({ success: false, error: '活动名称与活动 ID 不一致，请重新选择活动' }, { status: 400 });
+      }
+      activityId = activity.id;
+      activityName = activity.full_name;
+    }
 
-    const students = parseStudentInput(body.students) || [];
+    const parsedStudents = parseStudentInput(body.students);
+    const { students } = parsedStudents;
     const classNames = students.length
       ? [...new Set(students.map((student) => student.class_name))]
       : parseStringArray(body.class_names);
@@ -146,8 +168,22 @@ export async function POST(request: NextRequest) {
     if (!students.length) {
       return NextResponse.json({ success: false, error: '请假学生至少填写一名，且需要学号、姓名、班级完整' }, { status: 400 });
     }
+    if (parsedStudents.incompleteRows.length) {
+      return NextResponse.json({ success: false, error: `第 ${parsedStudents.incompleteRows.join('、')} 行的学号、姓名或班级不完整，请人工补齐后再提交` }, { status: 400 });
+    }
     const studentIdentityError = validateStudentIdentityPairs(students);
     if (studentIdentityError) return NextResponse.json({ success: false, error: studentIdentityError }, { status: 400 });
+    if (!isTemporaryLeave) {
+      const rosterRows = await query<{ student_id: string; student_name: string; class_name: string }>('SELECT student_id, student_name, class_name FROM class_roster WHERE student_id = ANY($1::text[])', [students.map((student) => student.student_id)]);
+      const rosterByStudentId = new Map(rosterRows.map((row) => [row.student_id, row]));
+      const mismatches = students.filter((student) => {
+        const roster = rosterByStudentId.get(student.student_id);
+        return !roster || roster.student_name !== student.student_name || roster.class_name !== student.class_name;
+      });
+      if (mismatches.length) {
+        return NextResponse.json({ success: false, error: `花名册未找到或三字段不一致：${mismatches.map((student) => `${student.student_id}（${student.student_name}/${student.class_name}）`).join('、')}` }, { status: 400 });
+      }
+    }
     // 同一假条内的班级数不超过 15 个，防止把全年级并到一张假条上。
     if (classNames.length > 15) return NextResponse.json({ success: false, error: '一张假条最多覆盖 15 个班级' }, { status: 400 });
 
@@ -247,22 +283,17 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const selfOnly = searchParams.get('self') === '1';
 
-    let auth = await requirePermission(request, 'queryLeave');
-    let canQueryAll = !auth.response;
-    if (!canQueryAll) {
-      // 晚自习考勤查询沿用旧入口，允许拥有晚自习查询权限的人读取。
-      auth = await requirePermission(request, 'eveningStudy');
-      canQueryAll = !auth.response;
-    }
-    if (!canQueryAll) {
-      auth = await requireUser(request);
-      if (auth.response) return auth.response;
-      if (!selfOnly) {
-        return NextResponse.json({ success: false, error: '没有假条查看权限' }, { status: 403 });
-      }
-    }
+    const auth = await requireUser(request);
+    if (auth.response) return auth.response;
     const user = auth.user!;
-    const canReviewInternalSignals = calculateUserPermissions(user).canReviewLeave;
+    const permissions = calculateUserPermissions(user);
+    // 假条查看和假条对比权限可读取各自页面所需的材料；假条查对权限不包含查看或对比权限。
+    // 仅无上述权限的普通用户才被限制为查看本人相关记录。
+    const canQueryAll = permissions.canQueryLeave || permissions.canManageOriginalLeave;
+    if (!canQueryAll && !selfOnly) {
+      return NextResponse.json({ success: false, error: '没有查看假条的权限' }, { status: 403 });
+    }
+    const canReviewInternalSignals = permissions.canReviewLeave;
 
     const id = searchParams.get('id');
     const keyword = searchParams.get('keyword')?.trim();
@@ -284,7 +315,10 @@ export async function GET(request: NextRequest) {
             [id, user.id, user.student_id, user.student_id],
           );
       if (!slip) return NextResponse.json({ success: false, error: selfOnly ? '没有找到与你相关的假条' : '假条不存在' }, { status: 404 });
-      const students = await query('SELECT * FROM leave_slip_students WHERE slip_id=$1 ORDER BY student_id', [id]);
+      // 普通学生只能看自己在该假条中的明细，不能借多人假条读取其他学生信息。
+      const students = canQueryAll
+        ? await query('SELECT * FROM leave_slip_students WHERE slip_id=$1 ORDER BY student_id', [id])
+        : await query('SELECT * FROM leave_slip_students WHERE slip_id=$1 AND student_id=$2 ORDER BY student_id', [id, user.student_id]);
       return NextResponse.json({ success: true, data: [canReviewInternalSignals ? slip : withoutInternalReviewFields(slip)], students });
     }
 
@@ -294,7 +328,8 @@ export async function GET(request: NextRequest) {
 
     if (keyword) {
       params.push(`%${keyword}%`);
-      where.push(`(applicant_name ILIKE $${paramIndex} OR applicant_student_id ILIKE $${paramIndex} OR activity_name ILIKE $${paramIndex} OR class_names ILIKE $${paramIndex++})`);
+      where.push(`(applicant_name ILIKE $${paramIndex} OR applicant_student_id ILIKE $${paramIndex} OR activity_name ILIKE $${paramIndex} OR class_names ILIKE $${paramIndex} OR EXISTS (SELECT 1 FROM leave_slip_students AS keyword_students WHERE keyword_students.slip_id=leave_slips.id AND (keyword_students.student_name ILIKE $${paramIndex} OR keyword_students.student_id ILIKE $${paramIndex})))`);
+      paramIndex += 1;
     }
     if (className) {
       params.push(`%${className}%`);
@@ -338,7 +373,9 @@ export async function GET(request: NextRequest) {
     const slips = await query(sql, params);
     const slipIds = slips.map((slip) => String((slip as { id: string }).id));
     const students = slipIds.length
-      ? await query(`SELECT * FROM leave_slip_students WHERE slip_id IN (${slipIds.map((_, index) => `$${index + 1}`).join(',')}) ORDER BY slip_id, student_id`, slipIds)
+      ? canQueryAll
+        ? await query(`SELECT * FROM leave_slip_students WHERE slip_id IN (${slipIds.map((_, index) => `$${index + 1}`).join(',')}) ORDER BY slip_id, student_id`, slipIds)
+        : await query(`SELECT * FROM leave_slip_students WHERE slip_id IN (${slipIds.map((_, index) => `$${index + 1}`).join(',')}) AND student_id=$${slipIds.length + 1} ORDER BY slip_id, student_id`, [...slipIds, user.student_id])
       : [];
 
     const visibleSlips = canReviewInternalSignals ? slips : slips.map(withoutInternalReviewFields);
@@ -351,15 +388,90 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const auth = await requirePermission(request, 'manageOriginalLeave');
+    const auth = await requireUser(request);
     if (auth.response) return auth.response;
+    const user = auth.user!;
+    const canManage = user.role === 'admin' || (user.role === 'leader' && user.department === '学习竞技部');
+    if (!canManage) {
+      return NextResponse.json({ success: false, error: '仅管理员或学习竞技部部门负责人可以删除普通假条' }, { status: 403 });
+    }
     const id = new URL(request.url).searchParams.get('id');
     if (!id) return NextResponse.json({ success: false, error: '缺少ID参数' }, { status: 400 });
-    await query('DELETE FROM leave_slip_students WHERE slip_id=$1', [id]);
-    await query('DELETE FROM leave_slips WHERE id=$1', [id]);
+    await withTransaction(async (client) => {
+      await client.query('DELETE FROM leave_slip_students WHERE slip_id=$1', [id]);
+      await client.query('DELETE FROM leave_slips WHERE id=$1', [id]);
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('删除假条失败:', error);
     return NextResponse.json({ success: false, error: '删除假条失败' }, { status: 500 });
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const auth = await requireUser(request);
+    if (auth.response) return auth.response;
+    const user = auth.user!;
+    const canManage = user.role === 'admin' || (user.role === 'leader' && user.department === '学习竞技部');
+    if (!canManage) return NextResponse.json({ success: false, error: '仅管理员或学习竞技部部门负责人可以修改普通假条' }, { status: 403 });
+
+    const body = await request.json();
+    const id = String(body.id || '').trim();
+    const leaveType = String(body.leave_type || '').trim();
+    const startTime = body.start_time ? new Date(String(body.start_time)) : null;
+    const endTime = body.end_time ? new Date(String(body.end_time)) : null;
+    if (!id || !leaveType || !startTime || Number.isNaN(startTime.getTime()) || !endTime || Number.isNaN(endTime.getTime())) {
+      return NextResponse.json({ success: false, error: '请完整填写请假类型、开始时间和结束时间' }, { status: 400 });
+    }
+    if (endTime <= startTime) return NextResponse.json({ success: false, error: '结束时间必须晚于开始时间' }, { status: 400 });
+
+    const current = await queryOne<{ id: string; slip_type: string; counselor_signature: boolean; official_seal: boolean; teacher_signature: boolean }>(
+      'SELECT id, slip_type, counselor_signature, official_seal, teacher_signature FROM leave_slips WHERE id=$1',
+      [id],
+    );
+    if (!current) return NextResponse.json({ success: false, error: '假条不存在或已删除' }, { status: 404 });
+    const validLeaveType = current.slip_type === '其他请假'
+      ? OTHER_LEAVE_TYPES.includes(leaveType as (typeof OTHER_LEAVE_TYPES)[number])
+      : LEAVE_TYPES.includes(leaveType as (typeof LEAVE_TYPES)[number]);
+    if (!validLeaveType) return NextResponse.json({ success: false, error: '该假条类型不能使用此请假类型' }, { status: 400 });
+    if (current.slip_type === '二课活动请假' && leaveType !== '活动公假') {
+      return NextResponse.json({ success: false, error: '二课活动请假只能使用“活动公假”' }, { status: 400 });
+    }
+    if (current.slip_type === '校级（且不为数经举办）假条' && leaveType !== '活动公假') {
+      return NextResponse.json({ success: false, error: '校级（且不为数经举办）假条只能使用“活动公假”' }, { status: 400 });
+    }
+    if (current.slip_type === '手写假条' && !current.counselor_signature) {
+      return NextResponse.json({ success: false, error: '手写假条缺少“辅导员签字”确认，不能修改后重新提交' }, { status: 400 });
+    }
+    if (current.slip_type === '二课活动请假' && (!current.official_seal || !current.teacher_signature)) {
+      return NextResponse.json({ success: false, error: '二课活动请假缺少“公章”或“老师签字”确认，不能修改后重新提交' }, { status: 400 });
+    }
+
+    let activityId: string | null = null;
+    let activityName: string | null = null;
+    if (current.slip_type === '二课活动请假') {
+      const requestedActivityId = body.activity_id ? String(body.activity_id).trim() : '';
+      if (!requestedActivityId) return NextResponse.json({ success: false, error: '二课活动请假必须关联活动总表中的活动' }, { status: 400 });
+      const activity = await queryOne<{ id: string; full_name: string }>('SELECT id, full_name FROM activities WHERE id=$1', [requestedActivityId]);
+      if (!activity) return NextResponse.json({ success: false, error: '选择的活动不存在或已删除，请重新选择' }, { status: 400 });
+      activityId = activity.id;
+      activityName = activity.full_name;
+    }
+
+    // 学生名单在此页面只读，因此班级字段只能由现有学生明细生成，禁止请求体把两者改成不一致。
+    const studentRows = await query<{ class_name: string }>('SELECT class_name FROM leave_slip_students WHERE slip_id=$1 ORDER BY class_name', [id]);
+    if (!studentRows.length) return NextResponse.json({ success: false, error: '该假条没有学生明细，不能修改；请重新提交假条' }, { status: 400 });
+    const classNames = [...new Set(studentRows.map((student) => student.class_name.trim()).filter(Boolean))];
+    if (!classNames.length) return NextResponse.json({ success: false, error: '该假条学生明细缺少班级，不能修改；请重新提交假条' }, { status: 400 });
+
+    const updated = await queryOne(
+      "UPDATE leave_slips SET activity_id=$1, activity_name=$2, class_names=$3, leave_type=$4, start_time=$5, end_time=$6, original_slip_id=NULL, review_status='待查对', review_note=NULL, reviewed_by_user_id=NULL, reviewed_by_name=NULL, reviewed_at=NULL WHERE id=$7 RETURNING *",
+      [activityId, activityName || null, JSON.stringify(classNames), leaveType, startTime.toISOString(), endTime.toISOString(), id],
+    );
+    return NextResponse.json({ success: true, data: updated, message: '假条已修改，已解除原对比关联并回到待查对' });
+  } catch (error) {
+    console.error('修改假条失败:', error);
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '修改假条失败' }, { status: 500 });
   }
 }

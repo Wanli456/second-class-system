@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
 // POST - 创建晚自习安排或考勤记录
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requirePermission(request, 'eveningStudy');
+    const auth = await requirePermission(request, 'manageAttendanceWork');
     if (auth.response) return auth.response;
     const body = await request.json();
     const { type, ...data } = body;
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
 // PUT - 更新晚自习安排
 export async function PUT(request: NextRequest) {
   try {
-    const auth = await requirePermission(request, 'eveningStudy');
+    const auth = await requirePermission(request, 'manageAttendanceWork');
     if (auth.response) return auth.response;
     const body = await request.json() as unknown;
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -169,7 +169,7 @@ export async function PUT(request: NextRequest) {
 // DELETE - 删除晚自习安排
 export async function DELETE(request: NextRequest) {
   try {
-    const auth = await requirePermission(request, 'eveningStudy');
+    const auth = await requirePermission(request, 'manageAttendanceWork');
     if (auth.response) return auth.response;
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");

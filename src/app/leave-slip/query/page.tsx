@@ -58,6 +58,8 @@ function LeaveSlipQueryContent() {
 
   const canAccess = hasPermission(user, 'canQueryLeave');
   const canCompare = hasPermission(user, 'canManageOriginalLeave');
+  const canReview = hasPermission(user, 'canReviewLeave');
+  const canViewRecords = canAccess;
 
   const studentsBySlip = useMemo(() => {
     const map = new Map<string, SlipStudent[]>();
@@ -70,7 +72,7 @@ function LeaveSlipQueryContent() {
   }, [students]);
 
   const search = async () => {
-    if (!canAccess) return;
+    if (!canViewRecords) return;
     setLoading(true);
     setSearched(true);
     try {
@@ -92,12 +94,12 @@ function LeaveSlipQueryContent() {
   };
 
   useEffect(() => {
-    if (initialized && user && canAccess && !searched) void search();
-  }, [initialized, user, canAccess, searched]);
+    if (initialized && user && canViewRecords && !searched) void search();
+  }, [initialized, user, canViewRecords, searched]);
 
   if (!initialized) return <AuthLoadingScreen />;
   if (!user) return <div className="flex min-h-dvh items-center justify-center bg-slate-50 p-4"><div className="rounded-xl border bg-white p-6 text-center"><h2 className="font-semibold">请先登录</h2><p className="mt-2 text-sm text-slate-500">登录后才能查询。</p><Link href="/login?redirect=/leave-slip/query" className="mt-4 inline-block rounded-md bg-slate-950 px-4 py-2 text-sm text-white">登录/注册</Link></div></div>;
-  if (!canAccess) {
+  if (!canViewRecords) {
     return <DashboardLayout user={user} title="假条查看与对比" activeNavHref="/leave-slip/records"><div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center"><AlertCircle className="mx-auto size-6 text-amber-600" /><h2 className="mt-3 font-semibold text-amber-900">当前账号没有假条查看权限</h2><p className="mt-2 text-sm text-amber-800">请联系系统管理员授予 `canQueryLeave` 权限。</p></div></DashboardLayout>;
   }
 

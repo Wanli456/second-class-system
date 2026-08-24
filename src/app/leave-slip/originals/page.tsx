@@ -317,7 +317,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
         <header className="mb-6 rounded-2xl border border-slate-200 bg-white px-5 py-6 shadow-sm sm:px-7">
           <div className={isSubmitMode ? 'flex items-start gap-4' : ''}>
             {isSubmitMode && <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><FileCheck2 className="size-5" /></span>}
-            <div><p className="text-sm font-medium text-teal-700">假条管理</p><h2 className="mt-1 text-2xl font-bold text-balance text-slate-950">{isSubmitMode ? '提交原假条' : '维护原假条'}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-pretty text-slate-600">{isSubmitMode ? '上传活动方提供的原始假条。系统会自动识别图片内容，请在提交前人工核对。' : '集中查询、核对和维护已归档的活动方原假条。此处不新增、不提交原假条。'}</p></div>
+            <div><p className="text-sm font-medium text-teal-700">假条管理</p><h2 className="mt-1 text-2xl font-bold text-balance text-slate-950">{isSubmitMode ? '提交原假条' : '维护原假条'}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-pretty text-slate-600">{isSubmitMode ? '上传活动方提供的原始假条。系统会自动识别图片内容，请在提交前人工核对。' : '集中查询、核对和维护已归档的活动方原假条。此处不新增、不提交原假条。'}</p>{!isSubmitMode && <div className="mt-4"><Link href="/leave-slip/records/compare"><Button type="button" variant="outline">返回假条对比</Button></Link></div>}</div>
           </div>
         </header>
 
@@ -346,7 +346,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
                 <Button type="button" onClick={handleSubmit} disabled={saving || ocrLoading} className="h-11 bg-teal-700 hover:bg-teal-800"><Plus className="size-4" />{ocrLoading ? '自动识别中...' : saving ? '提交中...' : '提交原假条'}</Button>
               </div>
               {ocrError && <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{ocrError}</p>}
-              {submitSuccess && <p className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"><CheckCircle2 className="size-4 shrink-0" />{submitSuccess}</p>}
+              {submitSuccess && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"><p className="flex items-center gap-2"><CheckCircle2 className="size-4 shrink-0" />{submitSuccess}</p><Button type="button" variant="outline" size="sm" className="border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100" onClick={() => setSubmitSuccess('')}>重新提交</Button></div>}
               {ocrLines.length > 0 && (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <p className="mb-2 text-xs font-medium text-slate-600">自动识别结果（初稿，请人工核对后保存）</p>

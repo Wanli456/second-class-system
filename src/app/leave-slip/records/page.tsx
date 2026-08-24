@@ -33,7 +33,7 @@ function LeaveSlipRecordsContent() {
           <p className="mt-2 max-w-3xl text-pretty text-sm leading-6 text-slate-600">在同一个功能区查看班级负责人上传的假条，或集中核对、维护活动方归档的原假条。两个操作仍分别按对应权限开放。</p>
         </header>
 
-        {!canQuery && !canCompare ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center"><AlertCircle className="mx-auto size-6 text-amber-600" /><h2 className="mt-3 font-semibold text-amber-900">当前账号没有查看权限</h2><p className="mt-2 text-sm text-amber-800">请联系系统管理员授予假条查看权限或假条对比权限。</p></div> : <div className="grid gap-5 lg:grid-cols-2">
+        {!canQuery && !canCompare ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center"><AlertCircle className="mx-auto size-6 text-amber-600" /><h2 className="mt-3 font-semibold text-amber-900">当前账号没有查看或对比权限</h2><p className="mt-2 text-sm text-amber-800">请联系系统管理员授予假条查看权限或假条对比权限。</p></div> : <div className="grid gap-5 lg:grid-cols-2">
           {canQuery && <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex size-11 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><FileSearch className="size-5" /></div>
             <h2 className="mt-4 text-balance text-xl font-semibold text-slate-950">查看假条</h2>

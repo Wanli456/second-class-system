@@ -360,7 +360,7 @@ export default function AttendanceWorkPage() {
             </div>
 
             <div className="mt-4 rounded-xl border border-slate-200 p-4">
-              <p className="mb-3 text-xs font-medium text-slate-600">按星期填写每天考勤人员（每行一个，可用顿号/逗号分隔）：</p>
+              <p className="mb-3 text-xs font-medium text-slate-600">按星期填写每天考勤人员（每行一个；姓名重名时必须填写学号，可用顿号/逗号分隔）：</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {WEEKDAYS.map((weekday, index) => (
                   <label key={weekday} className="block text-xs font-semibold text-slate-700">

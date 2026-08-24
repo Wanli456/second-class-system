@@ -5,6 +5,7 @@ import {
   type ClassRosterStudent,
   type RecordedClassAttendance,
 } from '@/lib/class-attendance-summary';
+import { uniqueLookup } from '@/lib/unique-lookup';
 import { query } from '@/storage/database/supabase-client';
 
 interface AttendanceDateRow {
@@ -142,36 +143,35 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const workerNames = attendanceWorkerNames(attendanceWork, requestedDate);
     const workerNameKeys = new Set([...workerNames].map(lookupKey).filter(Boolean));
-    const usersByName = new Map<string, UserRosterStudent>();
-    const usersByPhone = new Map<string, UserRosterStudent>();
-    const usersByStudentId = new Map<string, UserRosterStudent>();
-    const rosterByName = new Map<string, NamedRosterStudent>();
-    const rosterByStudentId = new Map<string, NamedRosterStudent>();
     const rosterKeys = new Set<string>();
     roster.forEach((student) => {
       const classKey = lookupKey(student.class_name);
       const studentKey = lookupKey(student.student_id);
       if (classKey && studentKey) rosterKeys.add(`${classKey}:${studentKey}`);
     });
-    users.forEach((user) => {
-      if (lookupKey(user.username)) usersByName.set(lookupKey(user.username), user);
-      if (lookupKey(user.contact_phone)) usersByPhone.set(lookupKey(user.contact_phone), user);
-      if (lookupKey(user.student_id)) usersByStudentId.set(lookupKey(user.student_id), user);
-    });
-    roster.forEach((student) => {
-      if (lookupKey(student.student_name)) rosterByName.set(lookupKey(student.student_name), student);
-      if (lookupKey(student.student_id)) rosterByStudentId.set(lookupKey(student.student_id), student);
-    });
+    // 同名时不猜测身份：重复姓名从索引中剔除，须填写学号才能计入考勤。
+    const usersByName = uniqueLookup(users, (user) => lookupKey(user.username));
+    const usersByPhone = uniqueLookup(users, (user) => lookupKey(user.contact_phone));
+    const usersByStudentId = uniqueLookup(users, (user) => lookupKey(user.student_id));
+    const rosterByName = uniqueLookup(roster, (student) => lookupKey(student.student_name));
+    const rosterByStudentId = uniqueLookup(roster, (student) => lookupKey(student.student_id));
 
     const findWorker = (name: string | null, phone: string | null): ClassRosterStudent | null => {
       const nameKey = lookupKey(name);
       const phoneKey = lookupKey(phone);
-      return usersByName.get(nameKey)
-        || usersByPhone.get(phoneKey)
-        || usersByStudentId.get(nameKey)
-        || rosterByName.get(nameKey)
-        || rosterByStudentId.get(nameKey)
-        || null;
+      // 学号是唯一身份标识，优先于姓名；姓名和手机号只在全库唯一时可用。
+      const candidates: Array<ClassRosterStudent | undefined> = [
+        usersByStudentId.get(nameKey),
+        rosterByStudentId.get(nameKey),
+        usersByPhone.get(phoneKey),
+        usersByName.get(nameKey),
+        rosterByName.get(nameKey),
+      ];
+      return candidates.find((candidate): candidate is ClassRosterStudent => Boolean(
+        candidate?.class_name
+        && candidate.student_id
+        && rosterKeys.has(lookupKey(candidate.class_name) + ':' + lookupKey(candidate.student_id)),
+      )) || null;
     };
     const attendanceWorkers: ClassRosterStudent[] = [];
     const attendanceWorkerIdsByClass = new Map<string, Set<string>>();

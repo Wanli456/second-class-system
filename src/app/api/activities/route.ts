@@ -14,6 +14,9 @@ export async function GET(request: NextRequest) {
     if (purpose === 'leave') {
       const auth = await requireUser(request);
       if (auth.response) return auth.response;
+      if (!calculateUserPermissions(auth.user!).canUploadLeave) {
+        return NextResponse.json({ success: false, error: '暂无假条上传权限' }, { status: 403 });
+      }
       const keyword = searchParams.get('keyword');
       const params: unknown[] = ['正常活动'];
       let sql = 'SELECT id,full_name,scope_type,scope_name,scope_names FROM activities WHERE status=$1';
@@ -23,8 +26,9 @@ export async function GET(request: NextRequest) {
       }
       sql += ' ORDER BY created_at DESC';
       const rows = await query(sql, params);
-      const visible = auth.user!.role === 'admin' ? rows : rows.filter((item) => scopeMatchesUser(auth.user!, getActivityScopes(item)));
-      return NextResponse.json({ success: true, data: visible.map(({ id, full_name }) => ({ id, full_name })) });
+      // 活动假条由班级负责人代本班提交，活动可能由其他部门主办；
+      // 因此活动选择不再受主办范围限制，必须由用户手动选定准确活动。
+      return NextResponse.json({ success: true, data: rows.map(({ id, full_name }) => ({ id, full_name })) });
     }
 
     if (purpose === 'scoring') {
