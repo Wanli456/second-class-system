@@ -6,6 +6,7 @@ import os from 'os';
 import path from 'path';
 import { requirePermission } from '@/lib/auth';
 import { assertSafeRemoteImageUrl } from '@/lib/image-url';
+import { selectStudentIdAfterRosterLookup } from '@/lib/ocr-student-id-validation';
 import { query } from '@/storage/database/supabase-client';
 
 function runPythonOcr(pythonPath: string, args: string[]) {
@@ -133,10 +134,10 @@ async function validateClassStudentsAgainstRoster(perImage: OcrPatch[]): Promise
           student_ids: group.students.map((name, index) => {
             const candidates = idsByName.get(name) || [];
             const ocrStudentId = group.student_ids[index];
-            // 同班可能存在同名学生。若 OCR 已识别到且花名册中存在该学号，
-            // 仍可安全保留；只有 OCR 未取得学号且候选唯一时，才自动补全。
-            if (ocrStudentId) return candidates.includes(ocrStudentId) ? ocrStudentId : '';
-            return candidates.length === 1 ? candidates[0] : '';
+            // OCR 已读出的学号不能被花名册查询结果覆盖或清空：图片中的班级
+            // 可能是“虚拟2531”这类简称，而花名册保存完整班级名。只有原图
+            // 没有学号时，才在候选唯一的前提下按花名册补全。
+            return selectStudentIdAfterRosterLookup(ocrStudentId, candidates);
           }),
         };
       } catch (error) {
