@@ -3,7 +3,7 @@ import { parse } from 'url';
 import next from 'next';
 import { ensureDatabaseSchema } from '@/storage/database/supabase-client';
 
-const dev = process.env.COZE_PROJECT_ENV !== 'PROD';
+const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME || 'localhost';
 const port = parseInt(process.env.PORT || '5000', 10);
 
@@ -13,11 +13,11 @@ const handle = app.getRequestHandler();
 
 app.prepare().then(async () => {
   // 生产环境安全检查：确保 PGDATABASE_URL 已配置
-  const isProduction = process.env.COZE_PROJECT_ENV === 'PROD';
+  const isProduction = process.env.NODE_ENV === 'production';
   if (isProduction && !process.env.PGDATABASE_URL) {
     console.error(
       '🚨 生产环境安全检查失败：缺少 PGDATABASE_URL 环境变量。\n' +
-      '请确保在部署环境中配置了 PGDATABASE_URL（通常由 prepare.sh 从 COZE_PGDATABASE_URL 映射）。'
+      '请确保在部署环境中配置了 PGDATABASE_URL。'
     );
     process.exit(1);
   }
@@ -47,7 +47,7 @@ app.prepare().then(async () => {
   server.listen(port, () => {
     console.log(
       `> Server listening at http://${hostname}:${port} as ${
-        dev ? 'development' : process.env.COZE_PROJECT_ENV
+        dev ? 'development' : 'production'
       }`,
     );
   });

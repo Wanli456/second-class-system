@@ -12,7 +12,7 @@ const FALLBACK_SECRET = 'second-class-local-development-secret';
 function sessionCookieOptions() {
   // Coze renders previews in an embedded cross-site frame. Production cookies
   // must opt into that context or protected API requests lose the session.
-  const isProduction = process.env.NODE_ENV === 'production' || process.env.COZE_PROJECT_ENV === 'PROD';
+  const isProduction = process.env.NODE_ENV === 'production';
   return {
     httpOnly: true,
     sameSite: isProduction ? 'none' as const : 'lax' as const,
@@ -56,7 +56,7 @@ export function normalizeRole(role: unknown): BaseRole {
 
 function secret() {
   if (process.env.AUTH_SESSION_SECRET) return process.env.AUTH_SESSION_SECRET;
-  const isProduction = process.env.NODE_ENV === 'production' || process.env.COZE_PROJECT_ENV === 'PROD';
+  const isProduction = process.env.NODE_ENV === 'production';
   if (isProduction) throw new Error('生产环境缺少 AUTH_SESSION_SECRET，拒绝使用固定会话密钥');
   return FALLBACK_SECRET;
 }

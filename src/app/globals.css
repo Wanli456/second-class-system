@@ -165,14 +165,12 @@ body {
   @apply font-sans;
 }
 
-/* 隐藏左下角的 N 按钮（Coze 调试工具）- 使用多种选择器确保覆盖 */
+/* 隐藏开发环境中可能注入的调试入口。 */
 button[aria-label="Open issues overlay"],
 button[aria-label="Collapse issues badge"],
-button[data-testid="coze-debug-button"],
 div[style*="bottom: 0"][style*="left: 0"] button,
 div[style*="bottom:0"][style*="left:0"] button,
 .fixed.bottom-0.left-0 button,
-[class*="coze-feedback" i],
 [class*="feedback-button" i],
 [class*="debug" i][class*="button" i] {
   display: none !important;
