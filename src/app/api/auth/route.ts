@@ -46,7 +46,6 @@ export async function PUT(request: NextRequest) {
   try {
     const { studentId, name, password } = await request.json();
     if (!studentId || !name || !password) return NextResponse.json({ success: false, error: '请填写学号、姓名和密码' }, { status: 400 });
-    if (String(password).length < 6) return NextResponse.json({ success: false, error: '密码至少需要 6 位' }, { status: 400 });
     const user = await queryOne<StoredUser>('SELECT * FROM users WHERE student_id=$1 AND username=$2', [studentId, name]);
     if (!user || !(await verifyPassword(password, user.password))) return NextResponse.json({ success: false, error: '学号、姓名或密码错误' }, { status: 401 });
     if (!user.password.startsWith('scrypt$')) await query('UPDATE users SET password=$1 WHERE id=$2', [await hashPassword(password), user.id]);
@@ -66,7 +65,10 @@ export async function GET(request: NextRequest) {
     if (searchParams.get('me') === 'true') {
       const auth = await requireUser(request);
       if (auth.response) return auth.response;
-      return NextResponse.json({ success: true, data: publicUser(auth.user!) });
+      const response = NextResponse.json({ success: true, data: publicUser(auth.user!) });
+      // A verified legacy bearer session is migrated to an HttpOnly cookie.
+      setSessionCookie(response, auth.user!.id);
+      return response;
     }
     if (searchParams.get('directory') === 'true') {
       const auth = await requirePermission(request, 'submitActivity');

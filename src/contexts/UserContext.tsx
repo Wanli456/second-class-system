@@ -41,18 +41,6 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
-function readStoredUser(): User | null {
-  if (typeof window === 'undefined') return null;
-
-  try {
-    const savedUser = window.localStorage.getItem('user');
-    return savedUser ? JSON.parse(savedUser) as User : null;
-  } catch {
-    window.localStorage.removeItem('user');
-    return null;
-  }
-}
-
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
@@ -63,9 +51,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     const initializeUser = async () => {
-      const storedUser = readStoredUser();
-      if (storedUser) setUser(storedUser);
-
       try {
         const currentUser = await refreshCurrentUser<User>();
         if (!cancelled) setUser(currentUser);
