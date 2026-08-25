@@ -5,7 +5,7 @@ import { ArrowLeft, Check, Loader2, Search, ShieldCheck, Users } from 'lucide-re
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DepartmentClassRosterManager } from '@/components/DepartmentClassRosterManager';
-import { apiFetch } from '@/lib/client-api';
+import { apiFetch, logoutCurrentUser } from '@/lib/client-api';
 import type { DepartmentUserManagementDepartment } from '@/lib/department-user-management';
 
 type PermissionKey =
@@ -83,8 +83,8 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  const redirectToLogin = () => {
-    window.localStorage.removeItem('user');
+  const redirectToLogin = async () => {
+    await logoutCurrentUser();
     router.replace(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
   };
 

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ensureDatabaseSchema, query, queryOne } from '@/storage/database/supabase-client';
 import {
   clearSessionCookie,
-  createSessionToken,
   hashPassword,
   publicUser,
   requirePermission,
@@ -34,9 +33,8 @@ export async function POST(request: NextRequest) {
       [String(name).trim(), await hashPassword(String(password)), String(studentId).trim(), department || null, className || null],
     );
     if (!user) return NextResponse.json({ success: false, error: '注册失败' }, { status: 500 });
-    const sessionToken = createSessionToken(user.id);
-    const response = NextResponse.json({ success: true, data: { ...publicUser(user), sessionToken } });
-    setSessionCookie(response, user.id, sessionToken);
+    const response = NextResponse.json({ success: true, data: publicUser(user) });
+    setSessionCookie(response, user.id);
     return response;
   } catch (error) {
     console.error('Registration failed:', error);
@@ -48,12 +46,12 @@ export async function PUT(request: NextRequest) {
   try {
     const { studentId, name, password } = await request.json();
     if (!studentId || !name || !password) return NextResponse.json({ success: false, error: '请填写学号、姓名和密码' }, { status: 400 });
+    if (String(password).length < 6) return NextResponse.json({ success: false, error: '密码至少需要 6 位' }, { status: 400 });
     const user = await queryOne<StoredUser>('SELECT * FROM users WHERE student_id=$1 AND username=$2', [studentId, name]);
     if (!user || !(await verifyPassword(password, user.password))) return NextResponse.json({ success: false, error: '学号、姓名或密码错误' }, { status: 401 });
     if (!user.password.startsWith('scrypt$')) await query('UPDATE users SET password=$1 WHERE id=$2', [await hashPassword(password), user.id]);
-    const sessionToken = createSessionToken(user.id);
-    const response = NextResponse.json({ success: true, data: { ...publicUser(user), sessionToken } });
-    setSessionCookie(response, user.id, sessionToken);
+    const response = NextResponse.json({ success: true, data: publicUser(user) });
+    setSessionCookie(response, user.id);
     return response;
   } catch (error) {
     console.error('Login failed:', error);

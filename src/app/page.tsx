@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { cn } from '@/lib/utils';
-import { apiFetch } from '@/lib/client-api';
+import { apiFetch, logoutCurrentUser } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
 import { isDepartmentUserManager } from '@/lib/department-user-management';
@@ -97,8 +97,8 @@ export default function Home() {
     setShowLoginModal(false);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
+  const handleLogout = async () => {
+    await logoutCurrentUser();
     setGlobalUser(null);
   };
 

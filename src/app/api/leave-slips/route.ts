@@ -1,3 +1,4 @@
+import { getUtcDayRangeForBusinessDate } from '@/lib/business-time';
 import { NextRequest, NextResponse } from 'next/server';
 import { calculateUserPermissions, requirePermission, requireUser, type AuthUser } from '@/lib/auth';
 import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
@@ -347,12 +348,8 @@ export async function GET(request: NextRequest) {
       where.push(`original_slip_id = $${paramIndex++}`);
     }
     if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      const startDate = `${date}T00:00:00.000Z`;
-      // 自动计算下一天 0 点，避免依赖 pg-mem 的 timestamp::text。
-      const parsed = new Date(startDate);
-      parsed.setUTCDate(parsed.getUTCDate() + 1);
-      const nextDate = parsed.toISOString().slice(0, 10);
-      params.push(startDate, `${nextDate}T00:00:00.000Z`);
+      const { start, end } = getUtcDayRangeForBusinessDate(date);
+      params.push(start, end);
       where.push(`(start_time >= $${paramIndex} AND start_time < $${paramIndex + 1} OR created_at >= $${paramIndex} AND created_at < $${paramIndex + 1})`);
       paramIndex += 2;
     }

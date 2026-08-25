@@ -1,3 +1,4 @@
+import { getBusinessDate } from '@/lib/business-time';
 import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne } from "@/storage/database/supabase-client";
 import { requirePermission } from "@/lib/auth";
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     // 查询今日安排
     if (type === "today") {
-      const today = new Date().toISOString().split("T")[0];
+      const today = getBusinessDate();
       const data = await query(
         `SELECT * FROM evening_study_schedules WHERE date = $1 ORDER BY classroom`,
         [today]

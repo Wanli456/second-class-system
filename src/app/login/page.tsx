@@ -11,7 +11,8 @@ import { User, Lock, LogIn, Hash } from "lucide-react";
 function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") || "/";
+  const requestedRedirect = searchParams.get("redirect");
+  const redirect = requestedRedirect?.startsWith("/") && !requestedRedirect.startsWith("//") ? requestedRedirect : "/";
   
   const [loginStudentId, setLoginStudentId] = useState("");
   const [loginName, setLoginName] = useState("");

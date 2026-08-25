@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query, queryOne } from '@/storage/database/supabase-client';
+import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
 import { calculateUserPermissions, requirePermission, requireUser } from '@/lib/auth';
-import { getActivityScopes, hasAnyScopePermission, newActivityId, normalizeIds, normalizeScopes, serializeScopes, scopeMatchesUser, validateActivityTimes, validateScopes } from '@/lib/business-rules';
+import { getActivityScopes, hasAnyScopePermission, nextActivityId, normalizeIds, normalizeScopes, serializeIds, serializeScopes, scopeMatchesUser, validateActivityTimes, validateScopes } from '@/lib/business-rules';
 import { ACTIVITY_STATUSES, isValidCategoryPath } from '@/lib/types';
 import { hydrateActivityLeaderDetails } from '@/lib/hydrate-activity-leaders';
 import { serializeActivityLeaderDetails } from '@/lib/activity-leader-details';
+import { getActivityDeletionAction } from '@/lib/activity-deletion';
 
 export async function GET(request: NextRequest) {
   try {
@@ -94,16 +95,19 @@ export async function POST(request: NextRequest) {
     const timeValidation = validateActivityTimes({ start_time, end_time, registration_start_time, registration_end_time });
     if (!timeValidation.valid) return NextResponse.json({ success: false, error: timeValidation.error }, { status: 400 });
     const firstScope = scopes[0];
-    const id = newActivityId();
-    const data = await queryOne(`INSERT INTO activities (id,full_name,start_time,end_time,registration_start_time,registration_end_time,category,category_primary,category_secondary,level,plan_file_url,plan_file_name,record_file_url,record_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,leader_ids,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,status,scoring_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'待赋分') RETURNING *`, [id, full_name, start_time, end_time, registration_start_time, registration_end_time, category, category_primary || null, category_secondary || null, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader_name, leader_phone, firstScope.type, firstScope.name, serializeScopes(scopes), JSON.stringify(body.leader_ids || []), auth.user!.id, auth.user!.username, auth.user!.student_id, status]);
     const leaderIds = normalizeIds(body.leader_ids);
-    if (leaderIds.length) {
-      const placeholders = leaderIds.map((_, index) => `$${index + 1}`).join(',');
-      const leaders = await query<{ id: string; username: string; student_id: string; contact_phone: string | null }>(`SELECT id,username,student_id,contact_phone FROM users WHERE id IN (${placeholders})`, leaderIds);
-      await query('UPDATE activities SET leader_details=$1 WHERE id=$2', [serializeActivityLeaderDetails(leaders.map((leader) => ({ id: leader.id, name: leader.username, studentId: leader.student_id, contactPhone: leader.contact_phone || null }))), id]);
-    }
-    const updated = await queryOne('SELECT * FROM activities WHERE id=$1', [id]);
-    return NextResponse.json({ success: true, data: updated || data });
+    const data = await withTransaction(async (client) => {
+      const id = await nextActivityId(client);
+      const inserted = await client.query(`INSERT INTO activities (id,full_name,start_time,end_time,registration_start_time,registration_end_time,category,category_primary,category_secondary,level,plan_file_url,plan_file_name,record_file_url,record_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,leader_ids,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,status,scoring_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'待赋分') RETURNING *`, [id, full_name, start_time, end_time, registration_start_time, registration_end_time, category, category_primary || null, category_secondary || null, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader_name, leader_phone, firstScope.type, firstScope.name, serializeScopes(scopes), serializeIds(leaderIds), auth.user!.id, auth.user!.username, auth.user!.student_id, status]);
+      if (leaderIds.length) {
+        const placeholders = leaderIds.map((_, index) => `$${index + 1}`).join(',');
+        const leaders = await client.query<{ id: string; username: string; student_id: string; contact_phone: string | null }>(`SELECT id,username,student_id,contact_phone FROM users WHERE id IN (${placeholders})`, leaderIds);
+        await client.query('UPDATE activities SET leader_details=$1 WHERE id=$2', [serializeActivityLeaderDetails(leaders.rows.map((leader) => ({ id: leader.id, name: leader.username, studentId: leader.student_id, contactPhone: leader.contact_phone || null }))), id]);
+      }
+      const updated = await client.query('SELECT * FROM activities WHERE id=$1', [id]);
+      return updated.rows[0] || inserted.rows[0] || null;
+    });
+    return NextResponse.json({ success: true, data });
   } catch (err) {
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '创建失败' }, { status: 500 });
   }
@@ -132,6 +136,7 @@ export async function PUT(request: NextRequest) {
       updates.scoring_material_submitter_student_id = auth.user!.student_id;
     }
     const allowedFields = ['full_name','start_time','end_time','registration_start_time','registration_end_time','category','category_primary','category_secondary','level','plan_file_url','plan_file_name','record_file_url','record_file_name','record_photo_url','record_photo_file_name','leader_name','leader_phone','scope_type','scope_name','scope_names','leader_ids','status','scoring_table_url','scoring_table_file_name','scoring_material_submitter_id','scoring_material_submitter_name','scoring_material_submitter_student_id'];
+    if (updates.leader_ids !== undefined) updates.leader_ids = serializeIds(normalizeIds(updates.leader_ids));
     const safeKeys = Object.keys(updates).filter((key) => allowedFields.includes(key));
     if (!safeKeys.length) return NextResponse.json({ success: false, error: '没有可更新的内容' }, { status: 400 });
     if (safeKeys.includes('status') && !ACTIVITY_STATUSES.includes(updates.status)) return NextResponse.json({ success: false, error: '活动状态取值不正确' }, { status: 400 });
@@ -166,8 +171,30 @@ export async function DELETE(request: NextRequest) {
     if (auth.response) return auth.response;
     const id = new URL(request.url).searchParams.get('id');
     if (!id) return NextResponse.json({ success: false, error: '缺少活动ID' }, { status: 400 });
-    await query('DELETE FROM activities WHERE id=$1', [id]);
-    return NextResponse.json({ success: true });
+
+    const referenceTables = ['leave_requests', 'leave_groups', 'leave_slips', 'original_leave_slips', 'activity_submissions'] as const;
+    const result = await withTransaction(async (client) => {
+      const activity = await client.query<{ id: string }>('SELECT id FROM activities WHERE id=$1', [id]);
+      if (!activity.rows[0]) return { found: false, deleted: false, data: null };
+
+      let referenceCount = 0;
+      for (const table of referenceTables) {
+        const references = await client.query<{ count: string }>(`SELECT COUNT(*) AS count FROM ${table} WHERE activity_id=$1`, [id]);
+        referenceCount += Number(references.rows[0]?.count || 0);
+      }
+      if (getActivityDeletionAction(referenceCount) === 'cancel') {
+        const updated = await client.query("UPDATE activities SET status='活动取消',updated_at=NOW() WHERE id=$1 RETURNING *", [id]);
+        return { found: true, deleted: false, data: updated.rows[0] || null };
+      }
+      const deleted = await client.query('DELETE FROM activities WHERE id=$1 RETURNING id', [id]);
+      return { found: true, deleted: deleted.rows.length > 0, data: null };
+    });
+
+    if (!result.found) return NextResponse.json({ success: false, error: '活动不存在' }, { status: 404 });
+    if (!result.deleted) {
+      return NextResponse.json({ success: true, data: result.data, message: '该活动存在关联记录，已改为活动取消，未删除历史数据' });
+    }
+    return NextResponse.json({ success: true, message: '活动已删除' });
   } catch (err) {
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '删除失败' }, { status: 500 });
   }

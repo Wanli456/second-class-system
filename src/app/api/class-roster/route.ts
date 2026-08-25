@@ -4,6 +4,8 @@ import { ensureDatabaseSchema, query, queryOne, withTransaction } from '@/storag
 
 type NormalizedRosterStudent = { className: string; studentId: string; studentName: string };
 
+class ClassRosterConflictError extends Error {}
+
 function normalizeStudent(value: unknown): NormalizedRosterStudent | null {
   if (!value || typeof value !== 'object') return null;
   const student = value as {
@@ -75,7 +77,7 @@ export async function POST(request: NextRequest) {
           [student.studentId, student.className],
         );
         if (conflict.rows.length) {
-          throw new Error(`学号 ${student.studentId} 已属于班级 ${conflict.rows[0].class_name}`);
+          throw new ClassRosterConflictError(`学号 ${student.studentId} 已属于班级 ${conflict.rows[0].class_name}`);
         }
         const inserted = await client.query(
           `INSERT INTO class_roster (class_name,student_id,student_name) VALUES ($1,$2,$3)
@@ -90,7 +92,8 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ success: true, data });
   } catch (error) {
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '保存花名册失败' }, { status: 500 });
+    const status = error instanceof ClassRosterConflictError ? 409 : 500;
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '保存花名册失败' }, { status });
   }
 }
 
@@ -103,17 +106,23 @@ export async function PUT(request: NextRequest) {
     const id = String(body.id || '').trim();
     const student = normalizeStudent(body);
     if (!id || !student) return NextResponse.json({ success: false, error: '请填写完整的学号和姓名' }, { status: 400 });
-    const current = await queryOne<{ class_name: string }>('SELECT class_name FROM class_roster WHERE id=$1', [id]);
-    if (!current) return NextResponse.json({ success: false, error: '花名册学生不存在' }, { status: 404 });
-    const existing = await queryOne<{ class_name: string }>('SELECT class_name FROM class_roster WHERE student_id=$1 AND class_name<>$2 AND id<>$3 LIMIT 1', [student.studentId, current.class_name, id]);
-    if (existing) {
-      return NextResponse.json({ success: false, error: `学号 ${student.studentId} 已属于班级 ${existing.class_name}` }, { status: 409 });
-    }
-    const data = await queryOne('UPDATE class_roster SET student_id=$1,student_name=$2,updated_at=NOW() WHERE id=$3 RETURNING id,class_name,student_id,student_name', [student.studentId, student.studentName, id]);
+    const data = await withTransaction(async (client) => {
+      const current = (await client.query<{ class_name: string; student_id: string }>('SELECT class_name,student_id FROM class_roster WHERE id=$1', [id])).rows[0];
+      if (!current) return null;
+      const existing = (await client.query<{ class_name: string }>('SELECT class_name FROM class_roster WHERE student_id=$1 AND class_name<>$2 AND id<>$3 LIMIT 1', [student.studentId, current.class_name, id])).rows[0];
+      if (existing) throw new ClassRosterConflictError(`学号 ${student.studentId} 已属于班级 ${existing.class_name}`);
+      const updated = (await client.query('UPDATE class_roster SET student_id=$1,student_name=$2,updated_at=NOW() WHERE id=$3 RETURNING id,class_name,student_id,student_name', [student.studentId, student.studentName, id])).rows[0];
+      if (current.student_id !== student.studentId) {
+        await client.query('UPDATE users SET class_name=NULL WHERE student_id=$1 AND class_name=$2', [current.student_id, current.class_name]);
+      }
+      await client.query('UPDATE users SET class_name=$1 WHERE student_id=$2', [current.class_name, student.studentId]);
+      return updated;
+    });
     if (!data) return NextResponse.json({ success: false, error: '花名册学生不存在' }, { status: 404 });
     return NextResponse.json({ success: true, data });
   } catch (error) {
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '更新花名册失败' }, { status: 500 });
+    const status = error instanceof ClassRosterConflictError ? 409 : 500;
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '更新花名册失败' }, { status });
   }
 }
 
@@ -123,7 +132,13 @@ export async function DELETE(request: NextRequest) {
   if (auth.response) return auth.response;
   const id = new URL(request.url).searchParams.get('id');
   if (!id) return NextResponse.json({ success: false, error: '缺少花名册记录 ID' }, { status: 400 });
-  const data = await queryOne('DELETE FROM class_roster WHERE id=$1 RETURNING id', [id]);
+  const data = await withTransaction(async (client) => {
+    const current = (await client.query<{ class_name: string; student_id: string }>('SELECT class_name,student_id FROM class_roster WHERE id=$1', [id])).rows[0];
+    if (!current) return null;
+    const deleted = (await client.query('DELETE FROM class_roster WHERE id=$1 RETURNING id', [id])).rows[0];
+    await client.query('UPDATE users SET class_name=NULL WHERE student_id=$1 AND class_name=$2', [current.student_id, current.class_name]);
+    return deleted;
+  });
   if (!data) return NextResponse.json({ success: false, error: '花名册学生不存在' }, { status: 404 });
   return NextResponse.json({ success: true });
 }

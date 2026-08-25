@@ -10,7 +10,7 @@ type DatabasePool = {
   end: () => Promise<void>;
 };
 
-type DatabaseClient = Pick<DatabasePool, 'query'> & { release?: () => void };
+export type DatabaseClient = Pick<DatabasePool, 'query'> & { release?: () => void };
 
 type LocalDatabaseState = {
   db: ReturnType<typeof newDb>;
@@ -106,6 +106,11 @@ if (localDb && shouldInitializeLocalDb) {
       scoring_table_file_name TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE activity_id_counters (
+      year_month TEXT PRIMARY KEY,
+      next_number INTEGER NOT NULL
     );
 
     CREATE TABLE activity_submissions (
@@ -325,6 +330,15 @@ async function migrateDatabaseSchema(): Promise<void> {
 
   // Run the compatibility changes before copying users into departments. Older
   // local processes can keep the same pg-mem instance during hot reloads.
+  if (!(await tableExists('activity_id_counters'))) {
+    await executeSchemaSql(`
+      CREATE TABLE activity_id_counters (
+        year_month TEXT PRIMARY KEY,
+        next_number INTEGER NOT NULL
+      );
+    `);
+  }
+
   await executeSchemaSql(`
     UPDATE users SET role='student' WHERE role IN ('publisher','scorer','leave_reviewer');
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_publish BOOLEAN NOT NULL DEFAULT false;

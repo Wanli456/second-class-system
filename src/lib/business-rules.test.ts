@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { formatActivityScopes } from './business-rules';
+import { formatActivityScopes, normalizeIds, serializeIds } from './business-rules';
 
 assert.equal(
   formatActivityScopes({
@@ -43,5 +43,9 @@ assert.equal(
 );
 
 assert.equal(formatActivityScopes({}), '-');
+
+assert.deepEqual(normalizeIds(' [\"leader-1\", \"leader-1\", \" leader-2 \"] '), ['leader-1', 'leader-2']);
+assert.equal(serializeIds(normalizeIds(' [\"leader-1\", \"leader-1\", \" leader-2 \"] ')), '[\"leader-1\",\"leader-2\"]');
+assert.equal(serializeIds(['leader-1', 'leader-1', '']), '[\"leader-1\"]');
 
 console.log('business rules scope format tests passed');

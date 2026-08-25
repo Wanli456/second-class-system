@@ -17,7 +17,7 @@ import {
 } from '@/lib/types';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
-import { apiFetch, refreshCurrentUser } from '@/lib/client-api';
+import { apiFetch, logoutCurrentUser, refreshCurrentUser } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { canOpenAdminTab, formatActivityScopes } from '@/lib/business-rules';
 import { getDepartmentAutoPermissionKeys, hasPermission, hasPermissionOverride, isDepartmentAutoPermission, type PermissionKey } from '@/lib/department-permissions';
@@ -424,8 +424,8 @@ function AdminPage() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
+  const handleLogout = async () => {
+    await logoutCurrentUser();
     setUser(null);
     setAuthenticated(false);
     setRole(null);

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
 import { createNotification } from '@/lib/notifications';
 import { requirePermission } from '@/lib/auth';
-import { getActivityScopes, newActivityId, normalizeIds, scopeMatchesUser } from '@/lib/business-rules';
+import { getActivityScopes, nextActivityId, normalizeIds, scopeMatchesUser } from '@/lib/business-rules';
 import { hydrateActivityLeaderDetails } from '@/lib/hydrate-activity-leaders';
 
 async function notifyUsers(ids: string[], type: string, title: string, content: string, relatedId: string) {
@@ -53,7 +53,7 @@ export async function PUT(request: NextRequest) {
       if (!claimed) return null;
 
       if (review_status === '已通过') {
-        activityId = newActivityId();
+        activityId = await nextActivityId(client);
         await client.query(`INSERT INTO activities (id,full_name,start_time,end_time,registration_start_time,registration_end_time,category,category_primary,category_secondary,level,plan_file_url,plan_file_name,record_file_url,record_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,leader_ids,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,status,scoring_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,'正常活动','待赋分')`, [
           activityId, submission.full_name, submission.start_time, submission.end_time, submission.registration_start_time || null, submission.registration_end_time || null, submission.category, submission.category_primary || null, submission.category_secondary || null, submission.level,
           submission.plan_file_url, submission.plan_file_name || null, submission.record_file_url, submission.record_file_name || null, submission.leader_name, submission.leader_phone,

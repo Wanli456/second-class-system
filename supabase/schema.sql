@@ -84,6 +84,11 @@ CREATE TABLE IF NOT EXISTS activities (
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS activity_id_counters (
+  year_month TEXT PRIMARY KEY,
+  next_number INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS activity_submissions (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   full_name TEXT NOT NULL,

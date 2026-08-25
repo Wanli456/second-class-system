@@ -1,6 +1,7 @@
-import { randomUUID } from 'crypto';
 import type { AuthUser } from '@/lib/auth';
 import { computeDepartmentAutoPerms, parsePermissionOverrides, type PermissionKey } from '@/lib/department-permissions';
+import type { DatabaseClient } from '@/storage/database/supabase-client';
+import { getBusinessDate } from './business-time';
 
 export type ActivityScope = 'department' | 'class';
 
@@ -11,23 +12,53 @@ export interface ActivityScopeAssignment {
   name: string;
 }
 
-export function newActivityId() {
-  const now = new Date();
-  const month = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
-  return `EK${month}${randomUUID().replaceAll('-', '').slice(0, 8)}`;
+export function getBusinessYearMonth(date = new Date()): string {
+  return getBusinessDate(date).slice(0, 7).replace('-', '');
+}
+
+export function formatActivityId(yearMonth: string, sequence: number): string {
+  if (!/^\d{6}$/.test(yearMonth) || !Number.isInteger(sequence) || sequence < 1) {
+    throw new Error('活动编号参数无效');
+  }
+  return `EK${yearMonth}${String(sequence).padStart(3, '0')}`;
+}
+
+export async function nextActivityId(client: DatabaseClient, date = new Date()): Promise<string> {
+  const yearMonth = getBusinessYearMonth(date);
+  const existingIds = await client.query<{ id: string }>('SELECT id FROM activities WHERE id LIKE $1', [`EK${yearMonth}%`]);
+  const maxExistingSequence = existingIds.rows.reduce((max, row) => {
+    const match = /^EK\d{6}(\d+)$/.exec(row.id);
+    const sequence = match ? Number(match[1]) : 0;
+    return Number.isInteger(sequence) ? Math.max(max, sequence) : max;
+  }, 0);
+
+  await client.query(
+    `INSERT INTO activity_id_counters (year_month,next_number) VALUES ($1,$2)
+     ON CONFLICT (year_month) DO NOTHING`,
+    [yearMonth, maxExistingSequence + 1],
+  );
+  const counter = await client.query<{ next_number: number }>(
+    `UPDATE activity_id_counters SET next_number=next_number+1
+     WHERE year_month=$1 RETURNING next_number`,
+    [yearMonth],
+  );
+  const nextNumber = Number(counter.rows[0]?.next_number);
+  if (!Number.isInteger(nextNumber) || nextNumber < 2) throw new Error('活动编号计数器初始化失败');
+  return formatActivityId(yearMonth, nextNumber - 1);
 }
 
 export function normalizeIds(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map(String).filter(Boolean);
-  if (typeof value === 'string') {
+  let values: unknown[] = [];
+  if (Array.isArray(value)) values = value;
+  else if (typeof value === 'string') {
     try {
       const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+      values = Array.isArray(parsed) ? parsed : value.split(',');
     } catch {
-      return value.split(',').map((id) => id.trim()).filter(Boolean);
+      values = value.split(',');
     }
   }
-  return [];
+  return [...new Set(values.map((id) => String(id).trim()).filter(Boolean))];
 }
 
 export function serializeIds(ids: string[]) {

@@ -14,6 +14,8 @@ type RosterStudent = {
   student_name: string;
 };
 
+class ClassRosterConflictError extends Error {}
+
 function canManageClassRoster(user: { role?: string | null; department?: string | null }) {
   return user.role === 'admin' || (user.role === 'leader' && user.department?.trim() === '学习竞技部');
 }
@@ -103,13 +105,14 @@ export async function POST(request: NextRequest) {
       const conflicts = conflictResult.rows as Array<{ student_id: string; class_name: string }>;
       if (conflicts.length) {
         const conflictText = conflicts.map((row) => `${row.student_id}（${row.class_name}）`).join('、');
-        throw new Error(`学号已属于其他班级：${conflictText}`);
+        throw new ClassRosterConflictError(`学号已属于其他班级：${conflictText}`);
       }
       await client.query('DELETE FROM class_roster WHERE class_name=$1', [className]);
       await client.query(`INSERT INTO class_roster (class_name, student_id, student_name) VALUES ${placeholders}`, values);
     });
     return NextResponse.json({ success: true, count: students.length });
   } catch (error) {
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '保存班级花名册失败' }, { status: 500 });
+    const status = error instanceof ClassRosterConflictError ? 409 : 500;
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '保存班级花名册失败' }, { status });
   }
 }

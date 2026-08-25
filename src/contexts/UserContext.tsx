@@ -27,7 +27,6 @@ interface User {
   className?: string | null;
   contactPhone?: string | null;
   permissionOverrides?: string | null;
-  sessionToken?: string;
 }
 
 interface UserContextType {

@@ -24,6 +24,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useUser } from '@/contexts/UserContext';
 import { hasPermission, type PermissionKey } from '@/lib/department-permissions';
 import { isDepartmentUserManager } from '@/lib/department-user-management';
+import { logoutCurrentUser } from '@/lib/client-api';
 import { NotificationBell } from '@/components/NotificationBell';
 
 const SIDEBAR_SCROLL_STORAGE_KEY = 'dashboard-sidebar-scroll-top';
@@ -55,7 +56,7 @@ interface User {
 interface DashboardLayoutProps {
   children: React.ReactNode;
   user?: User | null;
-  onLogout?: () => void;
+  onLogout?: () => void | Promise<void>;
   title?: string;
   activeNavHref?: string;
 }
@@ -317,11 +318,11 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
     return () => window.cancelAnimationFrame(frame);
   }, [currentRoute, isMobile, mobileOpen, visibleItems.length]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
+  const handleLogout = async () => {
     if (onLogout) {
-      onLogout();
+      await onLogout();
     } else {
+      await logoutCurrentUser();
       globalUser.setUser(null);
     }
     startTransition(() => {

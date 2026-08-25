@@ -4,6 +4,7 @@ import { DepartmentUsers } from '@/components/DepartmentUsers';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { useUser } from '@/contexts/UserContext';
+import { logoutCurrentUser } from '@/lib/client-api';
 import { isDepartmentUserManager } from '@/lib/department-user-management';
 
 type Department = '学习竞技部' | '第二课堂认证中心';
@@ -19,8 +20,8 @@ export function DepartmentUsersScopedPage({ department, title }: DepartmentUsers
   if (!initialized) return <AuthLoadingScreen />;
 
   const canAccess = user?.role === 'admin' || (isDepartmentUserManager(user) && user?.department === department);
-  const handleLogout = () => {
-    localStorage.removeItem('user');
+  const handleLogout = async () => {
+    await logoutCurrentUser();
     setUser(null);
   };
 

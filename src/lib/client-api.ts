@@ -1,5 +1,20 @@
 type StoredUser = { sessionToken?: unknown };
 
+export function removeSessionToken<T extends Record<string, unknown>>(user: T): Omit<T, 'sessionToken'> {
+  const { sessionToken: _sessionToken, ...safeUser } = user;
+  return safeUser;
+}
+
+export async function logoutCurrentUser() {
+  try {
+    await fetch('/api/auth', { method: 'DELETE', credentials: 'include' });
+  } catch (error) {
+    console.warn('服务端退出登录请求失败，已清理本地会话:', error);
+  } finally {
+    window.localStorage.removeItem('user');
+  }
+}
+
 export async function refreshCurrentUser<T extends object = Record<string, unknown>>() {
   if (typeof window === 'undefined') return null;
 
@@ -7,7 +22,8 @@ export async function refreshCurrentUser<T extends object = Record<string, unkno
   try {
     const saved = window.localStorage.getItem('user');
     if (!saved) return null;
-    savedUser = JSON.parse(saved) as Record<string, unknown>;
+    savedUser = removeSessionToken(JSON.parse(saved) as Record<string, unknown>);
+    window.localStorage.setItem('user', JSON.stringify(savedUser));
   } catch {
     window.localStorage.removeItem('user');
     return null;
@@ -17,7 +33,7 @@ export async function refreshCurrentUser<T extends object = Record<string, unkno
     const response = await apiFetch('/api/auth?me=true');
     const result = await response.json();
     if (response.ok && result.success && result.data) {
-      const currentUser = { ...savedUser, ...result.data };
+      const currentUser = removeSessionToken({ ...savedUser, ...result.data });
       window.localStorage.setItem('user', JSON.stringify(currentUser));
       return currentUser as T;
     }
@@ -35,23 +51,7 @@ export async function refreshCurrentUser<T extends object = Record<string, unkno
   return savedUser as T;
 }
 
-function sessionToken() {
-  if (typeof window === 'undefined') return null;
-
-  try {
-    const stored = window.localStorage.getItem('user');
-    if (!stored) return null;
-    const user = JSON.parse(stored) as StoredUser;
-    return typeof user.sessionToken === 'string' && user.sessionToken ? user.sessionToken : null;
-  } catch {
-    return null;
-  }
-}
-
 export function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
-  const token = sessionToken();
-  if (token) headers.set('Authorization', `Bearer ${token}`);
-
   return fetch(input, { ...init, headers, credentials: init.credentials ?? 'include' });
 }
