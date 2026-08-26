@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
 
     // 扩展名之外再校验文件头，防止把可执行文件等危险内容改扩展名伪装成图片/文档绕过上面的校验。
-    const actualKind = detectFileKindFromBytes(buffer);
+    const actualKind = detectFileKindFromBytes(buffer, originalName);
     if (!actualKind || actualKind !== extKind) {
       return NextResponse.json({ success: false, error: '文件内容与扩展名不匹配，请重新选择文件' }, { status: 400 });
     }

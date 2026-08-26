@@ -44,11 +44,13 @@ function matchesSignature(buffer: Buffer, signature: { bytes: number[]; offset?:
   return signature.bytes.every((byte, index) => buffer[offset + index] === byte);
 }
 
-export function detectFileKindFromBytes(buffer: Buffer): UploadFileKind | null {
+export function detectFileKindFromBytes(buffer: Buffer, fileName = ''): UploadFileKind | null {
   for (const signature of MAGIC_SIGNATURES) {
     if (matchesSignature(buffer, signature)) return signature.kind;
   }
   // csv 是纯文本，没有固定魔数；放宽为不含空字节的可打印内容即可。
+  const extension = fileName.split('.').pop()?.toLowerCase() || '';
+  if (extension !== 'csv') return null;
   const sample = buffer.subarray(0, Math.min(buffer.length, 512));
   if (sample.length > 0 && !sample.includes(0)) return 'document';
   return null;

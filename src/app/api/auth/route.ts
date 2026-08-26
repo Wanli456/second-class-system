@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ensureDatabaseSchema, query, queryOne } from '@/storage/database/supabase-client';
+import { ensureDatabaseSchema, query, queryOne, withTransaction } from '@/storage/database/supabase-client';
 import {
   clearSessionCookie,
   hashPassword,
@@ -180,49 +180,51 @@ export async function DELETE(request: NextRequest) {
       if (Number(count?.count || 0) <= 1) return NextResponse.json({ success: false, error: '不能删除最后一个管理员' }, { status: 400 });
     }
     // 保存提交时的身份快照，避免删除账号后历史记录失去原提交人信息。
-    await query(
-      `UPDATE activities
-       SET activity_submitter_name=COALESCE(activity_submitter_name,$1),
-           activity_submitter_student_id=COALESCE(activity_submitter_student_id,$2)
-       WHERE activity_submitter_id=$3`,
-      [target.username, target.student_id, id],
-    );
-    await query(
-      `UPDATE activities
-       SET scoring_material_submitter_name=COALESCE(scoring_material_submitter_name,$1),
-           scoring_material_submitter_student_id=COALESCE(scoring_material_submitter_student_id,$2)
-       WHERE scoring_material_submitter_id=$3`,
-      [target.username, target.student_id, id],
-    );
-    await query(
-      `UPDATE activity_submissions
-       SET scoring_material_submitter_name=COALESCE(scoring_material_submitter_name,$1),
-           scoring_material_submitter_student_id=COALESCE(scoring_material_submitter_student_id,$2)
-       WHERE scoring_material_submitter_id=$3`,
-      [target.username, target.student_id, id],
-    );
-    await query(
-      `UPDATE activity_submissions
-       SET activity_submitter_name=COALESCE(activity_submitter_name,$1),
-           activity_submitter_student_id=COALESCE(activity_submitter_student_id,$2)
-       WHERE activity_submitter_id=$3`,
-      [target.username, target.student_id, id],
-    );
-    await query(
-      `UPDATE leave_requests
-       SET applicant_name=COALESCE(applicant_name,$1),
-           applicant_student_id=COALESCE(applicant_student_id,$2)
-       WHERE applicant_user_id=$3`,
-      [target.username, target.student_id, id],
-    );
-    await query(
-      `UPDATE leave_groups
-       SET applicant_name=COALESCE(applicant_name,$1),
-           applicant_student_id=COALESCE(applicant_student_id,$2)
-       WHERE applicant_user_id=$3`,
-      [target.username, target.student_id, id],
-    );
-    await query('DELETE FROM users WHERE id=$1', [id]);
+    await withTransaction(async (client) => {
+      await client.query(
+        `UPDATE activities
+         SET activity_submitter_name=COALESCE(activity_submitter_name,$1),
+             activity_submitter_student_id=COALESCE(activity_submitter_student_id,$2)
+         WHERE activity_submitter_id=$3`,
+        [target.username, target.student_id, id],
+      );
+      await client.query(
+        `UPDATE activities
+         SET scoring_material_submitter_name=COALESCE(scoring_material_submitter_name,$1),
+             scoring_material_submitter_student_id=COALESCE(scoring_material_submitter_student_id,$2)
+         WHERE scoring_material_submitter_id=$3`,
+        [target.username, target.student_id, id],
+      );
+      await client.query(
+        `UPDATE activity_submissions
+         SET scoring_material_submitter_name=COALESCE(scoring_material_submitter_name,$1),
+             scoring_material_submitter_student_id=COALESCE(scoring_material_submitter_student_id,$2)
+         WHERE scoring_material_submitter_id=$3`,
+        [target.username, target.student_id, id],
+      );
+      await client.query(
+        `UPDATE activity_submissions
+         SET activity_submitter_name=COALESCE(activity_submitter_name,$1),
+             activity_submitter_student_id=COALESCE(activity_submitter_student_id,$2)
+         WHERE activity_submitter_id=$3`,
+        [target.username, target.student_id, id],
+      );
+      await client.query(
+        `UPDATE leave_requests
+         SET applicant_name=COALESCE(applicant_name,$1),
+             applicant_student_id=COALESCE(applicant_student_id,$2)
+         WHERE applicant_user_id=$3`,
+        [target.username, target.student_id, id],
+      );
+      await client.query(
+        `UPDATE leave_groups
+         SET applicant_name=COALESCE(applicant_name,$1),
+             applicant_student_id=COALESCE(applicant_student_id,$2)
+         WHERE applicant_user_id=$3`,
+        [target.username, target.student_id, id],
+      );
+      await client.query('DELETE FROM users WHERE id=$1', [id]);
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Failed to delete user:', error);
