@@ -9,12 +9,21 @@ const SESSION_COOKIE = 'second_class_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const FALLBACK_SECRET = 'second-class-local-development-secret';
 
-function sessionCookieOptions() {
-  const isProduction = process.env.NODE_ENV === 'production';
+function sessionCookieOptions(request?: NextRequest) {
+  const forwardedProtocol = request?.headers.get('x-forwarded-proto')?.split(',')[0].trim().toLowerCase();
+  const requestProtocol = forwardedProtocol || (request ? new URL(request.url).protocol.replace(':', '') : null);
+  const configuredSecure = process.env.AUTH_COOKIE_SECURE?.trim().toLowerCase();
+  const secure = configuredSecure === 'true'
+    ? true
+    : configuredSecure === 'false'
+      ? false
+      : requestProtocol
+        ? requestProtocol === 'https'
+        : process.env.NODE_ENV === 'production';
   return {
     httpOnly: true,
     sameSite: 'lax' as const,
-    secure: isProduction,
+    secure,
     path: '/',
   };
 }
@@ -229,15 +238,15 @@ export async function requirePermission(request: NextRequest, permission: 'admin
   return { user, response: null };
 }
 
-export function setSessionCookie(response: NextResponse, userId: string, token = createSessionToken(userId)) {
+export function setSessionCookie(response: NextResponse, userId: string, token = createSessionToken(userId), request?: NextRequest) {
   response.cookies.set({
     name: SESSION_COOKIE,
     value: token,
-    ...sessionCookieOptions(),
+    ...sessionCookieOptions(request),
     maxAge: SESSION_TTL_SECONDS,
   });
 }
 
-export function clearSessionCookie(response: NextResponse) {
-  response.cookies.set({ name: SESSION_COOKIE, value: '', ...sessionCookieOptions(), maxAge: 0 });
+export function clearSessionCookie(response: NextResponse, request?: NextRequest) {
+  response.cookies.set({ name: SESSION_COOKIE, value: '', ...sessionCookieOptions(request), maxAge: 0 });
 }

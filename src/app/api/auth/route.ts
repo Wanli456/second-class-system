@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     );
     if (!user) return NextResponse.json({ success: false, error: '注册失败' }, { status: 500 });
     const response = NextResponse.json({ success: true, data: publicUser(user) });
-    setSessionCookie(response, user.id);
+    setSessionCookie(response, user.id, undefined, request);
     return response;
   } catch (error) {
     console.error('Registration failed:', error);
@@ -50,7 +50,7 @@ export async function PUT(request: NextRequest) {
     if (!user || !(await verifyPassword(password, user.password))) return NextResponse.json({ success: false, error: '学号、姓名或密码错误' }, { status: 401 });
     if (!user.password.startsWith('scrypt$')) await query('UPDATE users SET password=$1 WHERE id=$2', [await hashPassword(password), user.id]);
     const response = NextResponse.json({ success: true, data: publicUser(user) });
-    setSessionCookie(response, user.id);
+    setSessionCookie(response, user.id, undefined, request);
     return response;
   } catch (error) {
     console.error('Login failed:', error);
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
       if (auth.response) return auth.response;
       const response = NextResponse.json({ success: true, data: publicUser(auth.user!) });
       // A verified legacy bearer session is migrated to an HttpOnly cookie.
-      setSessionCookie(response, auth.user!.id);
+      setSessionCookie(response, auth.user!.id, undefined, request);
       return response;
     }
     if (searchParams.get('directory') === 'true') {
@@ -167,7 +167,7 @@ export async function DELETE(request: NextRequest) {
   const id = new URL(request.url).searchParams.get('id');
   if (!id) {
     const response = NextResponse.json({ success: true });
-    clearSessionCookie(response);
+    clearSessionCookie(response, request);
     return response;
   }
   try {

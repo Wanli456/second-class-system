@@ -5,7 +5,7 @@ const sportsLeader = {
   id: 'user-1',
   username: '负责人',
   student_id: '20260001',
-  role: 'leader',
+  role: 'leader' as const,
   department: '学习竞技部',
   can_upload_leave: false,
   can_publish: false,
