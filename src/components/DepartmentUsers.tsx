@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DepartmentClassRosterManager } from '@/components/DepartmentClassRosterManager';
 import { apiFetch, logoutCurrentUser } from '@/lib/client-api';
+import { computeDepartmentAutoPerms } from '@/lib/department-permissions';
 import type { DepartmentUserManagementDepartment } from '@/lib/department-user-management';
 
 type PermissionKey =
@@ -65,6 +66,7 @@ type ManagedUser = {
   role: string | null;
   department: string | null;
   className: string | null;
+  contactPhone: string | null;
   permissions: Partial<Record<PermissionKey, boolean>>;
 };
 
@@ -78,7 +80,7 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [roleChanges, setRoleChanges] = useState<Record<string, 'student' | 'class_leader'>>({});
+  const [roleChanges, setRoleChanges] = useState<Record<string, 'student' | 'class_leader' | 'leader'>>({});
   const [nameQuery, setNameQuery] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -124,9 +126,23 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
     setMessage('');
   };
 
-  const updateRole = (userId: string, role: 'student' | 'class_leader') => {
-    setUsers((current) => current.map((item) => item.id === userId ? { ...item, role } : item));
+  const updateRole = (userId: string, role: 'student' | 'class_leader' | 'leader') => {
+    setUsers((current) => current.map((item) => item.id === userId ? {
+      ...item,
+      role,
+      permissions: {
+        ...item.permissions,
+        // 与后端一致：班级负责人→假条上传，部门负责人→提交原假条，取消身份即收回。
+        canUploadLeave: role === 'class_leader',
+        canSubmitOriginalLeave: role === 'leader',
+      },
+    } : item));
     setRoleChanges((current) => ({ ...current, [userId]: role }));
+    setMessage('');
+  };
+
+  const updateContactPhone = (userId: string, value: string) => {
+    setUsers((current) => current.map((item) => item.id === userId ? { ...item, contactPhone: value } : item));
     setMessage('');
   };
 
@@ -142,6 +158,7 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
           userId: user.id,
           permissions: user.permissions,
           department: managedDepartment,
+          ...(user.role === 'leader' ? { contactPhone: user.contactPhone?.trim() || null } : {}),
           ...(roleChanges[user.id] ? { role: roleChanges[user.id] } : {}),
         }),
       });
@@ -185,7 +202,7 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
             <div>
               <div className="flex items-center gap-2 text-xs font-semibold text-teal-700"><ShieldCheck className="size-4" />部门权限管理</div>
               <h1 className="mt-1 text-xl font-bold">{department}用户管理</h1>
-              <p className="mt-1 text-sm text-slate-500">学习竞技部可管理所有学生与班级负责人，并设置班级负责人及相关业务权限。</p>
+              <p className="mt-1 text-sm text-slate-500">学习竞技部可管理学生、班级负责人与各部门的部门负责人；设为部门负责人后自动获得提交原假条权限；归属部门由管理员在用户管理界面设置。</p>
             </div>
           </div>
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600"><Users className="size-4 text-teal-700" />共 {users.length} 人</div>
@@ -214,7 +231,12 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
           <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">未找到姓名包含“{nameQuery.trim()}”的用户。</div>
         ) : (
           <div className="space-y-4">
-            {visibleUsers.map((user) => (
+            {visibleUsers.map((user) => {
+              // 负责人的部门自动权限按所属部门计算：归属学习竞技部时这组业务权限全部自动授予（不可手改）；
+              // 未归属部门或归属其他部门（其自动权限不含这组键）时保持可手动勾选。
+              const autoPerms = user.role === 'leader' ? computeDepartmentAutoPerms(user.role, user.department) : null;
+              const hasAutoPerms = autoPerms !== null && permissionKeys.some((key) => Boolean(autoPerms[key]));
+              return (
               <section key={user.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
                   <div className="min-w-0">
@@ -224,14 +246,28 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
                       <label className="mt-3 flex w-fit items-center gap-2 text-sm text-slate-700">
                         账号角色
                         <select
-                          value={user.role === 'class_leader' ? 'class_leader' : 'student'}
-                          onChange={(event) => updateRole(user.id, event.target.value as 'student' | 'class_leader')}
+                          value={user.role === 'leader' ? 'leader' : user.role === 'class_leader' ? 'class_leader' : 'student'}
+                          onChange={(event) => updateRole(user.id, event.target.value as 'student' | 'class_leader' | 'leader')}
                           disabled={savingId === user.id}
                           className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
                         >
                           <option value="student">学生</option>
                           <option value="class_leader">班级负责人（自动获得假条上传权限）</option>
+                          <option value="leader">部门负责人（自动获得提交原假条权限；归属部门由管理员设置）</option>
                         </select>
+                      </label>
+                    )}
+                    {managedDepartment === '学习竞技部' && user.role === 'leader' && (
+                      <label className="mt-2 flex w-fit items-center gap-2 text-sm text-slate-700">
+                        联系方式
+                        <input
+                          type="tel"
+                          value={user.contactPhone || ''}
+                          onChange={(event) => updateContactPhone(user.id, event.target.value)}
+                          placeholder="部门负责人的联系电话"
+                          disabled={savingId === user.id}
+                          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+                        />
                       </label>
                     )}
                   </div>
@@ -240,15 +276,21 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
                   </button>
                 </div>
                 <div className="mt-4 grid gap-2 border-t border-slate-100 pt-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {permissionKeys.map((key) => (
-                    <label key={key} title={PERMISSION_HINTS[key]} className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50">
-                      <input type="checkbox" checked={Boolean(user.permissions[key])} onChange={(event) => updatePermission(user.id, key, event.target.checked)} className="size-4 accent-teal-700" />
-                      <span>{PERMISSION_LABELS[key] || key}</span>
-                    </label>
-                  ))}
+                  {permissionKeys.map((key) => {
+                    const isAutoPermission = Boolean(autoPerms?.[key]);
+                    return (
+                      <label key={key} title={PERMISSION_HINTS[key]} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50" style={{ cursor: isAutoPermission ? 'default' : 'pointer' }}>
+                        <input type="checkbox" checked={isAutoPermission || Boolean(user.permissions[key])} onChange={(event) => updatePermission(user.id, key, event.target.checked)} disabled={isAutoPermission || savingId === user.id} className="size-4 accent-teal-700 disabled:opacity-60" />
+                        <span>{PERMISSION_LABELS[key] || key}</span>
+                      </label>
+                    );
+                  })}
                 </div>
+                {hasAutoPerms && <p className="mt-2 text-xs text-slate-500">该负责人已归属部门且勾选项由部门自动授予，手动修改不生效。</p>}
+                {autoPerms !== null && !hasAutoPerms && <p className="mt-2 text-xs text-slate-500">该负责人暂无部门自动权限（未归属部门，或所属部门不含这些业务权限），可手动勾选业务权限；归属部门由管理员在用户管理界面设置。</p>}
               </section>
-            ))}
+              );
+            })}
           </div>
         )}
         {managedDepartment === '学习竞技部' && <DepartmentClassRosterManager onUnauthorized={redirectToLogin} />}

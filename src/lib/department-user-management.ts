@@ -74,6 +74,9 @@ export function canManageTargetUser(
   const targetDepartment = normalizedDepartment(target.department);
   if (scope.department === '学习竞技部') {
     // 学习竞技部负责维护班级负责人；目标学生不需要属于学习竞技部。
+    // 部门负责人统一由学习竞技部维护：无论归属哪个部门（含管理员后来归入的其他部门），
+    // 学竞界面都可见可管理，便于收回身份与维护联系方式。
+    if (target.role === 'leader') return true;
     return target.role === 'class_leader' || target.role === 'student';
   }
 
@@ -92,4 +95,14 @@ export function getEditablePermissionKeys(
   const scope = getManagedUserScope(manager, managedDepartment);
   if (!scope || (target && !canManageTargetUser(manager, target, managedDepartment))) return [];
   return [...DEPARTMENT_USER_MANAGEMENT[scope.department].permissionKeys];
+}
+
+// 角色分配策略：部门用户管理里只有学习竞技部可以设定角色，
+// 学习竞技部可把学生晋升为部门负责人（部门自动权限随身份生效）。
+export function canAssignManagedRole(
+  department: DepartmentUserManagementDepartment,
+  role: string,
+): boolean {
+  if (department !== '学习竞技部') return false;
+  return role === 'student' || role === 'class_leader' || role === 'leader';
 }
