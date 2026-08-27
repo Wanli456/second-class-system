@@ -1,7 +1,6 @@
 import { createServer } from 'http';
 import { parse } from 'url';
 import next from 'next';
-import { ensureDatabaseSchema } from '@/storage/database/supabase-client';
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME || 'localhost';
@@ -23,6 +22,7 @@ app.prepare().then(async () => {
   }
 
   try {
+    const { ensureDatabaseSchema } = await import('@/storage/database/supabase-client');
     await ensureDatabaseSchema();
   } catch (error) {
     console.error('Database schema migration failed:', error);

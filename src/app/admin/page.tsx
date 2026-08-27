@@ -484,6 +484,9 @@ function AdminPage() {
       } else {
         alert(data.error || '赋分失败');
       }
+    } catch (error) {
+      console.error('赋分失败:', error);
+      alert('赋分失败');
     } finally {
       setScoringInProgress(false);
     }
@@ -608,18 +611,23 @@ function AdminPage() {
   };
 
   const handleReviewSubmission = async (id: string, status: ReviewStatus) => {
-    const res = await apiFetch('/api/activities/review', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, review_status: status, review_note: reviewNote || null }),
-    });
-    const data = await res.json();
-    if (data.success) {
-      setReviewNote('');
-      fetchSubmissions();
-      if (isAdmin) fetchActivities();
-    } else {
-      alert(data.error);
+    try {
+      const res = await apiFetch('/api/activities/review', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, review_status: status, review_note: reviewNote || null }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setReviewNote('');
+        fetchSubmissions();
+        if (isAdmin) fetchActivities();
+      } else {
+        alert(data.error);
+      }
+    } catch (error) {
+      console.error('审核提交失败:', error);
+      alert('审核提交失败');
     }
   };
 
@@ -653,18 +661,28 @@ function AdminPage() {
   };
 
   const handleUpdateContactPhone = async (userId: string, contactPhone: string | null) => {
-    const res = await apiFetch('/api/auth', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, contactPhone }) });
-    const data = await res.json();
-    if (!data.success) { alert(data.error || '更新联系方式失败'); return; }
-    setUsers((previous) => previous.map((item) => item.id === userId ? { ...item, contactPhone } : item));
+    try {
+      const res = await apiFetch('/api/auth', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, contactPhone }) });
+      const data = await res.json();
+      if (!data.success) { alert(data.error || '更新联系方式失败'); return; }
+      setUsers((previous) => previous.map((item) => item.id === userId ? { ...item, contactPhone } : item));
+    } catch (error) {
+      console.error('更新联系方式失败:', error);
+      alert('更新联系方式失败');
+    }
   };
 
   const handleDeleteActivity = async (id: string) => {
     if (!confirm('确认删除该活动？')) return;
-    const res = await apiFetch(`/api/activities?id=${id}`, { method: 'DELETE' });
-    const data = await res.json();
-    if (data.success) fetchActivities();
-    else alert(data.error);
+    try {
+      const res = await apiFetch(`/api/activities?id=${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) fetchActivities();
+      else alert(data.error);
+    } catch (error) {
+      console.error('删除活动失败:', error);
+      alert('删除活动失败');
+    }
   };
 
   const filteredActivities = activities.filter(a => {

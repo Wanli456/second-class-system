@@ -56,7 +56,7 @@ async function resolveInputPath(imageUrl: string, tempDir: string, index: number
     const timer = setTimeout(() => controller.abort(), 15000);
     let response: Response;
     try {
-      response = await fetch(imageUrl, { signal: controller.signal });
+      response = await fetch(imageUrl, { redirect: 'error', signal: controller.signal });
     } finally {
       clearTimeout(timer);
     }
