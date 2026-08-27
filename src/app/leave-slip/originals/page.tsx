@@ -8,6 +8,7 @@ import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
+import { parseLeaveSlipArray as parseJsonArray } from '@/lib/leave-slip-array';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
 import { ImageUploadPreviews } from '@/components/ImageUploadPreviews';
 import { Button } from '@/components/ui/button';
@@ -31,16 +32,6 @@ interface OriginalSlip {
   image_list: string | null;
   notes: string | null;
   created_at: string;
-}
-
-function parseJsonArray(value: string | null): string[] {
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.map(String) : [value];
-  } catch {
-    return value.split(',').map((item) => item.trim()).filter(Boolean);
-  }
 }
 
 function parseImageList(value: string | null): Array<{ url: string; name?: string }> {
@@ -264,8 +255,8 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
           activity_name: activityName.trim() || null,
           class_names: classNames,
           student_names: studentEntries,
-          start_time: startTime ? new Date(startTime).toISOString() : null,
-          end_time: endTime ? new Date(endTime).toISOString() : null,
+          start_time: startTime || null,
+          end_time: endTime || null,
           images: uploaded,
           image_url: uploaded[0]?.url || null,
           image_name: uploaded[0]?.name || null,

@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
+import { parseLeaveSlipArray as parseJsonArray } from '@/lib/leave-slip-array';
 
 type LeaveSlip = {
   id: string;
@@ -41,16 +42,6 @@ type OriginalSlip = {
 };
 
 type SlipStudent = { slip_id: string; student_id: string; student_name: string; class_name: string };
-
-function parseJsonArray(value: string | null): string[] {
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.map(String) : [value];
-  } catch {
-    return value.split(',').map((item) => item.trim()).filter(Boolean);
-  }
-}
 
 function originalImage(original: OriginalSlip): { url: string; name: string } | null {
   if (original.image_url) return { url: original.image_url, name: original.image_name || '原假条图片' };
@@ -95,8 +86,8 @@ export default function LeaveSlipComparePage() {
     setEditActivityId(slip?.activity_id || '');
     setActivitySearch(slip?.activity_name || '');
     setEditLeaveType(slip?.leave_type || '');
-    setEditStartTime(slip?.start_time ? new Date(slip.start_time).toISOString().slice(0, 16) : '');
-    setEditEndTime(slip?.end_time ? new Date(slip.end_time).toISOString().slice(0, 16) : '');
+    setEditStartTime(slip?.start_time ? slip.start_time.slice(0, 16) : '');
+    setEditEndTime(slip?.end_time ? slip.end_time.slice(0, 16) : '');
     setIsEditDialogOpen(true);
   };
 

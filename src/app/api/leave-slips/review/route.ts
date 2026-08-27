@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth';
-import { query, queryOne } from '@/storage/database/supabase-client';
+import { query, queryOne, withWallTime, withWallTimes } from '@/storage/database/supabase-client';
 
 const REVIEW_STATUSES = ['待查对', '已通过', '已驳回'] as const;
 
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
       ? await query(`SELECT * FROM leave_slip_students WHERE slip_id IN (${slipIds.map((_, index) => `$${index + 1}`).join(',')}) ORDER BY slip_id, student_id`, slipIds)
       : [];
 
-    return NextResponse.json({ success: true, data: slips, students });
+    return NextResponse.json({ success: true, data: withWallTimes(slips), students });
   } catch (error) {
     console.error('获取待查对假条失败:', error);
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '获取待查对假条失败' }, { status: 500 });
@@ -86,7 +86,7 @@ export async function PUT(request: NextRequest) {
     );
     if (!data) return NextResponse.json({ success: false, error: '假条状态已变化，请刷新后重试' }, { status: 409 });
 
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true, data: withWallTime(data) });
   } catch (error) {
     console.error('查对假条失败:', error);
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '查对假条失败' }, { status: 500 });

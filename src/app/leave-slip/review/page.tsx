@@ -181,7 +181,7 @@ export default function LeaveSlipReviewPage() {
                     {slip.duplicate_warning && <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{slip.duplicate_warning}</p>}
                     {slip.original_image_difference_warning && <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">图片一致性风险{slip.original_image_similarity !== null ? `（最低匹配相似度 ${slip.original_image_similarity}%）` : ''}：{slip.original_image_difference_warning}</p>}
                     <p className="mt-3 text-sm font-semibold text-slate-900">班级：{classNames.join('、')}</p>
-                    <p className="mt-1 text-sm text-slate-600">上传：{slip.applicant_name || '-'}（{slip.applicant_student_id || '-'}） · {slip.start_time ? new Date(slip.start_time).toLocaleString('zh-CN') : '-'} 至 {slip.end_time ? new Date(slip.end_time).toLocaleString('zh-CN') : '-'}</p>
+                    <p className="mt-1 text-sm text-slate-600">上传：{slip.applicant_name || '-'}（{slip.applicant_student_id || '-'}） · {slip.start_time ? slip.start_time.replace('T', ' ') : '-'} 至 {slip.end_time ? slip.end_time.replace('T', ' ') : '-'}</p>
                     {slip.activity_name && <p className="mt-1 text-sm text-slate-600">活动：{slip.activity_name}</p>}
                     <div className="mt-3 flex flex-wrap gap-2 text-xs">
                       <span className={cn('rounded-md border px-2 py-1', slip.counselor_signature ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-400')}>辅导员签字·{slip.counselor_signature ? '已勾选' : '未勾选'}</span>

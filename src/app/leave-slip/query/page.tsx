@@ -9,6 +9,7 @@ import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
+import { parseLeaveSlipArray as parseJsonArray } from '@/lib/leave-slip-array';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -31,16 +32,6 @@ interface Slip {
   created_at: string;
 }
 interface SlipStudent { id: string; slip_id: string; student_id: string; student_name: string; class_name: string; }
-function parseJsonArray(value: string | null): string[] {
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.map(String) : [value];
-  } catch {
-    return value.split(',').map((item) => item.trim()).filter(Boolean);
-  }
-}
-
 export default function LeaveSlipQueryPage() {
   return <React.Suspense fallback={<AuthLoadingScreen />}><LeaveSlipQueryContent /></React.Suspense>;
 }

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth';
-import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
+import { query, queryOne, withTransaction, withWallTime, withWallTimes } from '@/storage/database/supabase-client';
 import { computeImageHashes } from '@/lib/image-hash';
+import { normalizeDateTimeInput } from '@/lib/datetime';
 
 function parseArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
     if (id) {
       const original = await queryOne('SELECT * FROM original_leave_slips WHERE id=$1', [id]);
       if (!original) return NextResponse.json({ success: false, error: '原假条不存在' }, { status: 404 });
-      return NextResponse.json({ success: true, data: [original] });
+      return NextResponse.json({ success: true, data: [withWallTime(original)] });
     }
 
     const where: string[] = [];
@@ -61,10 +62,10 @@ export async function GET(request: NextRequest) {
       where.push(`class_names ILIKE $${paramIndex++}`);
     }
 
-    const data = await query(
+    const data = withWallTimes(await query(
       `SELECT * FROM original_leave_slips ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT 200`,
       params,
-    );
+    ));
     return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error('查询原假条失败:', error);
@@ -90,8 +91,9 @@ export async function POST(request: NextRequest) {
     if (!activity) return NextResponse.json({ success: false, error: '活动不存在或已删除，请重新选择活动' }, { status: 400 });
     if (activity.full_name !== activityName) return NextResponse.json({ success: false, error: '活动名称与活动 ID 不一致，请重新选择活动' }, { status: 400 });
 
-    const startTime = body.start_time ? new Date(String(body.start_time)) : null;
-    const endTime = body.end_time ? new Date(String(body.end_time)) : null;
+    // 原假条起止时间同样按本地墙钟字符串入库，与普通假条保持同一约定。
+    const startTime = normalizeDateTimeInput(body.start_time);
+    const endTime = normalizeDateTimeInput(body.end_time);
     const images = parseImages(body.images);
     const imageList = images.length ? images : (body.image_url ? [{ url: String(body.image_url), name: String(body.image_name || body.image_url.split('/').pop() || '') }] : []);
     const ocrNames = parseArray(body.ocr_names);
@@ -100,9 +102,9 @@ export async function POST(request: NextRequest) {
       `INSERT INTO original_leave_slips (activity_id, activity_name, class_names, student_names, start_time, end_time, image_url, image_name, image_list, ocr_names, image_hashes, notes, created_by_user_id, created_by_name)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING *`,
-      [activity.id, activity.full_name, JSON.stringify(classNames), JSON.stringify(studentNames), startTime ? startTime.toISOString() : null, endTime ? endTime.toISOString() : null, imageList.length ? imageList[0].url : null, imageList.length ? imageList[0].name : null, JSON.stringify(imageList), JSON.stringify(ocrNames), JSON.stringify(imageHashes), body.notes ? String(body.notes) : null, user.id, user.username],
+      [activity.id, activity.full_name, JSON.stringify(classNames), JSON.stringify(studentNames), startTime, endTime, imageList.length ? imageList[0].url : null, imageList.length ? imageList[0].name : null, JSON.stringify(imageList), JSON.stringify(ocrNames), JSON.stringify(imageHashes), body.notes ? String(body.notes) : null, user.id, user.username],
     );
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true, data: data ? withWallTime(data) : null });
   } catch (error) {
     console.error('创建原假条失败:', error);
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '创建原假条失败' }, { status: 500 });

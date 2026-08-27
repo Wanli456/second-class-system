@@ -2,7 +2,15 @@ import { Pool, type QueryResultRow } from 'pg';
 import { newDb, DataType } from 'pg-mem';
 import { LOCAL_TEST_DATA_SQL } from './local-test-data';
 
-const useLocalTestDatabase = !process.env.PGDATABASE_URL;
+const databaseUrl = process.env.PGDATABASE_URL?.trim();
+const isProductionRuntime = process.env.NODE_ENV === 'production'
+  && process.env.NEXT_PHASE !== 'phase-production-build';
+
+if (isProductionRuntime && !databaseUrl) {
+  throw new Error('生产环境缺少 PGDATABASE_URL，拒绝回退到内存数据库');
+}
+
+const useLocalTestDatabase = !databaseUrl;
 
 type DatabasePool = {
   query: <T extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]) => Promise<{ rows: T[] }>;
@@ -298,7 +306,7 @@ if (localDb && shouldInitializeLocalDb) {
 const pool: DatabasePool = useLocalTestDatabase
   ? runtimeGlobal.__secondClassLocalDatabase?.pool ?? new (localDb!.adapters.createPg().Pool)() as DatabasePool
   : new Pool({
-      connectionString: process.env.PGDATABASE_URL,
+      connectionString: databaseUrl,
       ssl: { rejectUnauthorized: false },
     }) as DatabasePool;
 
@@ -708,6 +716,25 @@ export async function query<T extends QueryResultRow = QueryResultRow>(sql: stri
 export async function queryOne<T extends QueryResultRow = QueryResultRow>(sql: string, params: unknown[] = []): Promise<T | null> {
   const rows = await query<T>(sql, params);
   return rows[0] || null;
+}
+
+// pg-mem 把无时区 TIMESTAMP 解析为 UTC，生产 pg 按服务器本地时区解析；
+// 读取假条起止时间时按各自约定对称还原成「墙钟」字符串（YYYY-MM-DDTHH:mm:ss），
+// 前端因此不需要再判断服务器时区。ponytail: 若未来更换数据库驱动，需要重新核对解析约定。
+export function toWallTimeString(value: unknown): string | null {
+  if (!(value instanceof Date)) return null;
+  if (useLocalTestDatabase) return value.toISOString().slice(0, 19);
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`;
+}
+
+// 把查询结果行中的 start_time/end_time（驱动返回的 Date）还原成墙钟字符串。
+export function withWallTime<T extends QueryResultRow>(row: T): T {
+  return { ...row, start_time: toWallTimeString(row.start_time), end_time: toWallTimeString(row.end_time) } as T;
+}
+
+export function withWallTimes<T extends QueryResultRow>(rows: T[]): T[] {
+  return rows.map(withWallTime);
 }
 
 export async function withTransaction<T>(callback: (client: DatabaseClient) => Promise<T>): Promise<T> {

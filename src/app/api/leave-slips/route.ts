@@ -1,10 +1,11 @@
-import { getUtcDayRangeForBusinessDate } from '@/lib/business-time';
+import { getDayRangeForBusinessDate } from '@/lib/business-time';
 import { NextRequest, NextResponse } from 'next/server';
-import { calculateUserPermissions, requirePermission, requireUser, type AuthUser } from '@/lib/auth';
-import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
+import { calculateUserPermissions, requireUser, type AuthUser } from '@/lib/auth';
+import { query, queryOne, withTransaction, withWallTime, withWallTimes } from '@/storage/database/supabase-client';
 import { compareSlipWithOriginals } from '@/lib/leave-slip-matching';
 import { computeImageHashes } from '@/lib/image-hash';
 import { detectDuplicateSlip } from '@/lib/leave-slip-duplicate';
+import { normalizeDateTimeInput } from '@/lib/datetime';
 
 const SLIP_TYPES = ['手写假条', '二课活动请假', '校级（且不为数经举办）假条', '手机假条', '其他请假'] as const;
 const LEAVE_TYPES = ['事假', '病假', '活动公假'] as const;
@@ -190,9 +191,10 @@ export async function POST(request: NextRequest) {
     // 同一假条内的班级数不超过 15 个，防止把全年级并到一张假条上。
     if (classNames.length > 15) return NextResponse.json({ success: false, error: '一张假条最多覆盖 15 个班级' }, { status: 400 });
 
-    const startTime = body.start_time ? new Date(String(body.start_time)) : null;
-    const endTime = body.end_time ? new Date(String(body.end_time)) : null;
-    if (startTime && endTime && !Number.isNaN(startTime.getTime()) && !Number.isNaN(endTime.getTime()) && endTime <= startTime) {
+    // 起止时间按「本地墙钟」字符串入库（YYYY-MM-DDTHH:mm:ss），同格式可按字典序比较先后。
+    const startTime = normalizeDateTimeInput(body.start_time);
+    const endTime = normalizeDateTimeInput(body.end_time);
+    if (endTime && startTime && endTime <= startTime) {
       return NextResponse.json({ success: false, error: '结束时间必须晚于开始时间' }, { status: 400 });
     }
 
@@ -230,7 +232,7 @@ export async function POST(request: NextRequest) {
       const slip = (await client.query(
         `INSERT INTO leave_slips (slip_type, leave_type, class_names, start_time, end_time, activity_id, activity_name, applicant_user_id, applicant_name, applicant_student_id, leave_image_url, leave_image_name, image_list, ocr_names, image_hashes, counselor_signature, official_seal, teacher_signature, is_late, review_status)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
-        [slipType, leaveType, JSON.stringify(classNames), startTime ? startTime.toISOString() : null, endTime ? endTime.toISOString() : null, activityId, activityName, user.id, user.username, user.student_id, imageList[0].url, imageList[0].name, JSON.stringify(imageList), JSON.stringify(ocrNames), JSON.stringify(imageHashes), counselorSignature, officialSeal, teacherSignature, isLate, initialReviewStatus],
+        [slipType, leaveType, JSON.stringify(classNames), startTime, endTime, activityId, activityName, user.id, user.username, user.student_id, imageList[0].url, imageList[0].name, JSON.stringify(imageList), JSON.stringify(ocrNames), JSON.stringify(imageHashes), counselorSignature, officialSeal, teacherSignature, isLate, initialReviewStatus],
       )).rows[0] as { id: string };
 
       for (const student of students) {
@@ -264,7 +266,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: result,
+      data: withWallTime(result),
       warnings,
     });
   } catch (error) {
@@ -315,7 +317,7 @@ export async function GET(request: NextRequest) {
       const students = canQueryAll
         ? await query('SELECT * FROM leave_slip_students WHERE slip_id=$1 ORDER BY student_id', [id])
         : await query('SELECT * FROM leave_slip_students WHERE slip_id=$1 AND student_id=$2 ORDER BY student_id', [id, user.student_id]);
-      return NextResponse.json({ success: true, data: [canReviewInternalSignals ? slip : withoutInternalReviewFields(slip)], students });
+      return NextResponse.json({ success: true, data: [withWallTime(canReviewInternalSignals ? slip : withoutInternalReviewFields(slip))], students });
     }
 
     const where: string[] = [];
@@ -348,7 +350,7 @@ export async function GET(request: NextRequest) {
       where.push(`original_slip_id = $${paramIndex++}`);
     }
     if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      const { start, end } = getUtcDayRangeForBusinessDate(date);
+      const { start, end } = getDayRangeForBusinessDate(date);
       params.push(start, end);
       where.push(`(start_time >= $${paramIndex} AND start_time < $${paramIndex + 1} OR created_at >= $${paramIndex} AND created_at < $${paramIndex + 1})`);
       paramIndex += 2;
@@ -362,7 +364,7 @@ export async function GET(request: NextRequest) {
     }
 
     const sql = `SELECT * FROM leave_slips ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT 200`;
-    const slips = await query(sql, params);
+    const slips = withWallTimes(await query(sql, params));
     const slipIds = slips.map((slip) => String((slip as { id: string }).id));
     const students = slipIds.length
       ? canQueryAll
@@ -411,9 +413,9 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const id = String(body.id || '').trim();
     const leaveType = String(body.leave_type || '').trim();
-    const startTime = body.start_time ? new Date(String(body.start_time)) : null;
-    const endTime = body.end_time ? new Date(String(body.end_time)) : null;
-    if (!id || !leaveType || !startTime || Number.isNaN(startTime.getTime()) || !endTime || Number.isNaN(endTime.getTime())) {
+    const startTime = normalizeDateTimeInput(body.start_time);
+    const endTime = normalizeDateTimeInput(body.end_time);
+    if (!id || !leaveType || !startTime || !endTime) {
       return NextResponse.json({ success: false, error: '请完整填写请假类型、开始时间和结束时间' }, { status: 400 });
     }
     if (endTime <= startTime) return NextResponse.json({ success: false, error: '结束时间必须晚于开始时间' }, { status: 400 });
@@ -461,10 +463,10 @@ export async function PUT(request: NextRequest) {
     // 读取校验和这次写入之间已经查对过该假条，这里必须失败并提示刷新，而不是静默改回待查对。
     const updated = await queryOne(
       "UPDATE leave_slips SET activity_id=$1, activity_name=$2, class_names=$3, leave_type=$4, start_time=$5, end_time=$6, original_slip_id=NULL, review_status='待查对', review_note=NULL, reviewed_by_user_id=NULL, reviewed_by_name=NULL, reviewed_at=NULL WHERE id=$7 AND review_status=$8 RETURNING *",
-      [activityId, activityName || null, JSON.stringify(classNames), leaveType, startTime.toISOString(), endTime.toISOString(), id, current.review_status],
+      [activityId, activityName || null, JSON.stringify(classNames), leaveType, startTime, endTime, id, current.review_status],
     );
     if (!updated) return NextResponse.json({ success: false, error: '假条状态已被其他操作更新，请刷新后重试' }, { status: 409 });
-    return NextResponse.json({ success: true, data: updated, message: '假条已修改，已解除原对比关联并回到待查对' });
+    return NextResponse.json({ success: true, data: withWallTime(updated), message: '假条已修改，已解除原对比关联并回到待查对' });
   } catch (error) {
     console.error('修改假条失败:', error);
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '修改假条失败' }, { status: 500 });

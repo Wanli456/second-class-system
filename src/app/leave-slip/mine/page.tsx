@@ -99,7 +99,7 @@ export default function MyLeaveSlipsPage() {
                   <span className={cn('rounded-md border px-2 py-1 text-xs font-medium', slip.review_status === '已通过' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : slip.review_status === '已驳回' ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-amber-200 bg-amber-50 text-amber-700')}>{slip.review_status}</span>
                 </div>
                 <p className="mt-3 flex items-start gap-2 text-sm text-slate-900"><FileText className="mt-0.5 size-4 shrink-0 text-slate-400" />班级：{parseClasses(slip.class_names).join('、')}</p>
-                <p className="mt-1 text-sm text-slate-600">时间：{slip.start_time ? new Date(slip.start_time).toLocaleString('zh-CN') : '-'} 至 {slip.end_time ? new Date(slip.end_time).toLocaleString('zh-CN') : '-'}</p>
+                <p className="mt-1 text-sm text-slate-600">时间：{slip.start_time ? slip.start_time.replace('T', ' ') : '-'} 至 {slip.end_time ? slip.end_time.replace('T', ' ') : '-'}</p>
                 {slip.activity_name && <p className="mt-1 text-sm text-slate-600">活动：{slip.activity_name}</p>}
                 <div className="mt-3 rounded-lg bg-slate-50 p-3">
                   <p className="mb-2 text-xs font-medium text-slate-600">名单（{rows.length} 人）</p>
