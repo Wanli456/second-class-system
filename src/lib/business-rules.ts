@@ -173,14 +173,6 @@ function hasEffectivePermission(user: Partial<RawPermissionUser>, key: Permissio
   return Boolean(user[RAW_PERMISSION_FIELD[key]]);
 }
 
-export function canStartGroupLeave(user: Pick<AuthUser, 'role' | 'department' | 'can_start_group_leave' | 'class_name'>) {
-  return Boolean(user.class_name) && hasEffectivePermission(user, 'canStartGroupLeave');
-}
-
-export function canManageAttendanceWork(user: Pick<AuthUser, 'role' | 'department' | 'can_manage_attendance_work'>) {
-  return hasEffectivePermission(user, 'canManageAttendanceWork');
-}
-
 export function canOpenAdminTab(
   user: Pick<AuthUser, 'role' | 'department' | 'can_publish' | 'can_score' | 'can_review_leave'>,
   tab: string | null | undefined,
@@ -192,13 +184,6 @@ export function canOpenAdminTab(
     case 'leave': return hasEffectivePermission(user, 'canReviewLeave');
     default: return false;
   }
-}
-
-export function canResubmitGroupLeave(
-  userId: string,
-  group: { applicant_user_id?: string | null; review_status?: string | null },
-) {
-  return group.applicant_user_id === userId && group.review_status !== '已通过';
 }
 
 export function scopeMatchesUser(user: ScopedUser, scopes: ActivityScopeAssignment[]) {
@@ -215,17 +200,6 @@ function dedupeScopes(scopes: ActivityScopeAssignment[]) {
   return [...new Map(scopes.map((scope) => [`${scope.type}:${scope.name}`, scope])).values()];
 }
 
-export function includeApplicantStudent(studentIds: string[], applicantStudentId: string | null | undefined) {
-  return [...new Set([...studentIds, applicantStudentId || ''].filter(Boolean))];
-}
-
-export function selectAllClassStudents(
-  classMembers: Array<{ student_id: string }>,
-  applicantStudentId: string | null | undefined,
-) {
-  return includeApplicantStudent(classMembers.map((member) => member.student_id), applicantStudentId);
-}
-
 type ScopedUser = Pick<AuthUser, 'role' | 'department' | 'class_name'>;
 
 export function userScope(user: ScopedUser, scopeType: ActivityScope, scopeName: string | null | undefined) {
@@ -234,15 +208,6 @@ export function userScope(user: ScopedUser, scopeType: ActivityScope, scopeName:
   return scopeType === 'class'
     ? user.class_name === scopeName
     : user.department === scopeName;
-}
-
-export function hasScopePermission(user: AuthUser, permission: 'submitActivity' | 'submitScoring', scopeType: ActivityScope, scopeName: string | null | undefined) {
-  const key = permission === 'submitActivity' ? 'canSubmitActivity' : 'canSubmitScoring';
-  return hasEffectivePermission(user, key) && userScope(user, scopeType, scopeName);
-}
-
-export function parseDateOnly(value: string | null) {
-  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
 }
 
 export function validateActivityTimes(input: {
