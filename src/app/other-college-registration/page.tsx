@@ -18,6 +18,7 @@ async function uploadFile(file: File): Promise<UploadedFile> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('bucket', 'app-files');
+  formData.append('purpose', 'other-college');
   const response = await apiFetch('/api/upload', { method: 'POST', body: formData });
   const data = await response.json() as { success?: boolean; url?: string; file_name?: string; error?: string };
   if (!data.success || !data.url) throw new Error(data.error || '文件上传失败');

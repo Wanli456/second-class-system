@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Download, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { previewKind, type PreviewKind } from '@/lib/file-preview';
+import { apiFetch } from '@/lib/client-api';
 
 type ExcelSheet = {
   name: string;
@@ -79,7 +80,7 @@ function sanitizeWordHtml(html: string): string {
 }
 
 async function fetchPreviewBuffer(url: string): Promise<ArrayBuffer> {
-  const response = await fetch(url);
+  const response = await apiFetch(url);
   if (!response.ok) throw new Error(`文件读取失败（HTTP ${response.status}）`);
   return response.arrayBuffer();
 }

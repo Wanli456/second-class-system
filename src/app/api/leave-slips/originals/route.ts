@@ -3,6 +3,7 @@ import { requirePermission } from '@/lib/auth';
 import { query, queryOne, withTransaction, withWallTime, withWallTimes } from '@/storage/database/supabase-client';
 import { computeImageHashes } from '@/lib/image-hash';
 import { normalizeDateTimeInput } from '@/lib/datetime';
+import { readIdempotencyKey } from '@/lib/idempotency';
 
 function parseArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
@@ -32,26 +33,27 @@ function parseImages(value: unknown): ImageInput[] {
 
 export async function GET(request: NextRequest) {
   try {
-    let auth = await requirePermission(request, 'queryLeave');
-    if (auth.response) {
-      auth = await requirePermission(request, 'manageOriginalLeave');
-      if (auth.response) return auth.response;
-    }
+    let auth = await requirePermission(request, 'manageOriginalLeave');
+    if (auth.response) auth = await requirePermission(request, 'reviewLeave');
+    if (auth.response) return auth.response;
 
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    const id = searchParams.get('id')?.trim();
+    const ids = [...new Set((searchParams.get('ids') || '').split(',').map((value) => value.trim()).filter(Boolean))];
+    const requestedIds = id ? [id] : ids;
+    if (requestedIds.length > 100) return NextResponse.json({ success: false, error: '一次最多查询 100 条原假条' }, { status: 400 });
     const keyword = searchParams.get('keyword')?.trim();
     const className = searchParams.get('class')?.trim();
-
-    if (id) {
-      const original = await queryOne('SELECT * FROM original_leave_slips WHERE id=$1', [id]);
-      if (!original) return NextResponse.json({ success: false, error: '原假条不存在' }, { status: 404 });
-      return NextResponse.json({ success: true, data: [withWallTime(original)] });
-    }
 
     const where: string[] = [];
     const params: unknown[] = [];
     let paramIndex = 1;
+
+    if (requestedIds.length) {
+      params.push(...requestedIds);
+      where.push(`id IN (${requestedIds.map((_, index) => `$${paramIndex + index}`).join(',')})`);
+      paramIndex += requestedIds.length;
+    }
 
     if (keyword) {
       params.push(`%${keyword}%`);
@@ -66,6 +68,7 @@ export async function GET(request: NextRequest) {
       `SELECT * FROM original_leave_slips ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT 200`,
       params,
     ));
+    if (id && !data.length) return NextResponse.json({ success: false, error: '原假条不存在' }, { status: 404 });
     return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error('查询原假条失败:', error);
@@ -78,8 +81,15 @@ export async function POST(request: NextRequest) {
     const auth = await requirePermission(request, 'submitOriginalLeave');
     if (auth.response) return auth.response;
     const user = auth.user!;
+    const idempotencyKey = readIdempotencyKey(request.headers);
+    if (!idempotencyKey) return NextResponse.json({ success: false, error: '缺少或无效的幂等请求标识' }, { status: 400 });
 
     const body = await request.json();
+    const repeated = await queryOne<Record<string, unknown>>('SELECT * FROM original_leave_slips WHERE idempotency_key=$1', [idempotencyKey]);
+    if (repeated) {
+      if (repeated.created_by_user_id !== user.id && user.role !== 'admin') return NextResponse.json({ success: false, error: '重复请求标识已被其他用户使用' }, { status: 409 });
+      return NextResponse.json({ success: true, data: withWallTime(repeated) });
+    }
     const activityId = body.activity_id ? String(body.activity_id).trim() : '';
     const activityName = body.activity_name ? String(body.activity_name).trim() : '';
     const classNames = parseArray(body.class_names);
@@ -96,15 +106,23 @@ export async function POST(request: NextRequest) {
     const endTime = normalizeDateTimeInput(body.end_time);
     const images = parseImages(body.images);
     const imageList = images.length ? images : (body.image_url ? [{ url: String(body.image_url), name: String(body.image_name || body.image_url.split('/').pop() || '') }] : []);
+    if (!classNames.length || !studentNames.length || !startTime || !endTime || !imageList.length) {
+      return NextResponse.json({ success: false, error: '原假条必须填写学生、起止时间并上传图片' }, { status: 400 });
+    }
+    if (endTime <= startTime) return NextResponse.json({ success: false, error: '结束时间必须晚于开始时间' }, { status: 400 });
     const ocrNames = parseArray(body.ocr_names);
     const imageHashes = await computeImageHashes(imageList.map((item) => item.url));
     const data = await queryOne(
-      `INSERT INTO original_leave_slips (activity_id, activity_name, class_names, student_names, start_time, end_time, image_url, image_name, image_list, ocr_names, image_hashes, notes, created_by_user_id, created_by_name)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+      `INSERT INTO original_leave_slips (activity_id, activity_name, class_names, student_names, start_time, end_time, image_url, image_name, image_list, ocr_names, image_hashes, notes, created_by_user_id, created_by_name, idempotency_key)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ON CONFLICT (idempotency_key) DO NOTHING
        RETURNING *`,
-      [activity.id, activity.full_name, JSON.stringify(classNames), JSON.stringify(studentNames), startTime, endTime, imageList.length ? imageList[0].url : null, imageList.length ? imageList[0].name : null, JSON.stringify(imageList), JSON.stringify(ocrNames), JSON.stringify(imageHashes), body.notes ? String(body.notes) : null, user.id, user.username],
+      [activity.id, activity.full_name, JSON.stringify(classNames), JSON.stringify(studentNames), startTime, endTime, imageList[0].url, imageList[0].name, JSON.stringify(imageList), JSON.stringify(ocrNames), JSON.stringify(imageHashes), body.notes ? String(body.notes) : null, user.id, user.username, idempotencyKey],
     );
-    return NextResponse.json({ success: true, data: data ? withWallTime(data) : null });
+    if (data) return NextResponse.json({ success: true, data: withWallTime(data) });
+    const repeatedAfterRace = await queryOne<Record<string, unknown>>('SELECT * FROM original_leave_slips WHERE idempotency_key=$1', [idempotencyKey]);
+    if (!repeatedAfterRace) return NextResponse.json({ success: false, error: '提交未完成，请重试' }, { status: 409 });
+    if (repeatedAfterRace.created_by_user_id !== user.id && user.role !== 'admin') return NextResponse.json({ success: false, error: '重复请求标识已被其他用户使用' }, { status: 409 });
+    return NextResponse.json({ success: true, data: withWallTime(repeatedAfterRace) });
   } catch (error) {
     console.error('创建原假条失败:', error);
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '创建原假条失败' }, { status: 500 });

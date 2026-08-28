@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission, requireUser } from '@/lib/auth';
-import { ensureDatabaseSchema, query, queryOne } from '@/storage/database/supabase-client';
+import { ensureDatabaseSchema, lockTransactionKey, query, queryOne, withTransaction } from '@/storage/database/supabase-client';
 
 function normalizeName(value: unknown) {
   return String(value ?? '').trim();
@@ -71,12 +71,16 @@ export async function DELETE(request: NextRequest) {
 
   const id = new URL(request.url).searchParams.get('id');
   if (!id) return NextResponse.json({ success: false, error: '缺少部门 ID' }, { status: 400 });
-  const department = await queryOne<{ name: string }>('SELECT name FROM departments WHERE id=$1', [id]);
-  if (!department) return NextResponse.json({ success: false, error: '部门不存在' }, { status: 404 });
-  const assigned = await queryOne<{ count: number }>('SELECT COUNT(*)::int AS count FROM users WHERE department=$1', [department.name]);
-  if (Number(assigned?.count || 0) > 0) {
-    return NextResponse.json({ success: false, error: '该部门仍有用户归属，不能删除' }, { status: 400 });
-  }
-  await query('DELETE FROM departments WHERE id=$1', [id]);
+  const deleted = await withTransaction(async (client) => {
+    const department = (await client.query<{ name: string }>('SELECT name FROM departments WHERE id=$1 FOR UPDATE', [id])).rows[0];
+    if (!department) return { kind: 'missing' as const };
+    await lockTransactionKey(client, department.name);
+    const assigned = (await client.query<{ count: number }>('SELECT COUNT(*)::int AS count FROM users WHERE department=$1', [department.name])).rows[0];
+    if (Number(assigned?.count || 0) > 0) return { kind: 'assigned' as const };
+    await client.query('DELETE FROM departments WHERE id=$1', [id]);
+    return { kind: 'deleted' as const };
+  });
+  if (deleted.kind === 'missing') return NextResponse.json({ success: false, error: '部门不存在' }, { status: 404 });
+  if (deleted.kind === 'assigned') return NextResponse.json({ success: false, error: '该部门仍有用户归属，不能删除' }, { status: 400 });
   return NextResponse.json({ success: true });
 }

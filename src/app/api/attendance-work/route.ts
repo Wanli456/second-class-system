@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { calculateUserPermissions, requirePermission, requireUser } from '@/lib/auth';
 import { query, queryOne } from '@/storage/database/supabase-client';
+import { readIdempotencyKey } from '@/lib/idempotency';
 
 const REVIEW_STATUSES = ['待查对', '已通过', '已驳回'] as const;
 
@@ -96,11 +97,22 @@ export async function POST(request: NextRequest) {
     const auth = await requirePermission(request, 'manageAttendanceWork');
     if (auth.response) return auth.response;
     const user = auth.user!;
+    const idempotencyKey = readIdempotencyKey(request.headers);
+    if (!idempotencyKey) return NextResponse.json({ success: false, error: '缺少或无效的幂等请求标识' }, { status: 400 });
+    const repeated = await queryOne<Record<string, unknown>>('SELECT * FROM attendance_work_arrangements WHERE idempotency_key=$1', [idempotencyKey]);
+    if (repeated) {
+      if (repeated.created_by_user_id !== user.id && user.role !== 'admin') return NextResponse.json({ success: false, error: '重复请求标识已被其他用户使用' }, { status: 409 });
+      return NextResponse.json({ success: true, data: { id: repeated.id, review_status: repeated.review_status } });
+    }
 
     const body = await request.json();
     const name = String(body.name || '考勤工作安排').trim();
+    if (name.length > 100) return NextResponse.json({ success: false, error: '安排名称不能超过 100 个字符' }, { status: 400 });
     const weekStartDate = String(body.week_start_date || body.start_date || '').trim();
     const rawSchedules = parseSchedules(body.schedules);
+    if (rawSchedules.length > 7 || rawSchedules.some((item) => item.students.length > 200)) {
+      return NextResponse.json({ success: false, error: '每天最多 200 名考勤人员，一次最多 7 天' }, { status: 400 });
+    }
     const legacyStudentNames = parseNames(body.student_names);
     const legacyEndDate = String(body.end_date || '').trim();
     let schedules = rawSchedules;
@@ -118,6 +130,7 @@ export async function POST(request: NextRequest) {
 
     const allNames = [...new Set(schedules.flatMap((item) => item.students))];
     if (!allNames.length) return NextResponse.json({ success: false, error: '请至少填写一名考勤人员姓名' }, { status: 400 });
+    if (allNames.length > 500 || allNames.some((item) => item.length > 50)) return NextResponse.json({ success: false, error: '考勤人员总数不能超过 500 名，姓名不能超过 50 个字符' }, { status: 400 });
     const dates = schedules.map((item) => item.date).sort();
     const startDate = dates[0];
     // 旧版整周名单：保持原始 end_date，避免只生成周一当天。
@@ -127,15 +140,22 @@ export async function POST(request: NextRequest) {
     const fallbackUrl = body.leave_image_url ? String(body.leave_image_url) : (Array.isArray(body.image_list) ? body.image_list[0] : '');
     const imageList = images.length ? images : (fallbackUrl ? [{ url: fallbackUrl, name: String(body.leave_image_name || '考勤表') }] : []);
     if (!imageList.length) return NextResponse.json({ success: false, error: '请上传考勤工作安排表截图' }, { status: 400 });
+    if (imageList.length > 20) return NextResponse.json({ success: false, error: '一次最多上传 20 张图片' }, { status: 400 });
 
     const id = `aw-${randomUUID()}`;
-    await query(
-      `INSERT INTO attendance_work_arrangements (id, name, start_date, end_date, student_names, schedules, image_list, ocr_names, review_status, created_by_user_id, created_by_name)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'待查对',$9,$10)`,
-      [id, name, startDate, endDate, JSON.stringify(allNames), JSON.stringify(schedules), JSON.stringify(imageList), JSON.stringify(allNames), user.id, user.username],
+    const inserted = await queryOne(
+      `INSERT INTO attendance_work_arrangements (id, name, start_date, end_date, student_names, schedules, image_list, ocr_names, review_status, created_by_user_id, created_by_name, idempotency_key)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'待查对',$9,$10,$11) ON CONFLICT (idempotency_key) DO NOTHING RETURNING id, review_status`,
+      [id, name, startDate, endDate, JSON.stringify(allNames), JSON.stringify(schedules), JSON.stringify(imageList), JSON.stringify(allNames), user.id, user.username, idempotencyKey],
     );
+    if (!inserted) {
+      const repeatedAfterRace = await queryOne<Record<string, unknown>>('SELECT id, review_status, created_by_user_id FROM attendance_work_arrangements WHERE idempotency_key=$1', [idempotencyKey]);
+      if (!repeatedAfterRace) return NextResponse.json({ success: false, error: '提交未完成，请重试' }, { status: 409 });
+      if (repeatedAfterRace.created_by_user_id !== user.id && user.role !== 'admin') return NextResponse.json({ success: false, error: '重复请求标识已被其他用户使用' }, { status: 409 });
+      return NextResponse.json({ success: true, data: { id: repeatedAfterRace.id, review_status: repeatedAfterRace.review_status } });
+    }
 
-    return NextResponse.json({ success: true, data: { id, review_status: '待查对' } });
+    return NextResponse.json({ success: true, data: inserted });
   } catch (error) {
     console.error('提交考勤工作安排失败:', error);
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '提交失败' }, { status: 500 });

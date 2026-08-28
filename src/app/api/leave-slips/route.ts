@@ -4,6 +4,7 @@ import { calculateUserPermissions, requireUser, type AuthUser } from '@/lib/auth
 import { query, queryOne, withTransaction, withWallTime, withWallTimes } from '@/storage/database/supabase-client';
 import { compareSlipWithOriginals } from '@/lib/leave-slip-matching';
 import { computeImageHashes } from '@/lib/image-hash';
+import { readIdempotencyKey } from '@/lib/idempotency';
 import { detectDuplicateSlip } from '@/lib/leave-slip-duplicate';
 import { normalizeDateTimeInput } from '@/lib/datetime';
 
@@ -110,6 +111,13 @@ export async function POST(request: NextRequest) {
     const auth = await requireUser(request);
     if (auth.response) return auth.response;
     const user = auth.user!;
+    const idempotencyKey = readIdempotencyKey(request.headers);
+    if (!idempotencyKey) return NextResponse.json({ success: false, error: '缺少或无效的幂等请求标识' }, { status: 400 });
+    const repeated = await queryOne<Record<string, unknown>>('SELECT * FROM leave_slips WHERE idempotency_key=$1', [idempotencyKey]);
+    if (repeated) {
+      if (repeated.applicant_user_id !== user.id && user.role !== 'admin') return NextResponse.json({ success: false, error: '重复请求标识已被其他用户使用' }, { status: 409 });
+      return NextResponse.json({ success: true, data: withWallTime(repeated), warnings: [] });
+    }
 
     const body = await request.json();
     const slipType = String(body.slip_type || '');
@@ -230,10 +238,17 @@ export async function POST(request: NextRequest) {
 
     const result = await withTransaction(async (client) => {
       const slip = (await client.query(
-        `INSERT INTO leave_slips (slip_type, leave_type, class_names, start_time, end_time, activity_id, activity_name, applicant_user_id, applicant_name, applicant_student_id, leave_image_url, leave_image_name, image_list, ocr_names, image_hashes, counselor_signature, official_seal, teacher_signature, is_late, review_status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
-        [slipType, leaveType, JSON.stringify(classNames), startTime, endTime, activityId, activityName, user.id, user.username, user.student_id, imageList[0].url, imageList[0].name, JSON.stringify(imageList), JSON.stringify(ocrNames), JSON.stringify(imageHashes), counselorSignature, officialSeal, teacherSignature, isLate, initialReviewStatus],
-      )).rows[0] as { id: string };
+        `INSERT INTO leave_slips (slip_type, leave_type, class_names, start_time, end_time, activity_id, activity_name, applicant_user_id, applicant_name, applicant_student_id, leave_image_url, leave_image_name, image_list, ocr_names, image_hashes, counselor_signature, official_seal, teacher_signature, is_late, idempotency_key, review_status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,'待查对') ON CONFLICT (idempotency_key) DO NOTHING RETURNING *`,
+        [slipType, leaveType, JSON.stringify(classNames), startTime, endTime, activityId, activityName, user.id, user.username, user.student_id, imageList[0].url, imageList[0].name, JSON.stringify(imageList), JSON.stringify(ocrNames), JSON.stringify(imageHashes), counselorSignature, officialSeal, teacherSignature, isLate, idempotencyKey],
+      )).rows[0] as { id: string } | undefined;
+
+      if (!slip) {
+        const repeatedAfterRace = (await client.query('SELECT * FROM leave_slips WHERE idempotency_key=$1', [idempotencyKey])).rows[0] as { id: string; applicant_user_id?: string } | undefined;
+        if (!repeatedAfterRace) throw new Error('重复提交校验失败，请重试');
+        if (repeatedAfterRace.applicant_user_id !== user.id && user.role !== 'admin') throw new Error('重复请求标识已被其他用户使用');
+        return { slip: repeatedAfterRace, created: false };
+      }
 
       for (const student of students) {
         await client.query(
@@ -241,15 +256,15 @@ export async function POST(request: NextRequest) {
           [slip.id, student.student_id, student.student_name, student.class_name],
         );
       }
-      return slip;
+      return { slip, created: true };
     });
 
     const isCollectiveActivitySlip = slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条';
     let duplicateCheck: Awaited<ReturnType<typeof detectDuplicateSlip>> | null = null;
     try {
       // 活动类假条是“同一张原活动假条、多个班级各自提交本班名单”，图片相同/相似是正常的，不做 P 图查重。
-      if (result?.id && !isCollectiveActivitySlip) {
-        duplicateCheck = await detectDuplicateSlip(String(result.id), imageHashes);
+       if (result.created && result.slip?.id && !isCollectiveActivitySlip) {
+         duplicateCheck = await detectDuplicateSlip(String(result.slip.id), imageHashes);
       }
     } catch (duplicateError) {
       console.error('假条图片查重失败:', duplicateError);
@@ -257,7 +272,7 @@ export async function POST(request: NextRequest) {
 
     let autoMatch = null;
     try {
-      if (result?.id) autoMatch = await compareSlipWithOriginals(String(result.id));
+       if (result.created && result.slip?.id) autoMatch = await compareSlipWithOriginals(String(result.slip.id));
     } catch (matchError) {
       console.error('假条自动比对失败:', matchError);
     }
@@ -266,7 +281,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: withWallTime(result),
+      data: withWallTime(result.slip),
       warnings,
     });
   } catch (error) {

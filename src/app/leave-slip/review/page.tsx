@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AlertCircle, Check, Clock, Search, X } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -62,10 +62,12 @@ export default function LeaveSlipReviewPage() {
   const [keyword, setKeyword] = useState('');
   const [loading, setLoading] = useState(false);
   const [reviewNote, setReviewNote] = useState('');
+  const loadVersionRef = useRef(0);
 
   const canAccess = hasPermission(user, 'canReviewLeave');
 
   const load = async () => {
+    const loadVersion = ++loadVersionRef.current;
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -75,20 +77,24 @@ export default function LeaveSlipReviewPage() {
       const data = await res.json();
       if (!data.success) throw new Error(data.error || '查询失败');
       const loadedSlips: Slip[] = data.data || [];
+      if (loadVersion !== loadVersionRef.current) return;
       setSlips(loadedSlips);
       setStudents(data.students || []);
 
       const originalIds = [...new Set(loadedSlips.map((slip) => slip.original_slip_id).filter((id): id is string => Boolean(id)))];
       const fetched: Record<string, OriginalForReview> = {};
-      for (const originalId of originalIds) {
+      if (originalIds.length) {
         try {
-          const originalRes = await apiFetch(`/api/leave-slips/originals?id=${encodeURIComponent(originalId)}`);
+          const originalRes = await apiFetch(`/api/leave-slips/originals?ids=${encodeURIComponent(originalIds.join(','))}`);
           const originalData = await originalRes.json();
-          if (originalData.success && Array.isArray(originalData.data) && originalData.data[0]) fetched[originalId] = originalData.data[0];
+          if (originalData.success && Array.isArray(originalData.data)) {
+            for (const original of originalData.data as OriginalForReview[]) fetched[original.id] = original;
+          }
         } catch (fetchError) {
           console.error('加载原假条失败:', fetchError);
         }
       }
+      if (loadVersion !== loadVersionRef.current) return;
       setOriginalsMap(fetched);
     } catch (error) {
       alert(error instanceof Error ? error.message : '查询失败');

@@ -39,9 +39,22 @@ async function run() {
      WHERE table_name = $1
        AND column_name = ANY($2)
      ORDER BY column_name`,
-    ['activity_submissions', ['category_primary', 'category_secondary', 'registration_end_time', 'registration_start_time', 'scoring_material_submitter_name', 'scoring_material_submitter_student_id']],
+    ['activity_submissions', ['category_primary', 'category_secondary', 'idempotency_key', 'registration_end_time', 'registration_start_time', 'scoring_material_submitter_name', 'scoring_material_submitter_student_id']],
   );
-  assert.deepEqual(submissionColumns.map((column) => column.column_name), ['category_primary', 'category_secondary', 'registration_end_time', 'registration_start_time', 'scoring_material_submitter_name', 'scoring_material_submitter_student_id']);
+  assert.deepEqual(submissionColumns.map((column) => column.column_name), ['category_primary', 'category_secondary', 'idempotency_key', 'registration_end_time', 'registration_start_time', 'scoring_material_submitter_name', 'scoring_material_submitter_student_id']);
+
+  const idempotencyColumns = await query<{ table_name: string; column_name: string }>(
+    `SELECT table_name, column_name
+     FROM information_schema.columns
+     WHERE column_name = 'idempotency_key'
+       AND (table_name=$1 OR table_name=$2 OR table_name=$3 OR table_name=$4 OR table_name=$5 OR table_name=$6)
+     ORDER BY table_name`,
+    ['activity_submissions', 'evening_study_schedules', 'evening_study_attendance', 'leave_slips', 'original_leave_slips', 'attendance_work_arrangements'],
+  );
+  assert.deepEqual(idempotencyColumns.map((column) => column.table_name), [
+    'activity_submissions', 'attendance_work_arrangements', 'evening_study_attendance',
+    'evening_study_schedules', 'leave_slips', 'original_leave_slips',
+  ]);
   console.log('database migration tests passed');
 }
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth';
-import { query, withTransaction } from '@/storage/database/supabase-client';
+import { lockTransactionKey, query, withTransaction } from '@/storage/database/supabase-client';
 
 type RosterStudentInput = {
   studentId?: unknown;
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
       // 同一班级和同一批学号的写入必须串行，避免并发覆盖或跨班重复。
       const lockKeys = [className, ...students.map((student) => student.studentId)].sort();
       for (const lockKey of lockKeys) {
-        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [lockKey]);
+        await lockTransactionKey(client, lockKey);
       }
       const conflictResult = await client.query(
         'SELECT student_id, class_name FROM class_roster WHERE student_id = ANY($1::text[]) AND class_name <> $2',

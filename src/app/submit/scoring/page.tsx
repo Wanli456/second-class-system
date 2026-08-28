@@ -114,6 +114,7 @@ export default function SubmitScoringPage() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('bucket', 'app-files');
+    formData.append('purpose', 'scoring');
     const res = await apiFetch('/api/upload', { method: 'POST', body: formData });
     const data = await res.json();
     if (!data.success) throw new Error(data.error || '上传失败');

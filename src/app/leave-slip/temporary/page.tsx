@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Upload } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { PageErrorDialog } from '@/components/PageErrorDialog';
-import { apiFetch } from '@/lib/client-api';
+import { apiFetch, createIdempotencyKey } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
 import { Button } from '@/components/ui/button';
@@ -139,6 +139,7 @@ export default function TemporaryLeavePage() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const submitKeyRef = useRef<string | null>(null);
 
   const canStart = Boolean(user && (user.role === 'admin' || hasPermission(user, 'canStartGroupLeave')));
 
@@ -177,6 +178,7 @@ export default function TemporaryLeavePage() {
       for (const file of files) {
         const body = new FormData();
         body.append('file', file);
+        body.append('purpose', 'group-leave');
         const response = await apiFetch('/api/upload', { method: 'POST', body });
         const data: unknown = await response.json();
         if (!data || typeof data !== 'object' || !(data as { success?: boolean }).success) throw new Error((data as { error?: string })?.error || '图片上传失败');
@@ -188,19 +190,8 @@ export default function TemporaryLeavePage() {
       setUploadedImages((previous) => [...previous, ...uploaded]);
       files.forEach((file) => { const reader = new FileReader(); reader.onload = () => setPreviews((previous) => [...previous, String(reader.result)]); reader.readAsDataURL(file); });
       imagesUploaded = true;
-      const ocrUploads: UploadedImage[] = [];
-      // 交由服务端按“辅导员”表头的实际横坐标分列。前端预裁切会在倾斜拍摄时截掉姓名后方的学号列。
-      for (const file of files) {
-        const body = new FormData();
-        body.append('file', file);
-        const response = await apiFetch('/api/upload', { method: 'POST', body });
-        const data: unknown = await response.json();
-        if (!data || typeof data !== 'object' || !(data as { success?: boolean }).success) throw new Error((data as { error?: string })?.error || '识别图片上传失败');
-        const upload = data as { url?: unknown; file_name?: unknown };
-        if (!upload.url) throw new Error('识别图片上传后未返回地址');
-        ocrUploads.push({ url: String(upload.url), name: String(upload.file_name || file.name) });
-      }
-      const response = await apiFetch('/api/ocr/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrls: ocrUploads.map((item) => item.url) }) });
+      // 复用前面已上传的文件，避免同一批图片重复写入服务器。
+      const response = await apiFetch('/api/ocr/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrls: uploaded.map((item) => item.url) }) });
       const payload = await response.json() as OcrPayload;
       if (!payload.success) throw new Error(payload.error || '自动识别失败');
       const rows = formatOcrStudents(payload);
@@ -235,9 +226,10 @@ export default function TemporaryLeavePage() {
 
     setSubmitting(true);
     try {
+      const idempotencyKey = submitKeyRef.current || (submitKeyRef.current = createIdempotencyKey());
       const res = await apiFetch('/api/leave-slips', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
         body: JSON.stringify({
           slip_type: '其他请假',
           leave_type: '临时请假',
@@ -252,6 +244,7 @@ export default function TemporaryLeavePage() {
       const data = await res.json();
       if (!data.success) throw new Error(data.error || '提交失败');
       const warningText = Array.isArray(data.warnings) && data.warnings.length ? `（${data.warnings.join('；')}）` : '';
+      submitKeyRef.current = null;
       setSuccess(`临时请假已提交，等待人工查对。${warningText}`);
       setStudentsText('');
       setImageFiles([]);

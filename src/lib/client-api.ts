@@ -1,4 +1,10 @@
 type StoredUser = { sessionToken?: unknown };
+export const DEFAULT_API_TIMEOUT_MS = 15_000;
+
+export function createIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 function readStoredSessionToken(user: StoredUser): string | null {
   return typeof user.sessionToken === 'string' && user.sessionToken.trim()
@@ -66,5 +72,16 @@ export async function refreshCurrentUser<T extends object = Record<string, unkno
 
 export function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
-  return fetch(input, { ...init, headers, credentials: init.credentials ?? 'include' });
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (init.signal) {
+    if (init.signal.aborted) controller.abort();
+    else init.signal.addEventListener('abort', abort, { once: true });
+  }
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_API_TIMEOUT_MS);
+  return fetch(input, { ...init, headers, credentials: init.credentials ?? 'include', signal: controller.signal })
+    .finally(() => {
+      clearTimeout(timeout);
+      init.signal?.removeEventListener('abort', abort);
+    });
 }

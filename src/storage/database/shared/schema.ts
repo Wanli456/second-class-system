@@ -86,6 +86,7 @@ export const activity_submissions = pgTable(
     scoring_material_submitter_id: varchar("scoring_material_submitter_id", { length: 36 }),
     scoring_material_submitter_name: varchar("scoring_material_submitter_name", { length: 50 }),
     scoring_material_submitter_student_id: varchar("scoring_material_submitter_student_id", { length: 20 }),
+    idempotency_key: text("idempotency_key"),
     review_status: varchar("review_status", { length: 20 }).notNull().default("待审核"), // 待审核/已通过/已驳回
     review_note: text("review_note"),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -95,6 +96,7 @@ export const activity_submissions = pgTable(
     index("activity_submissions_review_status_idx").on(table.review_status),
     index("activity_submissions_leader_phone_idx").on(table.leader_phone),
     index("activity_submissions_created_at_idx").on(table.created_at),
+    uniqueIndex("activity_submissions_idempotency_key_idx").on(table.idempotency_key),
   ]
 );
 
@@ -184,12 +186,14 @@ export const evening_study_schedules = pgTable(
     checker_name: varchar("checker_name", { length: 50 }), // 检查人员
     checker_phone: varchar("checker_phone", { length: 20 }), // 检查人员电话
     notes: text("notes"), // 备注
+    idempotency_key: text("idempotency_key"),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index("evening_study_date_idx").on(table.date),
     index("evening_study_class_idx").on(table.class_name),
+    uniqueIndex("evening_study_schedules_idempotency_key_idx").on(table.idempotency_key),
   ]
 );
 
@@ -207,12 +211,14 @@ export const evening_study_attendance = pgTable(
     discipline_status: varchar("discipline_status", { length: 20 }).notNull().default("良好"), // 纪律状况：优秀/良好/一般/较差
     notes: text("notes"), // 备注
     checker_name: varchar("checker_name", { length: 50 }).notNull(), // 检查人员
+    idempotency_key: text("idempotency_key"),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index("evening_attendance_date_idx").on(table.date),
     index("evening_attendance_class_idx").on(table.class_name),
     index("evening_attendance_schedule_idx").on(table.schedule_id),
+    uniqueIndex("evening_study_attendance_idempotency_key_idx").on(table.idempotency_key),
   ]
 );
 

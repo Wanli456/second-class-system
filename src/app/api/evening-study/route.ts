@@ -2,6 +2,8 @@ import { getBusinessDate } from '@/lib/business-time';
 import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne } from "@/storage/database/supabase-client";
 import { requirePermission } from "@/lib/auth";
+import { readIdempotencyKey, scopeIdempotencyKey } from "@/lib/idempotency";
+import { validateEveningAttendance, validateEveningSchedule } from "@/lib/evening-study-validation";
 
 // GET - 查询晚自习安排和考勤
 export async function GET(request: NextRequest) {
@@ -72,13 +74,21 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requirePermission(request, 'manageAttendanceWork');
     if (auth.response) return auth.response;
+    const requestKey = readIdempotencyKey(request.headers);
+    if (!requestKey) return NextResponse.json({ success: false, error: "缺少或无效的幂等请求标识" }, { status: 400 });
+    const idempotencyKey = scopeIdempotencyKey(auth.user!.id, requestKey);
     const body = await request.json();
     const { type, ...data } = body;
+    if (type !== "attendance" && type !== "schedule") {
+      return NextResponse.json({ success: false, error: "记录类型不正确" }, { status: 400 });
+    }
 
     if (type === "attendance") {
+      const validation = validateEveningAttendance(data);
+      if (validation.error) return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
       const result = await queryOne(
-        `INSERT INTO evening_study_attendance (schedule_id, date, class_name, total_count, present_count, absent_count, discipline_status, notes, checker_name)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO evening_study_attendance (schedule_id, date, class_name, total_count, present_count, absent_count, discipline_status, notes, checker_name, idempotency_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (idempotency_key) DO NOTHING
          RETURNING *`,
         [
           data.schedule_id,
@@ -86,21 +96,34 @@ export async function POST(request: NextRequest) {
           data.class_name,
           data.total_count,
           data.present_count,
-          data.absent_count || (data.total_count - data.present_count),
+          validation.absentCount,
           data.discipline_status || "良好",
           data.notes,
           data.checker_name,
+          idempotencyKey,
         ]
       );
+      if (!result) {
+        const repeated = await queryOne('SELECT * FROM evening_study_attendance WHERE idempotency_key=$1', [idempotencyKey]);
+        if (!repeated) return NextResponse.json({ success: false, error: "提交未完成，请重试" }, { status: 409 });
+        return NextResponse.json({ success: true, data: repeated });
+      }
       return NextResponse.json({ success: true, data: result });
     }
 
+    const validation = validateEveningSchedule(data);
+    if (validation) return NextResponse.json({ success: false, error: validation }, { status: 400 });
     const result = await queryOne(
-      `INSERT INTO evening_study_schedules (date, weekday, class_name, classroom, checker_name, checker_phone, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO evening_study_schedules (date, weekday, class_name, classroom, checker_name, checker_phone, notes, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (idempotency_key) DO NOTHING
        RETURNING *`,
-      [data.date, data.weekday, data.class_name, data.classroom, data.checker_name, data.checker_phone, data.notes]
+      [data.date, data.weekday, data.class_name, data.classroom, data.checker_name, data.checker_phone, data.notes, idempotencyKey]
     );
+    if (!result) {
+      const repeated = await queryOne('SELECT * FROM evening_study_schedules WHERE idempotency_key=$1', [idempotencyKey]);
+      if (!repeated) return NextResponse.json({ success: false, error: "提交未完成，请重试" }, { status: 409 });
+      return NextResponse.json({ success: true, data: repeated });
+    }
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
     console.error("创建晚自习记录失败:", error);

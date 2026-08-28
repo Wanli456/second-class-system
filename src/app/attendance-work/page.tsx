@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle, Plus, Upload } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { PageErrorDialog } from '@/components/PageErrorDialog';
-import { apiFetch } from '@/lib/client-api';
+import { apiFetch, createIdempotencyKey } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
 import { Button } from '@/components/ui/button';
@@ -112,6 +112,7 @@ export default function AttendanceWorkPage() {
   const [items, setItems] = useState<WorkArrangement[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const submitKeyRef = useRef<string | null>(null);
 
   const canUpload = Boolean(user && (user.role === 'admin' || hasPermission(user, 'canManageAttendanceWork')));
   const canReview = Boolean(user && (user.role === 'admin' || hasPermission(user, 'canReviewLeave')));
@@ -199,6 +200,7 @@ export default function AttendanceWorkPage() {
       for (const file of selectedFiles) {
         const body = new FormData();
         body.append('file', file);
+        body.append('purpose', 'attendance-work');
         const uploadRes = await apiFetch('/api/upload', { method: 'POST', body });
         const uploadData = await uploadRes.json();
         if (!uploadData.success) throw new Error(uploadData.error || '图片上传失败');
@@ -248,6 +250,7 @@ export default function AttendanceWorkPage() {
     if (!editingId && !imageFiles.length) { setError('请上传考勤工作安排表截图'); return; }
 
     setSubmitting(true);
+    const idempotencyKey = editingId ? null : (submitKeyRef.current || (submitKeyRef.current = createIdempotencyKey()));
     try {
       // 修改模式：如果传了新图片就重新上传更新，否则沿用原图片。
       let images: Array<{ url: string; name: string }> = [];
@@ -256,6 +259,7 @@ export default function AttendanceWorkPage() {
         for (const file of imageFiles) {
           const body = new FormData();
           body.append('file', file);
+          body.append('purpose', 'attendance-work');
           const uploadRes = await apiFetch('/api/upload', { method: 'POST', body });
           const uploadData = await uploadRes.json();
           if (!uploadData.success) throw new Error(uploadData.error || '图片上传失败');
@@ -275,11 +279,12 @@ export default function AttendanceWorkPage() {
       }
       const res = await apiFetch('/api/attendance-work', {
         method: editingId ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}) },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || (editingId ? '修改失败' : '提交失败'));
+      submitKeyRef.current = null;
       setSuccess(editingId ? '已保存修改，状态回到待查对，需要重新查对通过后生效' : '已提交，等待查对通过后，名单内人员将在对应日期不算晚自习缺勤');
       setImageFiles([]);
       setPreviews([]);

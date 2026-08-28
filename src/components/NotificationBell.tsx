@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bell, Check, ExternalLink, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { apiFetch } from '@/lib/client-api';
 import { getNotificationHref, getNotificationTargetLabel } from '@/lib/notification-links';
 import {
   AlertDialog,
@@ -41,29 +42,35 @@ export function NotificationBell({ userId }: { userId: string | null }) {
 
   useEffect(() => {
     if (!userId) return;
+    const controller = new AbortController();
+    let active = true;
 
     const fetchNotifications = async () => {
       try {
-        const res = await fetch(`/api/notifications?userId=${userId}`);
+        const res = await apiFetch(`/api/notifications?userId=${userId}`, { signal: controller.signal });
         const data = await res.json();
-        if (data.success) {
+        if (active && data.success) {
           setNotifications(data.data);
           setUnreadCount(data.unreadCount);
         }
       } catch (error) {
-        console.error('获取通知失败:', error);
+        if (!controller.signal.aborted) console.error('获取通知失败:', error);
       }
     };
 
     fetchNotifications();
     // 每 30 秒刷新一次
     const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      active = false;
+      controller.abort();
+      clearInterval(interval);
+    };
   }, [userId]);
 
   const markAsRead = async (notificationId: string) => {
     try {
-      await fetch('/api/notifications', {
+      await apiFetch('/api/notifications', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notificationId }),
@@ -82,7 +89,7 @@ export function NotificationBell({ userId }: { userId: string | null }) {
 
   const markAllAsRead = async () => {
     try {
-      await fetch('/api/notifications', {
+      await apiFetch('/api/notifications', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, markAllRead: true }),
@@ -116,7 +123,7 @@ export function NotificationBell({ userId }: { userId: string | null }) {
       const body = deleteTarget.type === 'all'
         ? { userId, deleteAll: true }
         : { notificationId: deleteTarget.notification.id };
-      const response = await fetch('/api/notifications', {
+      const response = await apiFetch('/api/notifications', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

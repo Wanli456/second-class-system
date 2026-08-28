@@ -1,17 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
-import { requireUser } from '@/lib/auth';
+import { requirePermission } from '@/lib/auth';
 import { detectFileKindFromBytes, getUploadFileKind, UPLOAD_FILE_FORMAT_HINT } from '@/lib/upload-file-validation';
 import { publicUploadError } from '@/lib/upload-error';
 
 // POST /api/upload - 上传文件到雨云服务器本地存储
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireUser(request);
+    const formData = await request.formData();
+    const purpose = String(formData.get('purpose') || '').trim();
+    const permissionByPurpose = {
+      activity: 'submitActivity',
+      scoring: 'submitScoring',
+      'other-college': 'registerOtherCollege',
+      leave: 'uploadLeave',
+      'original-leave': 'submitOriginalLeave',
+      'group-leave': 'startGroupLeave',
+      'attendance-work': 'manageAttendanceWork',
+      admin: 'admin',
+    } as const;
+    const permission = permissionByPurpose[purpose as keyof typeof permissionByPurpose];
+    if (!permission) return NextResponse.json({ success: false, error: '缺少或无效的上传用途' }, { status: 400 });
+    const auth = await requirePermission(request, permission);
     if (auth.response) return auth.response;
 
-    const formData = await request.formData();
     const fileEntry = formData.get('file');
 
     if (!(fileEntry instanceof File)) {

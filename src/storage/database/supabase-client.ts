@@ -149,8 +149,9 @@ if (localDb && shouldInitializeLocalDb) {
       activity_id TEXT,
       scoring_material_submitter_id TEXT,
       scoring_material_submitter_name TEXT,
-      scoring_material_submitter_student_id TEXT,
-      review_status TEXT NOT NULL DEFAULT '待审核',
+       scoring_material_submitter_student_id TEXT,
+       idempotency_key TEXT,
+       review_status TEXT NOT NULL DEFAULT '待审核',
       review_note TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -222,8 +223,9 @@ if (localDb && shouldInitializeLocalDb) {
       classroom TEXT NOT NULL,
       checker_name TEXT,
       checker_phone TEXT,
-      notes TEXT,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+       notes TEXT,
+       idempotency_key TEXT,
+       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
 
@@ -237,8 +239,9 @@ if (localDb && shouldInitializeLocalDb) {
       absent_count INTEGER NOT NULL DEFAULT 0,
       discipline_status TEXT NOT NULL DEFAULT '良好',
       notes TEXT,
-      checker_name TEXT NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+       checker_name TEXT NOT NULL,
+       idempotency_key TEXT,
+       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
 
     CREATE TABLE notifications (
@@ -406,14 +409,16 @@ async function migrateDatabaseSchema(): Promise<void> {
      ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scoring_table_file_name TEXT;
      ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS registration_start_time TIMESTAMP;
      ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS registration_end_time TIMESTAMP;
+     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+     CREATE UNIQUE INDEX IF NOT EXISTS activity_submissions_idempotency_key_idx ON activity_submissions (idempotency_key);
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_user_id TEXT;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_name TEXT;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_student_id TEXT;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS group_id TEXT;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS start_time TIMESTAMP;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS end_time TIMESTAMP;
-    ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS leave_image_name TEXT;
-    ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS activity_id TEXT;
+     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS leave_image_name TEXT;
+     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS activity_id TEXT;
   `);
 
   const scoringActivitySnapshots = await query<{ id: string; scoring_material_submitter_id: string }>(
@@ -525,7 +530,7 @@ async function migrateDatabaseSchema(): Promise<void> {
 
   if (!(await tableExists('leave_slips'))) {
     await executeSchemaSql(`
-      CREATE TABLE leave_slips (
+    CREATE TABLE leave_slips (
         id TEXT PRIMARY KEY DEFAULT ${uuidDefault},
         slip_type TEXT NOT NULL DEFAULT 'handwritten',
         leave_type TEXT NOT NULL DEFAULT '事假',
@@ -550,8 +555,9 @@ async function migrateDatabaseSchema(): Promise<void> {
         counselor_signature BOOLEAN NOT NULL DEFAULT false,
         official_seal BOOLEAN NOT NULL DEFAULT false,
         teacher_signature BOOLEAN NOT NULL DEFAULT false,
-        is_late BOOLEAN NOT NULL DEFAULT false,
-        review_status TEXT NOT NULL DEFAULT '待查对',
+         is_late BOOLEAN NOT NULL DEFAULT false,
+         idempotency_key TEXT,
+         review_status TEXT NOT NULL DEFAULT '待查对',
         review_note TEXT,
         reviewed_by_user_id TEXT,
         reviewed_by_name TEXT,
@@ -581,6 +587,8 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS reviewed_by_user_id TEXT;
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS reviewed_by_name TEXT;
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP;
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS leave_slips_idempotency_key_idx ON leave_slips (idempotency_key);
   `);
 
   if (!(await tableExists('leave_slip_students'))) {
@@ -597,7 +605,7 @@ async function migrateDatabaseSchema(): Promise<void> {
 
   if (!(await tableExists('original_leave_slips'))) {
     await executeSchemaSql(`
-      CREATE TABLE original_leave_slips (
+    CREATE TABLE original_leave_slips (
         id TEXT PRIMARY KEY DEFAULT ${uuidDefault},
         activity_id TEXT,
         activity_name TEXT,
@@ -611,9 +619,10 @@ async function migrateDatabaseSchema(): Promise<void> {
         ocr_names TEXT NOT NULL DEFAULT '[]',
         image_hashes TEXT NOT NULL DEFAULT '[]',
         notes TEXT,
-        created_by_user_id TEXT,
-        created_by_name TEXT,
-        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+         created_by_user_id TEXT,
+         created_by_name TEXT,
+         idempotency_key TEXT,
+         created_at TIMESTAMP NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
     `);
@@ -623,11 +632,13 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS image_list TEXT NOT NULL DEFAULT '[]';
     ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS ocr_names TEXT NOT NULL DEFAULT '[]';
     ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS image_hashes TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS original_leave_slips_idempotency_key_idx ON original_leave_slips (idempotency_key);
   `);
 
   if (!(await tableExists('attendance_work_arrangements'))) {
     await executeSchemaSql(`
-      CREATE TABLE attendance_work_arrangements (
+    CREATE TABLE attendance_work_arrangements (
         id TEXT PRIMARY KEY DEFAULT ${uuidDefault},
         name TEXT NOT NULL DEFAULT '考勤工作安排',
         start_date TEXT,
@@ -643,6 +654,7 @@ async function migrateDatabaseSchema(): Promise<void> {
         reviewed_at TIMESTAMP,
         created_by_user_id TEXT,
         created_by_name TEXT,
+        idempotency_key TEXT,
         created_at TIMESTAMP NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
@@ -665,6 +677,8 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS created_by_user_id TEXT;
     ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS created_by_name TEXT;
     ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS attendance_work_arrangements_idempotency_key_idx ON attendance_work_arrangements (idempotency_key);
   `);
 
   await ensureDepartmentsTable();
@@ -750,6 +764,12 @@ export async function withTransaction<T>(callback: (client: DatabaseClient) => P
   } finally {
     client.release?.();
   }
+}
+
+export async function lockTransactionKey(client: DatabaseClient, key: string): Promise<void> {
+  // pg-mem has no advisory-lock implementation; production PostgreSQL does.
+  if (useLocalTestDatabase) return;
+  await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [key]);
 }
 
 // 关闭连接池（用于优雅关闭）

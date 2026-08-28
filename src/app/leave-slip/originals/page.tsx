@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AlertCircle, CheckCircle2, FileCheck2, Plus, Search, Trash2, Upload } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
-import { apiFetch } from '@/lib/client-api';
+import { apiFetch, createIdempotencyKey } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
 import { parseLeaveSlipArray as parseJsonArray } from '@/lib/leave-slip-array';
@@ -103,6 +103,8 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
   const [deleteTarget, setDeleteTarget] = useState<OriginalSlip | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const submitKeyRef = useRef<string | null>(null);
+  const uploadCacheRef = useRef(new Map<string, { url: string; name: string }>());
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrError, setOcrError] = useState('');
   const [ocrLines, setOcrLines] = useState<Array<{ text: string; score?: number }>>([]);
@@ -157,12 +159,18 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
   const uploadFilesToUrls = async (files: File[]) => {
     const uploaded: Array<{ url: string; name: string }> = [];
     for (const file of files) {
+      const cacheKey = `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
+      const cached = uploadCacheRef.current.get(cacheKey);
+      if (cached) { uploaded.push(cached); continue; }
       const body = new FormData();
       body.append('file', file);
+      body.append('purpose', 'original-leave');
       const uploadRes = await apiFetch('/api/upload', { method: 'POST', body });
       const uploadData = await uploadRes.json();
       if (!uploadData.success) throw new Error(uploadData.error || '图片上传失败');
-      uploaded.push({ url: String(uploadData.url), name: String(uploadData.file_name || file.name) });
+      const item = { url: String(uploadData.url), name: String(uploadData.file_name || file.name) };
+      uploadCacheRef.current.set(cacheKey, item);
+      uploaded.push(item);
     }
     return uploaded;
   };
@@ -247,9 +255,10 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
     try {
       const uploaded = imageFiles.length ? await uploadFilesToUrls(imageFiles) : [];
       const classNames = getClassNamesFromStudents(studentEntries);
+      const idempotencyKey = submitKeyRef.current || (submitKeyRef.current = createIdempotencyKey());
       const res = await apiFetch('/api/leave-slips/originals', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
         body: JSON.stringify({
           activity_id: activityId.trim() || null,
           activity_name: activityName.trim() || null,
@@ -266,6 +275,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || '保存失败');
+      submitKeyRef.current = null;
       setActivityId('');
       setActivityName('');
       setStudentNamesText('');

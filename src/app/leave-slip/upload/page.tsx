@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AlertCircle, FileCheck2, Minus, Plus, Send, Trash2, Upload, X } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { PageErrorDialog } from '@/components/PageErrorDialog';
-import { apiFetch } from '@/lib/client-api';
+import { apiFetch, createIdempotencyKey } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
 import { Button } from '@/components/ui/button';
@@ -128,6 +128,8 @@ export default function LeaveSlipUploadPage() {
   const [teacherSignature, setTeacherSignature] = useState(false);
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const submitKeyRef = useRef<string | null>(null);
+  const uploadCacheRef = useRef(new Map<string, { url: string; name: string }>());
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -197,12 +199,18 @@ export default function LeaveSlipUploadPage() {
   const uploadFilesToUrls = async (files: File[]) => {
     const uploaded: Array<{ url: string; name: string }> = [];
     for (const file of files) {
+      const cacheKey = `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
+      const cached = uploadCacheRef.current.get(cacheKey);
+      if (cached) { uploaded.push(cached); continue; }
       const body = new FormData();
       body.append('file', file);
+      body.append('purpose', 'leave');
       const uploadRes = await apiFetch('/api/upload', { method: 'POST', body });
       const uploadData = await uploadRes.json();
       if (!uploadData.success) throw new Error(uploadData.error || '图片上传失败');
-      uploaded.push({ url: String(uploadData.url), name: String(uploadData.file_name || file.name) });
+      const item = { url: String(uploadData.url), name: String(uploadData.file_name || file.name) };
+      uploadCacheRef.current.set(cacheKey, item);
+      uploaded.push(item);
     }
     return uploaded;
   };
@@ -350,9 +358,10 @@ export default function LeaveSlipUploadPage() {
     try {
       const uploaded = await uploadFilesToUrls(imageFiles);
 
+      const idempotencyKey = submitKeyRef.current || (submitKeyRef.current = createIdempotencyKey());
       const response = await apiFetch('/api/leave-slips', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
         body: JSON.stringify({
           slip_type: slipType,
           leave_type: leaveType,
@@ -379,6 +388,7 @@ export default function LeaveSlipUploadPage() {
       if (!response.ok || !data.success) {
         throw new Error(typeof data.error === 'string' && data.error ? data.error : `提交失败（HTTP ${response.status}）`);
       }
+      submitKeyRef.current = null;
       setSuccess('假条提交成功，当前状态：待查对');
       setImageFiles([]);
       setImagePreviews([]);

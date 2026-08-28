@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { calculateUserPermissions, requirePermission, requireUser } from '@/lib/auth';
-import { ensureDatabaseSchema, query, queryOne, withTransaction } from '@/storage/database/supabase-client';
+import { ensureDatabaseSchema, lockTransactionKey, query, queryOne, withTransaction } from '@/storage/database/supabase-client';
 
 type NormalizedRosterStudent = { className: string; studentId: string; studentName: string };
 
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
       // 同一批学号的校验和写入必须串行，避免并发请求把同一学号同时分配到两个班级。
       const lockKeys = [...new Set(students.map((student) => student.studentId))].sort();
       for (const lockKey of lockKeys) {
-        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [lockKey]);
+        await lockTransactionKey(client, lockKey);
       }
       const rows: Record<string, unknown>[] = [];
       for (const student of students) {
@@ -107,8 +107,11 @@ export async function PUT(request: NextRequest) {
     const student = normalizeStudent(body);
     if (!id || !student) return NextResponse.json({ success: false, error: '请填写完整的学号和姓名' }, { status: 400 });
     const data = await withTransaction(async (client) => {
-      const current = (await client.query<{ class_name: string; student_id: string }>('SELECT class_name,student_id FROM class_roster WHERE id=$1', [id])).rows[0];
+      const current = (await client.query<{ class_name: string; student_id: string }>('SELECT class_name,student_id FROM class_roster WHERE id=$1 FOR UPDATE', [id])).rows[0];
       if (!current) return null;
+      for (const lockKey of [...new Set([current.student_id, student.studentId])].sort()) {
+        await lockTransactionKey(client, lockKey);
+      }
       const existing = (await client.query<{ class_name: string }>('SELECT class_name FROM class_roster WHERE student_id=$1 AND class_name<>$2 AND id<>$3 LIMIT 1', [student.studentId, current.class_name, id])).rows[0];
       if (existing) throw new ClassRosterConflictError(`学号 ${student.studentId} 已属于班级 ${existing.class_name}`);
       const updated = (await client.query('UPDATE class_roster SET student_id=$1,student_name=$2,updated_at=NOW() WHERE id=$3 RETURNING id,class_name,student_id,student_name', [student.studentId, student.studentName, id])).rows[0];
@@ -133,8 +136,9 @@ export async function DELETE(request: NextRequest) {
   const id = new URL(request.url).searchParams.get('id');
   if (!id) return NextResponse.json({ success: false, error: '缺少花名册记录 ID' }, { status: 400 });
   const data = await withTransaction(async (client) => {
-    const current = (await client.query<{ class_name: string; student_id: string }>('SELECT class_name,student_id FROM class_roster WHERE id=$1', [id])).rows[0];
+    const current = (await client.query<{ class_name: string; student_id: string }>('SELECT class_name,student_id FROM class_roster WHERE id=$1 FOR UPDATE', [id])).rows[0];
     if (!current) return null;
+    await lockTransactionKey(client, current.student_id);
     const deleted = (await client.query('DELETE FROM class_roster WHERE id=$1 RETURNING id', [id])).rows[0];
     await client.query('UPDATE users SET class_name=NULL WHERE student_id=$1 AND class_name=$2', [current.student_id, current.class_name]);
     return deleted;

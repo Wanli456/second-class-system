@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LogIn, Send, Upload, Eye } from 'lucide-react';
 import { CATEGORIES, CATEGORY_DETAILS, LEVELS, type Category } from '@/lib/types';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
-import { apiFetch } from '@/lib/client-api';
+import { apiFetch, createIdempotencyKey } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { ImageUploadPreviews } from '@/components/ImageUploadPreviews';
 import { hasPermission } from '@/lib/department-permissions';
@@ -47,6 +47,7 @@ export default function SubmitPage() {
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const submitKeyRef = useRef<string | null>(null);
 
   const scopes = useMemo(() => {
     const values = new Map<string, ActivityScope>();
@@ -122,7 +123,7 @@ export default function SubmitPage() {
   };
 
   const uploadFile = async (file: File): Promise<{ url: string; fileName: string }> => {
-    const body = new FormData(); body.append('file', file); body.append('bucket', 'app-files');
+    const body = new FormData(); body.append('file', file); body.append('bucket', 'app-files'); body.append('purpose', 'activity');
     const response = await apiFetch('/api/upload', { method: 'POST', body }); const data = await response.json();
     if (!data.success) throw new Error(data.error || '文件上传失败'); return { url: String(data.url), fileName: String(data.file_name || file.name) };
   };
@@ -132,13 +133,14 @@ export default function SubmitPage() {
     if (!planFile && !existingPlanUrl) { alert('请上传活动策划书'); return; }
     if (!recordFile && !existingRecordUrl) { alert('请上传活动备案表'); return; }
     setSubmitting(true);
+    const idempotencyKey = submitKeyRef.current || (submitKeyRef.current = createIdempotencyKey());
     try {
       const planUpload = planFile ? await uploadFile(planFile) : null;
       const recordUpload = recordFile ? await uploadFile(recordFile) : null;
       const firstScope = hostScope;
-      const response = await apiFetch('/api/activities/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, scope_type: firstScope.type, scope_name: firstScope.name, scope_names: selectedScopes.map(({ type, name }) => ({ type, name })), leader_ids: leaderIds, ...(submissionId ? { submission_id: submissionId } : {}), plan_file_url: planUpload?.url || existingPlanUrl, plan_file_name: planUpload?.fileName || existingPlanName, record_file_url: recordUpload?.url || existingRecordUrl, record_file_name: recordUpload?.fileName || existingRecordName, registration_start_time: new Date(form.registration_start_time).toISOString(), registration_end_time: new Date(form.registration_end_time).toISOString(), start_time: new Date(form.start_time).toISOString(), end_time: new Date(form.end_time).toISOString() }) });
+      const response = await apiFetch('/api/activities/submit', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ ...form, scope_type: firstScope.type, scope_name: firstScope.name, scope_names: selectedScopes.map(({ type, name }) => ({ type, name })), leader_ids: leaderIds, ...(submissionId ? { submission_id: submissionId } : {}), plan_file_url: planUpload?.url || existingPlanUrl, plan_file_name: planUpload?.fileName || existingPlanName, record_file_url: recordUpload?.url || existingRecordUrl, record_file_name: recordUpload?.fileName || existingRecordName, registration_start_time: new Date(form.registration_start_time).toISOString(), registration_end_time: new Date(form.registration_end_time).toISOString(), start_time: new Date(form.start_time).toISOString(), end_time: new Date(form.end_time).toISOString() }) });
       const data = await response.json(); if (!data.success) throw new Error(data.error || '提交失败');
-      setSuccess(true); setSubmissionId(null); setForm({ full_name: '', registration_start_time: '', registration_end_time: '', start_time: '', end_time: '', category: '', category_primary: '', category_secondary: '', level: '' }); setCohostScopes([]); setLeaderIds(user ? [user.id] : []); setPlanFile(null); setRecordFile(null); setExistingPlanUrl(null); setExistingPlanName(null); setExistingRecordUrl(null); setExistingRecordName(null);
+      submitKeyRef.current = null; setSuccess(true); setSubmissionId(null); setForm({ full_name: '', registration_start_time: '', registration_end_time: '', start_time: '', end_time: '', category: '', category_primary: '', category_secondary: '', level: '' }); setCohostScopes([]); setLeaderIds(user ? [user.id] : []); setPlanFile(null); setRecordFile(null); setExistingPlanUrl(null); setExistingPlanName(null); setExistingRecordUrl(null); setExistingRecordName(null);
       if (new URLSearchParams(window.location.search).has('submissionId')) router.replace('/submit');
     } catch (error) { alert(error instanceof Error ? error.message : '提交失败'); } finally { setSubmitting(false); }
   };

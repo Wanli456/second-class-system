@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS activity_submissions (
   scoring_material_submitter_id TEXT,
   scoring_material_submitter_name TEXT,
   scoring_material_submitter_student_id TEXT,
+  idempotency_key TEXT,
   review_status TEXT NOT NULL DEFAULT '待审核',
   review_note TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
@@ -202,6 +203,7 @@ CREATE TABLE IF NOT EXISTS evening_study_schedules (
   checker_name TEXT,
   checker_phone TEXT,
   notes TEXT,
+  idempotency_key TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -217,6 +219,7 @@ CREATE TABLE IF NOT EXISTS evening_study_attendance (
   discipline_status TEXT NOT NULL DEFAULT '良好',
   notes TEXT,
   checker_name TEXT NOT NULL,
+  idempotency_key TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
@@ -258,6 +261,12 @@ WHERE s.scoring_material_submitter_id = u.id
   AND s.scoring_material_submitter_name IS NULL;
 ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_id TEXT;
 ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_names TEXT;
+ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS activity_submissions_idempotency_key_idx ON activity_submissions (idempotency_key);
+ALTER TABLE evening_study_schedules ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS evening_study_schedules_idempotency_key_idx ON evening_study_schedules (idempotency_key);
+ALTER TABLE evening_study_attendance ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS evening_study_attendance_idempotency_key_idx ON evening_study_attendance (idempotency_key);
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_name TEXT;
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_student_id TEXT;
 ALTER TABLE leave_groups ADD COLUMN IF NOT EXISTS applicant_name TEXT;

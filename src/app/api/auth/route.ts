@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ensureDatabaseSchema, query, queryOne, withTransaction } from '@/storage/database/supabase-client';
+import { ensureDatabaseSchema, lockTransactionKey, query, queryOne, withTransaction } from '@/storage/database/supabase-client';
 import {
   clearSessionCookie,
   hashPassword,
@@ -11,6 +11,7 @@ import {
 } from '@/lib/auth';
 import type { AuthUser } from '@/lib/auth';
 import { parsePermissionOverrides, type PermissionKey } from '@/lib/department-permissions';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 const PUBLIC_USER_FIELDS = `id, username, student_id, role, can_publish, can_score,
   can_submit_activity, can_view_submission_status, can_submit_scoring, can_register_other_college,
@@ -20,9 +21,22 @@ const PUBLIC_USER_FIELDS = `id, username, student_id, role, can_publish, can_sco
 
 type StoredUser = AuthUser & { password: string };
 
+function clientAddress(request: NextRequest): string {
+  return request.headers.get('x-forwarded-for')?.split(',')[0].trim()
+    || request.headers.get('x-real-ip')?.trim()
+    || 'unknown';
+}
+
+function rateLimitedResponse(retryAfterSeconds: number) {
+  return NextResponse.json({ success: false, error: '请求过于频繁，请稍后再试' }, { status: 429, headers: { 'Retry-After': String(retryAfterSeconds) } });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { studentId, name, password, department, className } = await request.json();
+    const address = clientAddress(request);
+    const limit = checkRateLimit(`auth:register:${address}`, 10, 10 * 60 * 1000);
+    if (!limit.allowed) return rateLimitedResponse(limit.retryAfterSeconds);
     if (!studentId || !name || !password) return NextResponse.json({ success: false, error: '请填写学号、姓名和密码' }, { status: 400 });
     if (String(password).length < 6) return NextResponse.json({ success: false, error: '密码至少需要 6 位' }, { status: 400 });
     const existing = await queryOne('SELECT id FROM users WHERE student_id=$1', [String(studentId).trim()]);
@@ -45,6 +59,12 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const { studentId, name, password } = await request.json();
+    const address = clientAddress(request);
+    const normalizedStudentId = String(studentId || '').trim();
+    const addressLimit = checkRateLimit(`auth:login:address:${address}`, 60, 10 * 60 * 1000);
+    const accountLimit = checkRateLimit(`auth:login:account:${normalizedStudentId || 'unknown'}`, 10, 10 * 60 * 1000);
+    if (!addressLimit.allowed) return rateLimitedResponse(addressLimit.retryAfterSeconds);
+    if (!accountLimit.allowed) return rateLimitedResponse(accountLimit.retryAfterSeconds);
     if (!studentId || !name || !password) return NextResponse.json({ success: false, error: '请填写学号、姓名和密码' }, { status: 400 });
     const user = await queryOne<StoredUser>('SELECT * FROM users WHERE student_id=$1 AND username=$2', [studentId, name]);
     if (!user || !(await verifyPassword(password, user.password))) return NextResponse.json({ success: false, error: '学号、姓名或密码错误' }, { status: 401 });
@@ -102,7 +122,7 @@ export async function PATCH(request: NextRequest) {
     if (auth.response) return auth.response;
     const userId = String(body.userId || body.id || '').trim();
     if (!userId) return NextResponse.json({ success: false, error: '缺少用户 ID' }, { status: 400 });
-    const target = await queryOne('SELECT id,role,permission_overrides FROM users WHERE id=$1', [userId]);
+    const target = await queryOne<{ id: string; role: string; permission_overrides: string | null; department: string | null }>('SELECT id,role,permission_overrides,department FROM users WHERE id=$1', [userId]);
     if (!target) return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
     const allowedRoles = new Set(['admin', 'leader', 'class_leader', 'student']);
     if (body.role !== undefined && !allowedRoles.has(String(body.role))) {
@@ -154,7 +174,18 @@ export async function PATCH(request: NextRequest) {
 
     if (!updates.length) return NextResponse.json({ success: false, error: '没有可更新的内容' }, { status: 400 });
     params.push(userId);
-    const user = await queryOne<AuthUser>(`UPDATE users SET ${updates.join(',')} WHERE id=$${params.length} RETURNING ${PUBLIC_USER_FIELDS}`, params);
+    const requestedDepartment = body.department === undefined
+      ? undefined
+      : body.department === null
+        ? null
+        : String(body.department).trim();
+    const departmentLocks = [...new Set([target.department, requestedDepartment].filter((value): value is string => Boolean(value)))].sort();
+    const user = await withTransaction(async (client) => {
+      for (const department of departmentLocks) {
+        await lockTransactionKey(client, department);
+      }
+      return (await client.query<AuthUser>(`UPDATE users SET ${updates.join(',')} WHERE id=$${params.length} RETURNING ${PUBLIC_USER_FIELDS}`, params)).rows[0] || null;
+    });
     if (!user) return NextResponse.json({ success: false, error: '用户更新失败' }, { status: 500 });
     return NextResponse.json({ success: true, data: publicUser(user) });
   } catch (error) {
