@@ -8,6 +8,7 @@ import {
   requireUser,
   setSessionCookie,
   verifyPassword,
+  validatePassword,
 } from '@/lib/auth';
 import type { AuthUser } from '@/lib/auth';
 import { parsePermissionOverrides, type PermissionKey } from '@/lib/department-permissions';
@@ -113,6 +114,8 @@ export async function PATCH(request: NextRequest) {
       const auth = await requireUser(request);
       if (auth.response) return auth.response;
       if (auth.user!.id !== body.id) return NextResponse.json({ success: false, error: '只能修改自己的密码' }, { status: 403 });
+      const passwordError = validatePassword(body.password);
+      if (passwordError) return NextResponse.json({ success: false, error: passwordError }, { status: 400 });
       const current = await queryOne<Pick<StoredUser, 'password'>>('SELECT password FROM users WHERE id=$1', [body.id]);
       if (!current || !(await verifyPassword(body.oldPassword, current.password))) return NextResponse.json({ success: false, error: '原密码错误' }, { status: 400 });
       await query('UPDATE users SET password=$1 WHERE id=$2', [await hashPassword(body.password), body.id]);
@@ -129,13 +132,10 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, error: '角色只能是管理员、部门负责人、班级负责人或学生' }, { status: 400 });
     }
     if (body.password) {
-      if (String(body.password).length < 6) return NextResponse.json({ success: false, error: '密码至少需要 6 位' }, { status: 400 });
+      const passwordError = validatePassword(body.password);
+      if (passwordError) return NextResponse.json({ success: false, error: passwordError }, { status: 400 });
       await query('UPDATE users SET password=$1 WHERE id=$2', [await hashPassword(String(body.password)), userId]);
       return NextResponse.json({ success: true });
-    }
-    if (target.role === 'admin' && body.role && body.role !== 'admin') {
-      const count = await queryOne(`SELECT COUNT(*)::int AS count FROM users WHERE role='admin'`, []);
-      if (Number(count?.count || 0) <= 1) return NextResponse.json({ success: false, error: '不能降级最后一个管理员' }, { status: 400 });
     }
     const fields: Record<string, string> = {
       role: 'role', canPublish: 'can_publish', canScore: 'can_score', canSubmitActivity: 'can_submit_activity',
@@ -181,6 +181,11 @@ export async function PATCH(request: NextRequest) {
         : String(body.department).trim();
     const departmentLocks = [...new Set([target.department, requestedDepartment].filter((value): value is string => Boolean(value)))].sort();
     const user = await withTransaction(async (client) => {
+      await lockTransactionKey(client, 'admin-role');
+      if (target.role === 'admin' && body.role && body.role !== 'admin') {
+        const count = await client.query<{ count: number }>(`SELECT COUNT(*)::int AS count FROM users WHERE role='admin'`);
+        if (Number(count.rows[0]?.count || 0) <= 1) throw new Error('LAST_ADMIN_DEMOTION');
+      }
       for (const department of departmentLocks) {
         await lockTransactionKey(client, department);
       }
@@ -189,6 +194,7 @@ export async function PATCH(request: NextRequest) {
     if (!user) return NextResponse.json({ success: false, error: '用户更新失败' }, { status: 500 });
     return NextResponse.json({ success: true, data: publicUser(user) });
   } catch (error) {
+    if (error instanceof Error && error.message === 'LAST_ADMIN_DEMOTION') return NextResponse.json({ success: false, error: '不能降级最后一个管理员' }, { status: 400 });
     console.error('Failed to update user:', error);
     return NextResponse.json({ success: false, error: '更新用户失败' }, { status: 500 });
   }
@@ -206,12 +212,13 @@ export async function DELETE(request: NextRequest) {
     if (auth.response) return auth.response;
     const target = await queryOne('SELECT id,role,username,student_id FROM users WHERE id=$1', [id]);
     if (!target) return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
-    if (target.role === 'admin') {
-      const count = await queryOne(`SELECT COUNT(*)::int AS count FROM users WHERE role='admin'`, []);
-      if (Number(count?.count || 0) <= 1) return NextResponse.json({ success: false, error: '不能删除最后一个管理员' }, { status: 400 });
-    }
     // 保存提交时的身份快照，避免删除账号后历史记录失去原提交人信息。
     await withTransaction(async (client) => {
+      await lockTransactionKey(client, 'admin-role');
+      if (target.role === 'admin') {
+        const count = await client.query<{ count: number }>(`SELECT COUNT(*)::int AS count FROM users WHERE role='admin'`);
+        if (Number(count.rows[0]?.count || 0) <= 1) throw new Error('LAST_ADMIN_DELETE');
+      }
       await client.query(
         `UPDATE activities
          SET activity_submitter_name=COALESCE(activity_submitter_name,$1),
@@ -258,6 +265,7 @@ export async function DELETE(request: NextRequest) {
     });
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof Error && error.message === 'LAST_ADMIN_DELETE') return NextResponse.json({ success: false, error: '不能删除最后一个管理员' }, { status: 400 });
     console.error('Failed to delete user:', error);
     return NextResponse.json({ success: false, error: '删除用户失败' }, { status: 500 });
   }

@@ -1,7 +1,7 @@
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
 
-function isPrivateIp(ip: string): boolean {
+export function isPrivateIp(ip: string): boolean {
   const version = isIP(ip);
   if (version === 4) {
     const parts = ip.split('.').map((part) => Number(part));
@@ -12,11 +12,14 @@ function isPrivateIp(ip: string): boolean {
       (parts[0] === 169 && parts[1] === 254) ||
       (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
       (parts[0] === 192 && parts[1] === 168)
+      || (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127)
+      || (parts[0] === 198 && parts[1] >= 18 && parts[1] <= 19)
+      || parts[0] >= 224
     );
   }
   if (version === 6) {
     const lower = ip.toLowerCase();
-    if (lower === '::' || lower === '::1' || lower.startsWith('fe80:') || lower.startsWith('fc') || lower.startsWith('fd')) return true;
+    if (lower === '::' || lower === '::1' || lower.startsWith('fe80:') || lower.startsWith('fc') || lower.startsWith('fd') || lower.startsWith('ff')) return true;
     if (lower.startsWith('::ffff:')) return isPrivateIp(lower.slice(7));
   }
   return false;

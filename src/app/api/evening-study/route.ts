@@ -86,6 +86,12 @@ export async function POST(request: NextRequest) {
     if (type === "attendance") {
       const validation = validateEveningAttendance(data);
       if (validation.error) return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
+      const schedule = await queryOne<{ id: string; date: string; class_name: string }>(
+        'SELECT id,date,class_name FROM evening_study_schedules WHERE id=$1', [data.schedule_id],
+      );
+      if (!schedule || schedule.date !== data.date || schedule.class_name !== data.class_name) {
+        return NextResponse.json({ success: false, error: '考勤安排与晚自习安排不匹配' }, { status: 400 });
+      }
       const result = await queryOne(
         `INSERT INTO evening_study_attendance (schedule_id, date, class_name, total_count, present_count, absent_count, discipline_status, notes, checker_name, idempotency_key)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (idempotency_key) DO NOTHING
@@ -163,6 +169,12 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: "没有可更新的内容" }, { status: 400 });
     }
 
+    const current = await queryOne<Record<string, unknown>>('SELECT * FROM evening_study_schedules WHERE id=$1', [id.trim()]);
+    if (!current) return NextResponse.json({ success: false, error: "晚自习记录不存在" }, { status: 404 });
+    const merged = { ...current, ...data };
+    const validation = validateEveningSchedule(merged);
+    if (validation) return NextResponse.json({ success: false, error: validation }, { status: 400 });
+
     const setClauses: string[] = [];
     const params: unknown[] = [];
     let paramIndex = 1;
@@ -180,9 +192,6 @@ export async function PUT(request: NextRequest) {
       `UPDATE evening_study_schedules SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
       params
     );
-    if (!result) {
-      return NextResponse.json({ success: false, error: "晚自习记录不存在" }, { status: 404 });
-    }
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
     console.error("更新晚自习记录失败:", error);
@@ -202,6 +211,8 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: "缺少ID参数" }, { status: 400 });
     }
 
+    const attendance = await queryOne<{ count: number }>('SELECT COUNT(*)::int AS count FROM evening_study_attendance WHERE schedule_id=$1', [id]);
+    if (Number(attendance?.count || 0) > 0) return NextResponse.json({ success: false, error: '已有考勤记录，不能删除安排' }, { status: 409 });
     await query(`DELETE FROM evening_study_schedules WHERE id = $1`, [id]);
     return NextResponse.json({ success: true, message: "删除成功" });
   } catch (error) {

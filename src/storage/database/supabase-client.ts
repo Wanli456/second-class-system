@@ -112,6 +112,7 @@ if (localDb && shouldInitializeLocalDb) {
       scoring_status TEXT NOT NULL DEFAULT '待赋分',
       scoring_table_url TEXT,
       scoring_table_file_name TEXT,
+      idempotency_key TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
@@ -311,6 +312,7 @@ const pool: DatabasePool = useLocalTestDatabase
   : new Pool({
       connectionString: databaseUrl,
       ssl: { rejectUnauthorized: false },
+      options: '-c timezone=Asia/Shanghai',
     }) as DatabasePool;
 
 if (useLocalTestDatabase && !runtimeGlobal.__secondClassLocalDatabase) {
@@ -389,7 +391,9 @@ async function migrateDatabaseSchema(): Promise<void> {
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_photo_file_name TEXT;
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_table_file_name TEXT;
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS registration_start_time TIMESTAMP;
-     ALTER TABLE activities ADD COLUMN IF NOT EXISTS registration_end_time TIMESTAMP;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS registration_end_time TIMESTAMP;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS activities_idempotency_key_idx ON activities (idempotency_key);
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_type TEXT DEFAULT 'department';
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS category_primary TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS category_secondary TEXT;
@@ -602,6 +606,7 @@ async function migrateDatabaseSchema(): Promise<void> {
       );
     `);
   }
+  await executeSchemaSql(`CREATE UNIQUE INDEX IF NOT EXISTS leave_slip_students_slip_student_idx ON leave_slip_students (slip_id, student_id);`);
 
   if (!(await tableExists('original_leave_slips'))) {
     await executeSchemaSql(`
@@ -738,8 +743,14 @@ export async function queryOne<T extends QueryResultRow = QueryResultRow>(sql: s
 export function toWallTimeString(value: unknown): string | null {
   if (!(value instanceof Date)) return null;
   if (useLocalTestDatabase) return value.toISOString().slice(0, 19);
-  const pad = (part: number) => String(part).padStart(2, '0');
-  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(value).reduce<Record<string, string>>((result, part) => {
+    if (part.type !== 'literal') result[part.type] = part.value;
+    return result;
+  }, {});
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`;
 }
 
 // 把查询结果行中的 start_time/end_time（驱动返回的 Date）还原成墙钟字符串。

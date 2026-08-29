@@ -4,6 +4,7 @@ import path from 'path';
 import { requirePermission } from '@/lib/auth';
 import { detectFileKindFromBytes, getUploadFileKind, UPLOAD_FILE_FORMAT_HINT } from '@/lib/upload-file-validation';
 import { publicUploadError } from '@/lib/upload-error';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 // POST /api/upload - 上传文件到雨云服务器本地存储
 export async function POST(request: NextRequest) {
@@ -24,6 +25,10 @@ export async function POST(request: NextRequest) {
     if (!permission) return NextResponse.json({ success: false, error: '缺少或无效的上传用途' }, { status: 400 });
     const auth = await requirePermission(request, permission);
     if (auth.response) return auth.response;
+    const uploadLimit = checkRateLimit(`upload:${auth.user!.id}`, 20, 10 * 60 * 1000);
+    if (!uploadLimit.allowed) {
+      return NextResponse.json({ success: false, error: '上传过于频繁，请稍后再试' }, { status: 429, headers: { 'Retry-After': String(uploadLimit.retryAfterSeconds) } });
+    }
 
     const fileEntry = formData.get('file');
 

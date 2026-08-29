@@ -58,6 +58,7 @@ const PERMISSION_HINTS: Record<PermissionKey, string> = {
   canSubmitOriginalLeave: '允许提交活动方归档用的原假条。',
   canManageOriginalLeave: '允许将上传假条与已归档的活动方原假条进行对比，并维护原假条。',
 };
+const USER_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
 type ManagedUser = {
   id: string;
@@ -84,6 +85,8 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
   const [nameQuery, setNameQuery] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [userPage, setUserPage] = useState(1);
+  const [userPageSize, setUserPageSize] = useState<number>(USER_PAGE_SIZE_OPTIONS[0]);
 
   const redirectToLogin = async () => {
     await logoutCurrentUser();
@@ -192,6 +195,9 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
   const visibleUsers = normalizedNameQuery
     ? users.filter((user) => user.name.toLocaleLowerCase().includes(normalizedNameQuery))
     : users;
+  const totalUserPages = Math.max(1, Math.ceil(visibleUsers.length / userPageSize));
+  const currentUserPage = Math.min(userPage, totalUserPages);
+  const paginatedUsers = visibleUsers.slice((currentUserPage - 1) * userPageSize, currentUserPage * userPageSize);
 
   return (
     <main className="text-slate-950">
@@ -215,7 +221,7 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
             <input
               type="search"
               value={nameQuery}
-              onChange={(event) => setNameQuery(event.target.value)}
+              onChange={(event) => { setNameQuery(event.target.value); setUserPage(1); }}
               placeholder="按姓名搜索用户"
               className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-slate-400"
             />
@@ -231,7 +237,7 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
           <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">未找到姓名包含“{nameQuery.trim()}”的用户。</div>
         ) : (
           <div className="space-y-4">
-            {visibleUsers.map((user) => {
+            {paginatedUsers.map((user) => {
               // 负责人的部门自动权限按所属部门计算：归属学习竞技部时这组业务权限全部自动授予（不可手改）；
               // 未归属部门或归属其他部门（其自动权限不含这组键）时保持可手动勾选。
               const autoPerms = user.role === 'leader' ? computeDepartmentAutoPerms(user.role, user.department) : null;
@@ -291,6 +297,15 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
               </section>
               );
             })}
+          </div>
+        )}
+        {!error && visibleUsers.length > 0 && (
+          <div className="mt-5 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+              <span>显示 {(currentUserPage - 1) * userPageSize + 1}-{Math.min(currentUserPage * userPageSize, visibleUsers.length)} / {visibleUsers.length} 人</span>
+              <label className="flex items-center gap-2"><span className="text-xs text-slate-500">每页</span><select aria-label="部门用户列表每页数量" value={userPageSize} onChange={(event) => { setUserPageSize(Number(event.target.value)); setUserPage(1); }} className="h-8 rounded-md border border-slate-200 bg-white px-2 text-sm"><option value={10}>10 人</option><option value={20}>20 人</option><option value={50}>50 人</option></select></label>
+            </div>
+            <div className="flex items-center justify-between gap-2 sm:justify-end"><button type="button" disabled={currentUserPage <= 1} onClick={() => setUserPage((page) => Math.max(1, page - 1))} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm disabled:opacity-40">上一页</button><span className="text-sm text-slate-600">第 {currentUserPage} / {totalUserPages} 页</span><button type="button" disabled={currentUserPage >= totalUserPages} onClick={() => setUserPage((page) => Math.min(totalUserPages, page + 1))} className="rounded-md border border-slate-200 px-3 py-1.5 text-sm disabled:opacity-40">下一页</button></div>
           </div>
         )}
         {managedDepartment === '学习竞技部' && <DepartmentClassRosterManager onUnauthorized={redirectToLogin} />}

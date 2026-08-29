@@ -3,6 +3,8 @@ import { requirePermission } from '@/lib/auth';
 import { CATEGORIES } from '@/lib/types';
 import { createOtherCollegeActivityId, isOtherCollege } from '@/lib/other-college-registration';
 import { queryOne } from '@/storage/database/supabase-client';
+import { readIdempotencyKey, scopeIdempotencyKey } from '@/lib/idempotency';
+import { isValidDateRange } from '@/lib/other-college-validation';
 
 type RegistrationBody = {
   fullName?: unknown;
@@ -22,15 +24,12 @@ function requiredText(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
-function isValidDateRange(startTime: string, endTime: string): boolean {
-  const start = new Date(startTime).getTime();
-  const end = new Date(endTime).getTime();
-  return Number.isFinite(start) && Number.isFinite(end) && end >= start;
-}
-
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const auth = await requirePermission(request, 'registerOtherCollege');
   if (auth.response) return auth.response;
+  const requestKey = readIdempotencyKey(request.headers);
+  if (!requestKey) return NextResponse.json({ success: false, error: '缺少或无效的幂等请求标识' }, { status: 400 });
+  const idempotencyKey = scopeIdempotencyKey(auth.user!.id, requestKey);
 
   let body: RegistrationBody;
   try {
@@ -65,13 +64,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const data = await queryOne(
-    'INSERT INTO activities (id,full_name,start_time,end_time,category,level,plan_file_url,record_file_url,record_photo_url,record_photo_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,scoring_material_submitter_id,scoring_material_submitter_name,scoring_material_submitter_student_id,scoring_table_url,scoring_table_file_name,status,scoring_status) ' +
-    "VALUES ($1,$2,$3,$4,$5,'校级',NULL,NULL,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'正常活动','待赋分') RETURNING *",
+    'INSERT INTO activities (id,full_name,start_time,end_time,category,level,plan_file_url,record_file_url,record_photo_url,record_photo_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,scoring_material_submitter_id,scoring_material_submitter_name,scoring_material_submitter_student_id,scoring_table_url,scoring_table_file_name,status,scoring_status,idempotency_key) ' +
+    "VALUES ($1,$2,$3,$4,$5,'校级',NULL,NULL,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'正常活动','待赋分',$18) ON CONFLICT (idempotency_key) DO NOTHING RETURNING *",
     [
       createOtherCollegeActivityId(), fullName, startTime, endTime, category, recordPhotoUrl, recordPhotoFileName,
       leaderName, contactPhone, 'other_college', organizer, JSON.stringify([{ type: 'other_college', name: organizer }]),
-      auth.user!.id, auth.user!.username, auth.user!.student_id, scoringTableUrl, scoringTableFileName,
+      auth.user!.id, auth.user!.username, auth.user!.student_id, scoringTableUrl, scoringTableFileName, idempotencyKey,
     ],
   );
+  if (!data) {
+    const repeated = await queryOne('SELECT * FROM activities WHERE idempotency_key=$1', [idempotencyKey]);
+    if (!repeated) return NextResponse.json({ success: false, error: '提交未完成，请重试' }, { status: 409 });
+    return NextResponse.json({ success: true, data: repeated });
+  }
   return NextResponse.json({ success: true, data });
 }

@@ -247,6 +247,10 @@ export function setSessionCookie(response: NextResponse, userId: string, token =
   });
 }
 
+export function validatePassword(password: unknown): string | null {
+  return typeof password === 'string' && password.length >= 6 ? null : '密码至少需要 6 位';
+}
+
 export function clearSessionCookie(response: NextResponse, request?: NextRequest) {
   response.cookies.set({ name: SESSION_COOKIE, value: '', ...sessionCookieOptions(request), maxAge: 0 });
 }

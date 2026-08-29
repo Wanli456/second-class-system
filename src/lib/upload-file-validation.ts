@@ -31,8 +31,6 @@ const MAGIC_SIGNATURES: Array<{ kind: UploadFileKind; bytes: number[]; offset?: 
   { kind: 'image', bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] }, // png
   { kind: 'image', bytes: [0x47, 0x49, 0x46, 0x38] }, // gif
   { kind: 'image', bytes: [0x42, 0x4d] }, // bmp
-  { kind: 'image', bytes: [0x52, 0x49, 0x46, 0x46] }, // webp (RIFF....WEBP)
-  { kind: 'image', bytes: [0x66, 0x74, 0x79, 0x70], offset: 4 }, // heic/heif (ftyp box)
   { kind: 'document', bytes: [0x25, 0x50, 0x44, 0x46] }, // pdf
   { kind: 'document', bytes: [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1] }, // legacy doc/xls/ppt (OLE2)
   { kind: 'document', bytes: [0x50, 0x4b, 0x03, 0x04] }, // docx/xlsx/pptx/zip
@@ -45,6 +43,11 @@ function matchesSignature(buffer: Buffer, signature: { bytes: number[]; offset?:
 }
 
 export function detectFileKindFromBytes(buffer: Buffer, fileName = ''): UploadFileKind | null {
+  if (buffer.length >= 12 && matchesSignature(buffer, { bytes: [0x52, 0x49, 0x46, 0x46] }) && matchesSignature(buffer, { bytes: [0x57, 0x45, 0x42, 0x50], offset: 8 })) return 'image';
+  if (buffer.length >= 12 && matchesSignature(buffer, { bytes: [0x66, 0x74, 0x79, 0x70], offset: 4 })) {
+    const brand = buffer.subarray(8, 12).toString('ascii');
+    if (['heic', 'heix', 'hevc', 'hevx', 'mif1', 'msf1'].includes(brand)) return 'image';
+  }
   for (const signature of MAGIC_SIGNATURES) {
     if (matchesSignature(buffer, signature)) return signature.kind;
   }

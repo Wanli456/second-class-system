@@ -64,6 +64,7 @@ function validateStudentIdentityPairs(students: StudentInput[]): string | null {
   for (const student of students) {
     const identity = student.student_name + "\u0000" + student.class_name;
     const previousIdentity = identitiesByStudentId.get(student.student_id);
+    if (previousIdentity === identity) return "同一张假条中不能重复添加学号 " + student.student_id;
     if (previousIdentity && previousIdentity !== identity) return "学号 " + student.student_id + " 对应了不同的姓名或班级，请核对后再提交";
     const previousStudentId = studentIdsByIdentity.get(identity);
     if (previousStudentId && previousStudentId !== student.student_id) return "学生 " + student.student_name + "（" + student.class_name + "）对应了不同的学号，请核对后再提交";

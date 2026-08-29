@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { calculateUserPermissions } from './auth';
+import { calculateUserPermissions, validatePassword } from './auth';
 
 const sportsLeader = {
   id: 'user-1',
@@ -25,5 +25,8 @@ const sportsLeader = {
 };
 
 assert.equal(calculateUserPermissions(sportsLeader).canUploadLeave, false);
+assert.equal(validatePassword('12345'), '密码至少需要 6 位');
+assert.equal(validatePassword('123456'), null);
+assert.equal(validatePassword(null), '密码至少需要 6 位');
 
 console.log('auth permission override tests passed');

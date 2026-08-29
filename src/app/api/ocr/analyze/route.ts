@@ -52,6 +52,10 @@ async function resolveInputPath(imageUrl: string, tempDir: string, index: number
     if (!(await assertSafeRemoteImageUrl(imageUrl))) {
       throw new Error('远程图片地址不合法或指向内网');
     }
+    // DNS 可能在校验与请求之间变化；请求前再次校验，缩小 TOCTOU 窗口。
+    if (!(await assertSafeRemoteImageUrl(imageUrl))) {
+      throw new Error('远程图片地址不合法或指向内网');
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
     let response: Response;

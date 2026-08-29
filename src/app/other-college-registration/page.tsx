@@ -66,7 +66,7 @@ export default function OtherCollegeRegistrationPage() {
       } catch (reason) {
         throw new Error('备案表照片上传失败：' + (reason instanceof Error ? reason.message : '请稍后重试'));
       }
-      const response = await apiFetch('/api/other-college-registrations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fullName, organizer, category, startTime, endTime, leaderName, contactPhone, scoringTableUrl: scoringUpload.url, scoringTableFileName: scoringUpload.fileName, recordPhotoUrl: recordUpload.url, recordPhotoFileName: recordUpload.fileName }) });
+      const response = await apiFetch('/api/other-college-registrations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify({ fullName, organizer, category, startTime, endTime, leaderName, contactPhone, scoringTableUrl: scoringUpload.url, scoringTableFileName: scoringUpload.fileName, recordPhotoUrl: recordUpload.url, recordPhotoFileName: recordUpload.fileName }) });
       const data = await response.json() as { success?: boolean; error?: string };
       if (!data.success) throw new Error(data.error || '登记失败');
       setSuccess(true); setFullName(''); setOrganizer(''); setCategory(''); setStartTime(''); setEndTime(''); setLeaderName(''); setContactPhone(''); setScoringTable(null); setRecordPhoto(null);

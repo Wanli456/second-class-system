@@ -33,6 +33,12 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_phone TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS can_start_group_leave BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS can_manage_attendance_work BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS can_upload_leave BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS can_query_leave BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS can_review_leave BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_evening_study BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS can_manage_original_leave BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS permission_overrides TEXT;
 
 CREATE TABLE IF NOT EXISTS departments (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -80,6 +86,7 @@ CREATE TABLE IF NOT EXISTS activities (
   scoring_status TEXT NOT NULL DEFAULT '待赋分',
   scoring_table_url TEXT,
   scoring_table_file_name TEXT,
+  idempotency_key TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -88,6 +95,9 @@ CREATE TABLE IF NOT EXISTS activity_id_counters (
   year_month TEXT PRIMARY KEY,
   next_number INTEGER NOT NULL
 );
+
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS activities_idempotency_key_idx ON activities (idempotency_key);
 
 CREATE TABLE IF NOT EXISTS activity_submissions (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -273,3 +283,85 @@ ALTER TABLE leave_groups ADD COLUMN IF NOT EXISTS applicant_name TEXT;
 ALTER TABLE leave_groups ADD COLUMN IF NOT EXISTS applicant_student_id TEXT;
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS activity_id TEXT;
 ALTER TABLE leave_groups ADD COLUMN IF NOT EXISTS activity_id TEXT;
+
+CREATE TABLE IF NOT EXISTS leave_slips (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  slip_type TEXT NOT NULL DEFAULT 'handwritten',
+  leave_type TEXT NOT NULL DEFAULT '事假',
+  class_names TEXT NOT NULL,
+  start_time TIMESTAMP,
+  end_time TIMESTAMP,
+  activity_id TEXT,
+  activity_name TEXT,
+  applicant_user_id TEXT NOT NULL,
+  applicant_name TEXT,
+  applicant_student_id TEXT,
+  leave_image_url TEXT,
+  leave_image_name TEXT,
+  image_list TEXT NOT NULL DEFAULT '[]',
+  ocr_names TEXT NOT NULL DEFAULT '[]',
+  image_hashes TEXT NOT NULL DEFAULT '[]',
+  duplicate_of_slip_id TEXT,
+  duplicate_score INT,
+  duplicate_warning TEXT,
+  original_image_similarity INT,
+  original_image_difference_warning TEXT,
+  counselor_signature BOOLEAN NOT NULL DEFAULT false,
+  official_seal BOOLEAN NOT NULL DEFAULT false,
+  teacher_signature BOOLEAN NOT NULL DEFAULT false,
+  is_late BOOLEAN NOT NULL DEFAULT false,
+  original_slip_id TEXT,
+  review_status TEXT NOT NULL DEFAULT '待查对',
+  review_note TEXT,
+  reviewed_by_user_id TEXT,
+  reviewed_by_name TEXT,
+  reviewed_at TIMESTAMP,
+  idempotency_key TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS leave_slip_students (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  slip_id TEXT NOT NULL,
+  student_id TEXT NOT NULL,
+  student_name TEXT NOT NULL,
+  class_name TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS leave_slip_students_slip_student_idx ON leave_slip_students (slip_id, student_id);
+
+CREATE TABLE IF NOT EXISTS original_leave_slips (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  activity_id TEXT,
+  image_url TEXT,
+  image_name TEXT,
+  image_list TEXT NOT NULL DEFAULT '[]',
+  ocr_names TEXT NOT NULL DEFAULT '[]',
+  image_hashes TEXT NOT NULL DEFAULT '[]',
+  notes TEXT,
+  created_by_user_id TEXT,
+  created_by_name TEXT,
+  idempotency_key TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS attendance_work_arrangements (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  name TEXT NOT NULL DEFAULT '考勤工作安排',
+  start_date TEXT,
+  end_date TEXT,
+  student_names TEXT NOT NULL DEFAULT '[]',
+  schedules TEXT NOT NULL DEFAULT '[]',
+  image_list TEXT NOT NULL DEFAULT '[]',
+  ocr_names TEXT NOT NULL DEFAULT '[]',
+  review_status TEXT NOT NULL DEFAULT '待查对',
+  review_note TEXT,
+  created_by_user_id TEXT,
+  created_by_name TEXT,
+  idempotency_key TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS attendance_work_arrangements_idempotency_key_idx ON attendance_work_arrangements (idempotency_key);
