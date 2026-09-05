@@ -4,7 +4,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { publicUser, requireUser } from '@/lib/auth';
 import { getUploadContentType } from '@/lib/upload-file-validation';
 import { safeUploadFileName } from '@/lib/local-upload';
-import { queryOne } from '@/storage/database/supabase-client';
+import { query, queryOne } from '@/storage/database/supabase-client';
+
+function imageListContains(value: string | null, url: string): boolean {
+  try {
+    const images: unknown = JSON.parse(value || '[]');
+    return Array.isArray(images) && images.some((image: unknown) =>
+      typeof image === 'object' && image !== null && 'url' in image && image.url === url);
+  } catch {
+    return false;
+  }
+}
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ filename: string }> }) {
   const auth = await requireUser(request);
@@ -32,7 +42,27 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       ) AS allowed`,
       [url, user.id, permissions.canPublish, permissions.canScore, permissions.canPublish, permissions.canReviewLeave, permissions.canQueryLeave, permissions.canManageOriginalLeave],
     );
-    if (!reference?.allowed) return NextResponse.json({ success: false, error: '无权访问该文件' }, { status: 403 });
+    if (!reference?.allowed) {
+      // Keep the existing role/ownership rules; match individual URLs, not the entire JSON string.
+      const lists = await query<{ image_list: string | null }>(
+        `SELECT image_list FROM leave_slips WHERE applicant_user_id=$1 OR $2 OR $3
+         UNION ALL SELECT image_list FROM original_leave_slips WHERE created_by_user_id=$1 OR $4
+         UNION ALL SELECT image_list FROM attendance_work_arrangements
+          WHERE created_by_user_id=$1 OR $5 OR $6 OR ($7 AND review_status='已通过')`,
+        [
+          user.id,
+          permissions.canReviewLeave,
+          permissions.canQueryLeave,
+          permissions.canManageOriginalLeave,
+          permissions.canManageAttendanceWork,
+          permissions.canReviewLeave,
+          permissions.canViewEveningStudy,
+        ],
+      );
+      if (!lists.some((row) => imageListContains(row.image_list, url))) {
+        return NextResponse.json({ success: false, error: '无权访问该文件' }, { status: 403 });
+      }
+    }
   }
 
   try {

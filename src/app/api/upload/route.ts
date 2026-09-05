@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
 import { requirePermission } from '@/lib/auth';
 import { detectFileKindFromBytes, getUploadFileKind, UPLOAD_FILE_FORMAT_HINT } from '@/lib/upload-file-validation';
 import { publicUploadError } from '@/lib/upload-error';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { query } from '@/storage/database/supabase-client';
 
 // POST /api/upload - 上传文件到雨云服务器本地存储
 export async function POST(request: NextRequest) {
@@ -70,6 +71,15 @@ export async function POST(request: NextRequest) {
 
     // 返回公开URL
     const publicUrl = `/uploads/${fileName}`;
+    try {
+      await query(
+        'INSERT INTO upload_assets (url, uploaded_by_user_id, purpose) VALUES ($1,$2,$3)',
+        [publicUrl, auth.user!.id, purpose],
+      );
+    } catch (error) {
+      await unlink(filePath).catch(() => undefined);
+      throw error;
+    }
 
     return NextResponse.json({ success: true, url: publicUrl, file_name: originalName });
   } catch (err) {

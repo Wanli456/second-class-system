@@ -8,16 +8,22 @@ import { requirePermission } from '@/lib/auth';
 import { assertSafeRemoteImageUrl } from '@/lib/image-url';
 import { selectStudentIdAfterRosterLookup } from '@/lib/ocr-student-id-validation';
 import { query } from '@/storage/database/supabase-client';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { downloadOcrImage, parseOcrImageUrls, tryAcquireOcrSlot } from '@/lib/ocr-limits';
+import { canAccessOcrAttachment } from '@/lib/ocr-attachment-access';
 
 function runPythonOcr(pythonPath: string, args: string[]) {
   return new Promise<void>((resolve, reject) => {
     // 保留 stderr：运行环境出错时返回真实原因，不能只显示无意义的退出码。
     const child = spawn(pythonPath, args, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
-    const stderr: Uint8Array[] = [];
-    child.stderr?.on('data', (chunk: Uint8Array) => stderr.push(chunk));
+    let stderr = Buffer.alloc(0);
+    child.stderr?.on('data', (chunk: Uint8Array) => {
+      stderr = Buffer.concat([stderr, chunk]).subarray(-8192);
+    });
+    let timedOut = false;
     const timer = setTimeout(() => {
+      timedOut = true;
       child.kill();
-      reject(new Error('自动识别超时'));
     }, 120000);
     child.once('error', (error) => {
       clearTimeout(timer);
@@ -25,9 +31,10 @@ function runPythonOcr(pythonPath: string, args: string[]) {
     });
     child.once('close', (code) => {
       clearTimeout(timer);
-      if (code === 0) resolve();
+      if (timedOut) reject(new Error('自动识别超时'));
+      else if (code === 0) resolve();
       else {
-        const details = Buffer.concat(stderr).toString('utf8').trim();
+        const details = stderr.toString('utf8').trim();
         reject(new Error(`OCR 脚本退出码：${code}${details ? `（${details.slice(-500)}）` : ''}`));
       }
     });
@@ -47,7 +54,7 @@ function unique(value: string[]): string[] {
   return [...new Set(value.map((item) => item.trim()).filter(Boolean))];
 }
 
-async function resolveInputPath(imageUrl: string, tempDir: string, index: number): Promise<string> {
+async function resolveInputPath(imageUrl: string, tempDir: string, index: number, userId: string, isAdmin: boolean, canManageOriginalLeave: boolean, canManageAttendanceWork: boolean): Promise<string> {
   if (/^https?:\/\//i.test(imageUrl)) {
     if (!(await assertSafeRemoteImageUrl(imageUrl))) {
       throw new Error('远程图片地址不合法或指向内网');
@@ -56,33 +63,28 @@ async function resolveInputPath(imageUrl: string, tempDir: string, index: number
     if (!(await assertSafeRemoteImageUrl(imageUrl))) {
       throw new Error('远程图片地址不合法或指向内网');
     }
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
-    let response: Response;
-    try {
-      response = await fetch(imageUrl, { redirect: 'error', signal: controller.signal });
-    } finally {
-      clearTimeout(timer);
-    }
-    if (!response.ok) throw new Error(`下载图片失败：HTTP ${response.status}`);
-    const contentLength = Number(response.headers.get('content-length') || 0);
-    if (contentLength && contentLength > 8 * 1024 * 1024) {
-      throw new Error('远程图片超过 8MB，拒绝下载');
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.length > 8 * 1024 * 1024) throw new Error('远程图片超过 8MB，拒绝下载');
+    const buffer = await downloadOcrImage(imageUrl);
     const ext = imageUrl.includes('.png') ? 'png' : 'jpg';
     const inputPath = path.join(tempDir, `image-${index}.${ext}`);
     await writeFile(inputPath, buffer);
     return inputPath;
   }
   if (imageUrl.startsWith('/uploads/') && !imageUrl.includes('..')) {
+    const allowed = await canAccessOcrAttachment(imageUrl, userId, { isAdmin, canManageOriginalLeave, canManageAttendanceWork });
+    if (!allowed) throw new OcrAttachmentAccessError();
     const fileName = imageUrl.split('/').pop();
     const inputPath = path.join(process.cwd(), 'public', 'uploads', fileName || '');
     if (!existsSync(inputPath)) throw new Error(`找不到本地图片：${imageUrl}`);
     return inputPath;
   }
   throw new Error('image_url 只支持 /uploads 本地路径或公网 http(s) 图片地址');
+}
+
+class OcrAttachmentAccessError extends Error {
+  constructor() {
+    super('无权识别该附件');
+    this.name = 'OcrAttachmentAccessError';
+  }
 }
 
 type OcrLine = { text: string; score?: number };
@@ -182,6 +184,7 @@ function mergeClassStudents(perImage: OcrPatch[]): Array<{ class_name: string; s
 // body: { imageUrls: string[] } 或 { imageUrl: string }，地址来自 /api/upload 的返回值。
 // 返回多张截图合并后的识别行和初步字段（需人工核对）。
 export async function POST(request: NextRequest) {
+  let releaseSlot: (() => void) | null = null;
   try {
     let auth = await requirePermission(request, 'manageOriginalLeave');
     if (auth.response) {
@@ -195,24 +198,28 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const body = await request.json();
-    const rawUrls = Array.isArray(body.imageUrls) ? body.imageUrls
-      : Array.isArray(body.image_urls) ? body.image_urls
-        : [body.imageUrl || body.image_url].filter(Boolean);
-    const imageUrls = rawUrls.map((url: unknown) => String(url).trim()).filter(Boolean);
-
-    if (!imageUrls.length) return NextResponse.json({ success: false, error: '缺少 imageUrl 或 imageUrls 参数' }, { status: 400 });
+    const limit = checkRateLimit(`ocr:${auth.user!.id}`, 10, 10 * 60_000);
+    if (!limit.allowed) return NextResponse.json({ success: false, error: '识别请求过于频繁，请稍后再试' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } });
+    let imageUrls: string[];
+    try {
+      imageUrls = parseOcrImageUrls(await request.json());
+    } catch (error) {
+      return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '图片参数无效' }, { status: 400 });
+    }
+    releaseSlot = tryAcquireOcrSlot(auth.user!.id);
+    if (!releaseSlot) return NextResponse.json({ success: false, error: '识别任务正在处理中，请稍后再试' },
+      { status: 429, headers: { 'Retry-After': '3' } });
 
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ds-ocr-'));
-    const pythonPath = resolvePythonPath();
-    const scriptPath = path.join(process.cwd(), 'local-ocr', 'ocr_service.py');
-    if (!existsSync(scriptPath)) throw new Error('OCR 服务脚本 local-ocr/ocr_service.py 不存在');
-
     try {
+      const pythonPath = resolvePythonPath();
+      const scriptPath = path.join(process.cwd(), 'local-ocr', 'ocr_service.py');
+      if (!existsSync(scriptPath)) throw new Error('OCR 服务脚本 local-ocr/ocr_service.py 不存在');
       const perImage: OcrPatch[] = [];
       for (let index = 0; index < imageUrls.length; index += 1) {
         const imageUrl = imageUrls[index];
-        const inputPath = await resolveInputPath(imageUrl, tempDir, index);
+        const inputPath = await resolveInputPath(imageUrl, tempDir, index, auth.user!.id, auth.user!.role === 'admin', Boolean(auth.user!.can_manage_original_leave), Boolean(auth.user!.can_manage_attendance_work));
         const outputPath = path.join(tempDir, `result-${index}.json`);
         await runPythonOcr(pythonPath, [scriptPath, inputPath, outputPath]);
         const raw = await readFile(outputPath, 'utf8');
@@ -221,7 +228,7 @@ export async function POST(request: NextRequest) {
         perImage.push({ image: index, url: imageUrl, lines: result.lines || [], fields: result.fields || {} });
       }
 
-        const enrichedPerImage = await validateClassStudentsAgainstRoster(perImage);
+      const enrichedPerImage = await validateClassStudentsAgainstRoster(perImage);
       const lines = enrichedPerImage.flatMap((result) => result.lines.map((line) => ({ ...line, image: result.image })));
 
       const firstNonEmpty = (selector: (fields: Record<string, unknown>) => string) => (
@@ -260,6 +267,9 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error('自动识别失败:', error);
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '自动识别失败' }, { status: 500 });
+    const status = error instanceof OcrAttachmentAccessError ? 403 : 500;
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '自动识别失败' }, { status });
+  } finally {
+    releaseSlot?.();
   }
 }

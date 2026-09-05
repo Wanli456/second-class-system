@@ -73,7 +73,7 @@ export default function EveningStudyPage() {
     setError('');
     setLoading(true);
     try {
-      const response = await apiFetch(`/api/leave-slips?class=${encodeURIComponent(className.trim())}&date=${encodeURIComponent(date)}`);
+      const response = await apiFetch(`/api/leave-slips?evening=1&class=${encodeURIComponent(className.trim())}&date=${encodeURIComponent(date)}`);
       const data: QueryResult = await response.json();
       if (!data.success) throw new Error(data.error || '查询失败');
       const slips = data.data || [];

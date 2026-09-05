@@ -28,8 +28,8 @@ async function run() {
     assert.equal(body.success, status === 200);
     return body;
   }
-  const leavePath = (className = classA, day = date, status?: string) =>
-    `/api/leave-slips?${new URLSearchParams({ class: className, date: day, ...(status ? { status } : {}) })}`;
+  const leavePath = (className = classA, day = date, status?: string, evening = false) =>
+    `/api/leave-slips?${new URLSearchParams({ class: className, date: day, ...(status ? { status } : {}), ...(evening ? { evening: '1' } : {}) })}`;
   const dutyPath = (status?: string, day = date) =>
     `/api/attendance-work?${new URLSearchParams({ date: day, ...(status ? { review_status: status } : {}) })}`;
 
@@ -51,21 +51,21 @@ async function run() {
   }
 
   const slips = [
-    ['eq-approved', classA, '已通过', '15T18:30:00', '14T12:00:00'],
-    ['eq-pending', classA, '待查对', '15T18:30:00', '14T12:00:00'],
-    ['eq-rejected', classA, '已驳回', '15T18:30:00', '14T12:00:00'],
-    ['eq-midnight', classA, '已通过', '15T00:00:00', '14T12:00:00'],
-    ['eq-created-today', classA, '已通过', '16T18:30:00', '15T12:00:00'],
-    ['eq-other-class', classB, '已通过', '15T18:30:00', '14T12:00:00'],
-    ['eq-previous', classA, '已通过', '14T23:59:59', '14T12:00:00'],
-    ['eq-next-midnight', classA, '已通过', '16T00:00:00', '16T00:00:00'],
+    ['eq-approved', classA, '已通过', '15T18:30:00', '15T20:30:00', '14T12:00:00'],
+    ['eq-pending', classA, '待查对', '14T23:30:00', '15T01:00:00', '14T12:00:00'],
+    ['eq-rejected', classA, '已驳回', '15T00:00:00', '16T00:00:00', '14T12:00:00'],
+    ['eq-midnight', classA, '已通过', '15T23:59:59', '16T00:00:00', '14T12:00:00'],
+    ['eq-created-today', classA, '已通过', null, null, '15T12:00:00'],
+    ['eq-other-class', classB, '已通过', '15T18:30:00', '15T20:30:00', '14T12:00:00'],
+    ['eq-previous', classA, '已通过', '14T12:00:00', '14T23:59:59', '14T12:00:00'],
+    ['eq-next-midnight', classA, '已通过', '16T00:00:00', '17T00:00:00', '16T00:00:00'],
   ] as const;
-  for (const [id, className, status, start, created] of slips) {
+  for (const [id, className, status, start, end, created] of slips) {
     await query(`INSERT INTO leave_slips (id, class_names, applicant_user_id, slip_type,
       leave_type, start_time, end_time, created_at, review_status, activity_name,
       image_hashes, duplicate_warning)
       VALUES ($1,$2,'eq-none','手写假条','病假',$3,$4,$5,$6,NULL,$7,$8)`,
-    [id, JSON.stringify([className]), `2099-06-${start}`, '2099-06-16T21:00:00',
+    [id, JSON.stringify([className]), start ? `2099-06-${start}` : null, end ? `2099-06-${end}` : null,
       `2099-06-${created}`, status, '["private-hash"]', '内部提示']);
     await query(`INSERT INTO leave_slip_students (id, slip_id, student_id, student_name, class_name)
       VALUES ($1,$2,$3,$4,$5)`, [id + '-student', id, id + '-number', id + '-姓名', className]);
@@ -81,8 +81,8 @@ async function run() {
       const fixture = slips.find(([id]) => id === row.id)!;
       assert.equal(row.class_names, JSON.stringify([fixture[1]]));
       assert.equal(row.review_status, fixture[2]);
-      assert.equal(row.start_time, `2099-06-${fixture[3]}`);
-      assert.equal(row.end_time, '2099-06-16T21:00:00');
+      assert.equal(row.start_time, fixture[3] ? `2099-06-${fixture[3]}` : null);
+      assert.equal(row.end_time, fixture[4] ? `2099-06-${fixture[4]}` : null);
       assert.equal(row.leave_type, '病假');
       assert.equal(row.slip_type, '手写假条');
       assert.equal(row.activity_name, null);
@@ -99,16 +99,20 @@ async function run() {
     }
   }
   // Page sends no status: rejected/pending remain present for client-side classification.
-  // Date contract is start-day OR creation-day, not interval overlap.
+  // Date contract is interval overlap; records without a start time fall back to creation date.
   checkSlips(await get(leave, leavePath(), 'eq-both'), expectedSlips);
   for (const user of ['eq-query', 'eq-original']) {
     checkSlips(await get(leave, leavePath(), user), expectedSlips);
   }
+  checkSlips(await get(leave, leavePath(classA, date, undefined, true), 'eq-evening'), expectedSlips);
+  await get(leave, leavePath(), 'eq-evening', 403);
+  await get(leave, leavePath(classA, date, undefined, true), 'eq-none', 403);
   for (const status of ['已通过', '待查对', '已驳回']) {
     const expected = slips.filter(([id, , state]) => expectedSlips.includes(id) && state === status).map(([id]) => id);
     checkSlips(await get(leave, leavePath(classA, date, status), 'eq-both'), expected);
   }
   checkSlips(await get(leave, leavePath(classB), 'eq-both'), ['eq-other-class']);
+  checkSlips(await get(leave, leavePath(classA, '2099-06-16'), 'eq-both'), ['eq-next-midnight']);
   checkSlips(await get(leave, leavePath(classA, '2099-06-17'), 'eq-both'), []);
 
   const duties = [

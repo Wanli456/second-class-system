@@ -47,6 +47,10 @@ const eslintConfig = defineConfig([
     'dist/**',
     // Browser automation profiles are generated runtime assets, not source code.
     'cn_debug/**',
+    'local-ocr/.python-runtime/**',
+    '.ocr-venv*/**',
+    'ppt-master-projects/**',
+    'public/uploads/**',
     // Script files (CommonJS):
     'scripts/**/*.js',
   ]),

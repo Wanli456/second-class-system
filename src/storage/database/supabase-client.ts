@@ -255,6 +255,13 @@ if (localDb && shouldInitializeLocalDb) {
       related_id TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE upload_assets (
+      url TEXT PRIMARY KEY,
+      uploaded_by_user_id TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
   `);
 
   // Stable accounts for local previews; this database is never used when PGDATABASE_URL is configured.
@@ -594,6 +601,17 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
     CREATE UNIQUE INDEX IF NOT EXISTS leave_slips_idempotency_key_idx ON leave_slips (idempotency_key);
   `);
+
+  if (!(await tableExists('upload_assets'))) {
+    await executeSchemaSql(`
+      CREATE TABLE upload_assets (
+        url TEXT PRIMARY KEY,
+        uploaded_by_user_id TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+  }
 
   if (!(await tableExists('leave_slip_students'))) {
     await executeSchemaSql(`

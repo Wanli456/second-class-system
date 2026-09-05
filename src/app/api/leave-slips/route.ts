@@ -301,14 +301,6 @@ export async function GET(request: NextRequest) {
     if (auth.response) return auth.response;
     const user = auth.user!;
     const permissions = calculateUserPermissions(user);
-    // 假条查看和假条对比权限可读取各自页面所需的材料；假条查对权限不包含查看或对比权限。
-    // 仅无上述权限的普通用户才被限制为查看本人相关记录。
-    const canQueryAll = permissions.canQueryLeave || permissions.canManageOriginalLeave;
-    if (!canQueryAll && !selfOnly) {
-      return NextResponse.json({ success: false, error: '没有查看假条的权限' }, { status: 403 });
-    }
-    const canReviewInternalSignals = permissions.canReviewLeave;
-
     const id = searchParams.get('id');
     const keyword = searchParams.get('keyword')?.trim();
     const className = searchParams.get('class')?.trim();
@@ -317,6 +309,16 @@ export async function GET(request: NextRequest) {
     const reviewStatus = searchParams.get('status');
     const originalSlipId = searchParams.get('original_slip_id');
     const date = searchParams.get('date');
+    const eveningRequested = searchParams.get('evening') === '1';
+    // 假条查看和假条对比权限可读取各自页面所需的材料；假条查对权限不包含查看或对比权限。
+    // 仅无上述权限的普通用户才被限制为查看本人相关记录。
+    const eveningQuery = eveningRequested && Boolean(className && date && /^\d{4}-\d{2}-\d{2}$/.test(date));
+    const canQueryAll = permissions.canQueryLeave || permissions.canManageOriginalLeave;
+    const canReadAllRows = canQueryAll || (eveningQuery && permissions.canViewEveningStudy);
+    if (!canReadAllRows && !selfOnly) {
+      return NextResponse.json({ success: false, error: '没有查看假条的权限' }, { status: 403 });
+    }
+    const canReviewInternalSignals = permissions.canReviewLeave;
 
     if (id) {
       const slip = canQueryAll
@@ -368,11 +370,11 @@ export async function GET(request: NextRequest) {
     if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
       const { start, end } = getDayRangeForBusinessDate(date);
       params.push(start, end);
-      where.push(`(start_time >= $${paramIndex} AND start_time < $${paramIndex + 1} OR created_at >= $${paramIndex} AND created_at < $${paramIndex + 1})`);
+      where.push(`((start_time IS NOT NULL AND start_time < $${paramIndex + 1} AND (end_time IS NULL OR end_time > $${paramIndex})) OR (start_time IS NULL AND created_at >= $${paramIndex} AND created_at < $${paramIndex + 1}))`);
       paramIndex += 2;
     }
 
-    if (!canQueryAll) {
+    if (!canReadAllRows) {
       // 普通学生/班级负责人：默认只能查看与自己相关的假条（本人是上传人或被覆盖学生之一）。
       params.push(user.id, user.student_id, user.student_id);
       where.push(`(applicant_user_id = $${paramIndex} OR applicant_student_id = $${paramIndex + 1} OR id IN (SELECT slip_id FROM leave_slip_students WHERE student_id = $${paramIndex + 2}))`);
@@ -383,7 +385,7 @@ export async function GET(request: NextRequest) {
     const slips = withWallTimes(await query(sql, params));
     const slipIds = slips.map((slip) => String((slip as { id: string }).id));
     const students = slipIds.length
-      ? canQueryAll
+      ? canReadAllRows
         ? await query(`SELECT * FROM leave_slip_students WHERE slip_id IN (${slipIds.map((_, index) => `$${index + 1}`).join(',')}) ORDER BY slip_id, student_id`, slipIds)
         : await query(`SELECT * FROM leave_slip_students WHERE slip_id IN (${slipIds.map((_, index) => `$${index + 1}`).join(',')}) AND student_id=$${slipIds.length + 1} ORDER BY slip_id, student_id`, [...slipIds, user.student_id])
       : [];

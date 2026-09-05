@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test": "node scripts/test.mjs",
     "build": "bash ./scripts/build.sh",
     "dev": "node node_modules/tsx/dist/cli.mjs watch src/server.ts",
     "preinstall": "npx only-allow pnpm",
