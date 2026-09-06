@@ -5,7 +5,8 @@ import { requirePermission } from '@/lib/auth';
 import { detectFileKindFromBytes, getUploadFileKind, UPLOAD_FILE_FORMAT_HINT } from '@/lib/upload-file-validation';
 import { publicUploadError } from '@/lib/upload-error';
 import { checkRateLimit } from '@/lib/rate-limit';
-import { query } from '@/storage/database/supabase-client';
+import { withTransaction } from '@/storage/database/supabase-client';
+import { writeAuditLog } from '@/lib/audit-log';
 
 // POST /api/upload - 上传文件到雨云服务器本地存储
 export async function POST(request: NextRequest) {
@@ -72,10 +73,13 @@ export async function POST(request: NextRequest) {
     // 返回公开URL
     const publicUrl = `/uploads/${fileName}`;
     try {
-      await query(
-        'INSERT INTO upload_assets (url, uploaded_by_user_id, purpose) VALUES ($1,$2,$3)',
-        [publicUrl, auth.user!.id, purpose],
-      );
+      await withTransaction(async (client) => {
+        await client.query(
+          'INSERT INTO upload_assets (url, uploaded_by_user_id, purpose) VALUES ($1,$2,$3)',
+          [publicUrl, auth.user!.id, purpose],
+        );
+        await writeAuditLog({ actor: auth.user, action: 'upload', resourceType: 'file', details: { purpose, size: file.size } }, client);
+      });
     } catch (error) {
       await unlink(filePath).catch(() => undefined);
       throw error;

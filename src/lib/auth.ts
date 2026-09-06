@@ -51,6 +51,12 @@ export type AuthUser = {
   department?: string | null;
   class_name?: string | null;
   permission_overrides?: string | null;
+  admin_session_id?: string | null;
+};
+
+export type SessionToken = {
+  userId: string;
+  sessionId?: string;
 };
 
 export type BaseRole = 'admin' | 'leader' | 'class_leader' | 'student';
@@ -72,16 +78,16 @@ function sign(value: string) {
   return createHmac('sha256', secret()).update(value).digest('base64url');
 }
 
-function serializeSession(userId: string) {
-  const payload = `${userId}.${Date.now() + SESSION_TTL_SECONDS * 1000}`;
+function serializeSession(userId: string, sessionId?: string) {
+  const payload = [userId, Date.now() + SESSION_TTL_SECONDS * 1000, sessionId].filter((value) => value !== undefined).join('.');
   return `${Buffer.from(payload).toString('base64url')}.${sign(payload)}`;
 }
 
-export function createSessionToken(userId: string) {
-  return serializeSession(userId);
+export function createSessionToken(userId: string, sessionId?: string) {
+  return serializeSession(userId, sessionId);
 }
 
-function readSession(value?: string | null) {
+export function readSessionToken(value?: string | null): SessionToken | null {
   if (!value) return null;
   const [encodedPayload, signature] = value.split('.');
   if (!encodedPayload || !signature) return null;
@@ -90,13 +96,37 @@ function readSession(value?: string | null) {
     const payload = Buffer.from(encodedPayload, 'base64url').toString('utf8');
     const expected = sign(payload);
     if (signature.length !== expected.length || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
-    const separator = payload.lastIndexOf('.');
-    const userId = payload.slice(0, separator);
-    const expiresAt = Number(payload.slice(separator + 1));
-    return userId && expiresAt > Date.now() ? userId : null;
+    const parts = payload.split('.');
+    if (parts.length !== 2 && parts.length !== 3) return null;
+    const [userId, expiresAtRaw, sessionId] = parts;
+    const expiresAt = Number(expiresAtRaw);
+    return userId && expiresAt > Date.now() ? { userId, ...(sessionId ? { sessionId } : {}) } : null;
   } catch {
     return null;
   }
+}
+
+export function createAdminSessionId() {
+  return randomBytes(32).toString('base64url');
+}
+
+export async function issueSessionToken(userId: string) {
+  const sessionId = createAdminSessionId();
+  const admin = await queryOne<{ id: string }>(
+    `UPDATE users SET admin_session_id=$1 WHERE id=$2 AND role='admin' RETURNING id`,
+    [sessionId, userId],
+  );
+  return createSessionToken(userId, admin ? sessionId : undefined);
+}
+
+export async function revokeAdminSession(userId: string, sessionId: string): Promise<void> {
+  await queryOne('UPDATE users SET admin_session_id=NULL WHERE id=$1 AND role=\'admin\' AND admin_session_id=$2 RETURNING id', [userId, sessionId]);
+}
+
+export function isSessionActiveForUser(session: SessionToken | null, user: Pick<AuthUser, 'role' | 'admin_session_id'>) {
+  if (!session) return false;
+  if (!session.sessionId) return user.role !== 'admin';
+  return session.sessionId === user.admin_session_id;
 }
 
 export async function hashPassword(password: string) {
@@ -175,16 +205,27 @@ export function publicUser(user: AuthUser) {
 // 导出函数供测试使用
 export { calculateUserPermissions };
 
-export async function getSessionUser(request: NextRequest): Promise<AuthUser | null> {
+async function getAuthenticatedSession(request: NextRequest): Promise<{ user: AuthUser; session: SessionToken } | null> {
   const authorization = request.headers.get('authorization');
   const bearerToken = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null;
-  const userId = readSession(request.cookies.get(SESSION_COOKIE)?.value) || readSession(bearerToken);
-  if (!userId) return null;
-  return queryOne(
-    `SELECT id, username, student_id, role, can_publish, can_score, can_submit_activity, can_view_submission_status, can_submit_scoring, can_register_other_college, can_review_leave, can_view_evening_study, can_start_group_leave, can_manage_attendance_work, can_upload_leave, can_query_leave, can_manage_original_leave, can_submit_original_leave, department, class_name, contact_phone, permission_overrides
-     FROM users WHERE id = $1`,
-    [userId],
-  );
+  const sessions = [request.cookies.get(SESSION_COOKIE)?.value, bearerToken].map(readSessionToken).filter((session): session is SessionToken => !!session);
+  for (const session of sessions) {
+    const user = await queryOne<AuthUser>(
+      `SELECT id, username, student_id, role, can_publish, can_score, can_submit_activity, can_view_submission_status, can_submit_scoring, can_register_other_college, can_review_leave, can_view_evening_study, can_start_group_leave, can_manage_attendance_work, can_upload_leave, can_query_leave, can_manage_original_leave, can_submit_original_leave, department, class_name, contact_phone, permission_overrides, admin_session_id
+       FROM users WHERE id = $1`,
+      [session.userId],
+    );
+    if (user && isSessionActiveForUser(session, user)) return { user, session };
+  }
+  return null;
+}
+
+export async function getSessionUser(request: NextRequest): Promise<AuthUser | null> {
+  return (await getAuthenticatedSession(request))?.user || null;
+}
+
+export async function getActiveSessionToken(request: NextRequest): Promise<SessionToken | null> {
+  return (await getAuthenticatedSession(request))?.session || null;
 }
 
 export async function requireUser(request: NextRequest) {

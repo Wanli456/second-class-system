@@ -1,7 +1,40 @@
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { ensureDatabaseSchema, query } from '@/storage/database/supabase-client';
 
+async function checkSharedInitialization() {
+  const runtime = globalThis as typeof globalThis & {
+    __secondClassSchemaInitialization?: Promise<void> | null;
+    __secondClassLocalDatabase?: { db: { public: { none: (sql: string) => void } } };
+  };
+  const schema = runtime.__secondClassLocalDatabase!.db.public;
+  const originalNone = schema.none;
+  const failure = new Error('injected schema failure');
+  schema.none = () => { throw failure; };
+  try {
+    await assert.rejects(ensureDatabaseSchema(), (error) => error === failure);
+    assert.equal(runtime.__secondClassSchemaInitialization, null, 'failed initialization is retryable');
+  } finally {
+    schema.none = originalNone;
+  }
+  const pending = ensureDatabaseSchema();
+  const reload = createRequire(import.meta.url);
+  const modulePath = reload.resolve('../storage/database/supabase-client');
+  delete reload.cache[modulePath];
+  const secondModule = reload(modulePath) as typeof import('@/storage/database/supabase-client');
+  assert.equal(secondModule.ensureDatabaseSchema(), pending, 'module reload shares in-flight migration');
+  await pending;
+  assert.equal(secondModule.ensureDatabaseSchema(), pending, 'completed migration is not replayed');
+}
+
 async function run() {
+  // Simulate a retained pg-mem table before a new route module initializes.
+  await query(`CREATE TABLE file_cleanup_jobs (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(), asset_url TEXT NOT NULL UNIQUE,
+    staged_path TEXT, status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT, created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`);
+  await checkSharedInitialization();
   await ensureDatabaseSchema();
   const columns = await query<{ column_name: string }>(
     `SELECT column_name

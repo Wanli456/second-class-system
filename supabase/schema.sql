@@ -39,6 +39,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS can_review_leave BOOLEAN NOT NULL DEF
 ALTER TABLE users ADD COLUMN IF NOT EXISTS can_view_evening_study BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS can_manage_original_leave BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS permission_overrides TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_session_id TEXT;
 
 CREATE TABLE IF NOT EXISTS departments (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -160,7 +161,7 @@ CREATE TABLE IF NOT EXISTS leave_requests (
 CREATE TABLE IF NOT EXISTS leave_groups (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   class_name TEXT NOT NULL,
-  applicant_user_id TEXT NOT NULL,
+  applicant_user_id TEXT,
   applicant_name TEXT,
   applicant_student_id TEXT,
   leave_type TEXT NOT NULL DEFAULT '活动公假',
@@ -293,7 +294,7 @@ CREATE TABLE IF NOT EXISTS leave_slips (
   end_time TIMESTAMP,
   activity_id TEXT,
   activity_name TEXT,
-  applicant_user_id TEXT NOT NULL,
+  applicant_user_id TEXT,
   applicant_name TEXT,
   applicant_student_id TEXT,
   leave_image_url TEXT,
@@ -330,10 +331,17 @@ CREATE TABLE IF NOT EXISTS leave_slip_students (
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS leave_slip_students_slip_student_idx ON leave_slip_students (slip_id, student_id);
+ALTER TABLE leave_groups ALTER COLUMN applicant_user_id DROP NOT NULL;
+ALTER TABLE leave_slips ALTER COLUMN applicant_user_id DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS original_leave_slips (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   activity_id TEXT,
+  activity_name TEXT,
+  class_names TEXT,
+  student_names TEXT NOT NULL DEFAULT '[]',
+  start_time TIMESTAMP,
+  end_time TIMESTAMP,
   image_url TEXT,
   image_name TEXT,
   image_list TEXT NOT NULL DEFAULT '[]',
@@ -346,6 +354,9 @@ CREATE TABLE IF NOT EXISTS original_leave_slips (
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS activity_name TEXT;
+ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS class_names TEXT;
+ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS student_names TEXT NOT NULL DEFAULT '[]';
 
 CREATE TABLE IF NOT EXISTS attendance_work_arrangements (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -358,6 +369,9 @@ CREATE TABLE IF NOT EXISTS attendance_work_arrangements (
   ocr_names TEXT NOT NULL DEFAULT '[]',
   review_status TEXT NOT NULL DEFAULT '待查对',
   review_note TEXT,
+  reviewed_by_user_id TEXT,
+  reviewed_by_name TEXT,
+  reviewed_at TIMESTAMP,
   created_by_user_id TEXT,
   created_by_name TEXT,
   idempotency_key TEXT,
@@ -365,3 +379,31 @@ CREATE TABLE IF NOT EXISTS attendance_work_arrangements (
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS attendance_work_arrangements_idempotency_key_idx ON attendance_work_arrangements (idempotency_key);
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  actor_user_id TEXT, actor_name TEXT, action TEXT NOT NULL, resource_type TEXT NOT NULL,
+  resource_id TEXT, details JSONB NOT NULL DEFAULT '{}'::jsonb, ip_address TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx ON audit_logs (created_at);
+CREATE INDEX IF NOT EXISTS audit_logs_actor_idx ON audit_logs (actor_user_id);
+CREATE INDEX IF NOT EXISTS audit_logs_resource_idx ON audit_logs (resource_type, resource_id);
+
+CREATE TABLE IF NOT EXISTS upload_assets (
+  url TEXT PRIMARY KEY,
+  uploaded_by_user_id TEXT,
+  purpose TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+ALTER TABLE upload_assets ALTER COLUMN uploaded_by_user_id DROP NOT NULL;
+
+CREATE TABLE IF NOT EXISTS file_cleanup_jobs (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  asset_url TEXT NOT NULL UNIQUE,
+  staged_path TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);

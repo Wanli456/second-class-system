@@ -1,0 +1,3 @@
+export default function PrivacyPage() {
+  return <main className="mx-auto max-w-3xl px-6 py-10 text-slate-800"><h1 className="text-2xl font-bold">隐私与数据使用说明</h1><p className="mt-4">本系统用于第二课堂活动管理、请假审核、活动赋分和晚自习查询。</p><h2 className="mt-8 text-lg font-semibold">收集内容</h2><p className="mt-2">包括姓名、学号、班级、联系方式、活动材料、请假截图及审核记录。</p><h2 className="mt-8 text-lg font-semibold">保存期限</h2><p className="mt-2">有注册账号主体从注册日期起算，注册满四年进入自动清理；账号删除后清理个人信息并保留去个人化业务记录。管理员仍可使用独立的毕业处置入口提前处置，自动期限不以毕业状态为前提。请假截图、活动材料等文件按 180 天规则处理；实际执行状态以管理员治理页显示为准。</p><h2 className="mt-8 text-lg font-semibold">删除与导出</h2><p className="mt-2">管理员可在数据治理页预览或执行到期清理、提前进行毕业处置、导出白名单业务数据、查看操作日志，并对文件执行带引用确认的永久删除。关键治理操作会保留审计记录。</p><p className="mt-8 text-sm text-slate-500">如需更正或删除信息，请联系系统管理员。</p></main>;
+}

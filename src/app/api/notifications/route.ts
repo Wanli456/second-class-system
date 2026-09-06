@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query, queryOne } from "@/storage/database/supabase-client";
+import { query, queryOne, withTransaction } from "@/storage/database/supabase-client";
 import { requireUser } from "@/lib/auth";
+import { writeAuditLog } from "@/lib/audit-log";
 
 // GET /api/notifications - 获取用户通知列表
 // PUT /api/notifications - 标记通知为已读
@@ -48,19 +49,19 @@ export async function PUT(request: NextRequest) {
 
     if (markAllRead && userId === auth.user!.id) {
       // 标记所有通知为已读
-      await query(
-        `UPDATE notifications SET is_read = 'true' WHERE user_id = $1 AND is_read = 'false'`,
-        [userId]
-      );
+      await withTransaction(async (client) => {
+        const updated = await client.query(`UPDATE notifications SET is_read = 'true' WHERE user_id = $1 AND is_read = 'false' RETURNING id`, [userId]);
+        if (updated.rows.length) await writeAuditLog({ actor: auth.user, action: 'mark_notification_read', resourceType: 'notification', details: { count: updated.rows.length } }, client);
+      });
       return NextResponse.json({ success: true, message: "已全部标记为已读" });
     }
 
     if (notificationId) {
       // 标记单个通知为已读
-      await query(
-        `UPDATE notifications SET is_read = 'true' WHERE id = $1 AND user_id = $2`,
-        [notificationId, auth.user!.id]
-      );
+      await withTransaction(async (client) => {
+        const updated = await client.query(`UPDATE notifications SET is_read = 'true' WHERE id = $1 AND user_id = $2 AND is_read = 'false' RETURNING id`, [notificationId, auth.user!.id]);
+        if (updated.rows[0]) await writeAuditLog({ actor: auth.user, action: 'mark_notification_read', resourceType: 'notification', resourceId: notificationId }, client);
+      });
       return NextResponse.json({ success: true, message: "已标记为已读" });
     }
 
@@ -79,15 +80,22 @@ export async function DELETE(request: NextRequest) {
     const { notificationId, userId, deleteAll } = body;
 
     if (deleteAll && userId === auth.user!.id) {
-      await query('DELETE FROM notifications WHERE user_id = $1', [userId]);
+      await withTransaction(async (client) => {
+        const deleted = await client.query('DELETE FROM notifications WHERE user_id = $1 RETURNING id', [userId]);
+        if (deleted.rows.length) await writeAuditLog({ actor: auth.user, action: 'delete_notification', resourceType: 'notification', details: { count: deleted.rows.length } }, client);
+      });
       return NextResponse.json({ success: true, message: '已清空通知' });
     }
 
     if (notificationId) {
-      const deleted = await query(
+      const deleted = await withTransaction(async (client) => {
+        const result = await client.query(
         'DELETE FROM notifications WHERE id = $1 AND user_id = $2 RETURNING id',
         [notificationId, auth.user!.id]
-      );
+        );
+        if (result.rows[0]) await writeAuditLog({ actor: auth.user, action: 'delete_notification', resourceType: 'notification', resourceId: notificationId }, client);
+        return result.rows;
+      });
       if (!deleted.length) {
         return NextResponse.json({ success: false, error: '通知不存在' }, { status: 404 });
       }

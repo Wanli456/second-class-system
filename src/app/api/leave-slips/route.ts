@@ -1,12 +1,13 @@
 import { getDayRangeForBusinessDate } from '@/lib/business-time';
 import { NextRequest, NextResponse } from 'next/server';
 import { calculateUserPermissions, requireUser, type AuthUser } from '@/lib/auth';
-import { query, queryOne, withTransaction, withWallTime, withWallTimes } from '@/storage/database/supabase-client';
+import { query, queryOne, toWallTimeString, withTransaction, withWallTime, withWallTimes } from '@/storage/database/supabase-client';
 import { compareSlipWithOriginals } from '@/lib/leave-slip-matching';
 import { computeImageHashes } from '@/lib/image-hash';
 import { readIdempotencyKey } from '@/lib/idempotency';
 import { detectDuplicateSlip } from '@/lib/leave-slip-duplicate';
 import { normalizeDateTimeInput } from '@/lib/datetime';
+import { writeAuditLog } from '@/lib/audit-log';
 
 const SLIP_TYPES = ['手写假条', '二课活动请假', '校级（且不为数经举办）假条', '手机假条', '其他请假'] as const;
 const LEAVE_TYPES = ['事假', '病假', '活动公假'] as const;
@@ -15,6 +16,10 @@ const REVIEW_STATUSES = ['待查对', '已通过', '已驳回'] as const;
 
 type StudentInput = { student_id: string; student_name: string; class_name: string };
 type StudentParseResult = { students: StudentInput[]; incompleteRows: number[] };
+
+function normalizeStoredWallTime(value: unknown): string | null {
+  return typeof value === 'string' ? normalizeDateTimeInput(value) : toWallTimeString(value);
+}
 
 function withoutInternalReviewFields(slip: Record<string, unknown>): Record<string, unknown> {
   const {
@@ -257,6 +262,13 @@ export async function POST(request: NextRequest) {
           [slip.id, student.student_id, student.student_name, student.class_name],
         );
       }
+      await writeAuditLog({
+        actor: user,
+        action: 'create_leave_slip',
+        resourceType: 'leave_slip',
+        resourceId: slip.id,
+        details: { reviewStatus: initialReviewStatus, participantCount: students.length },
+      }, client);
       return { slip, created: true };
     });
 
@@ -411,7 +423,14 @@ export async function DELETE(request: NextRequest) {
     if (!id) return NextResponse.json({ success: false, error: '缺少ID参数' }, { status: 400 });
     await withTransaction(async (client) => {
       await client.query('DELETE FROM leave_slip_students WHERE slip_id=$1', [id]);
-      await client.query('DELETE FROM leave_slips WHERE id=$1', [id]);
+      const deleted = (await client.query('DELETE FROM leave_slips WHERE id=$1 RETURNING id', [id])).rows[0] as { id: string } | undefined;
+      if (!deleted) return;
+      await writeAuditLog({
+        actor: user,
+        action: 'delete_leave_slip',
+        resourceType: 'leave_slip',
+        resourceId: deleted.id,
+      }, client);
     });
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -438,8 +457,8 @@ export async function PUT(request: NextRequest) {
     }
     if (endTime <= startTime) return NextResponse.json({ success: false, error: '结束时间必须晚于开始时间' }, { status: 400 });
 
-    const current = await queryOne<{ id: string; slip_type: string; counselor_signature: boolean; official_seal: boolean; teacher_signature: boolean; review_status: string }>(
-      'SELECT id, slip_type, counselor_signature, official_seal, teacher_signature, review_status FROM leave_slips WHERE id=$1',
+    const current = await queryOne<{ id: string; slip_type: string; counselor_signature: boolean; official_seal: boolean; teacher_signature: boolean; review_status: string; activity_id: string | null; activity_name: string | null; class_names: string; leave_type: string; start_time: unknown; end_time: unknown; original_slip_id: string | null }>(
+      'SELECT id, slip_type, counselor_signature, official_seal, teacher_signature, review_status, activity_id, activity_name, class_names, leave_type, start_time, end_time, original_slip_id FROM leave_slips WHERE id=$1',
       [id],
     );
     if (!current) return NextResponse.json({ success: false, error: '假条不存在或已删除' }, { status: 404 });
@@ -479,10 +498,31 @@ export async function PUT(request: NextRequest) {
 
     // 用乐观锁（WHERE review_status=读取时的状态）避免覆盖并发查对结果：如果查对人在
     // 读取校验和这次写入之间已经查对过该假条，这里必须失败并提示刷新，而不是静默改回待查对。
-    const updated = await queryOne(
-      "UPDATE leave_slips SET activity_id=$1, activity_name=$2, class_names=$3, leave_type=$4, start_time=$5, end_time=$6, original_slip_id=NULL, review_status='待查对', review_note=NULL, reviewed_by_user_id=NULL, reviewed_by_name=NULL, reviewed_at=NULL WHERE id=$7 AND review_status=$8 RETURNING *",
-      [activityId, activityName || null, JSON.stringify(classNames), leaveType, startTime, endTime, id, current.review_status],
-    );
+    const classNamesJson = JSON.stringify(classNames);
+    const hasChange = current.activity_id !== activityId
+      || current.activity_name !== (activityName || null)
+      || current.class_names !== classNamesJson
+      || current.leave_type !== leaveType
+      || normalizeStoredWallTime(current.start_time) !== startTime
+      || normalizeStoredWallTime(current.end_time) !== endTime
+      || current.original_slip_id !== null
+      || current.review_status !== '待查对';
+    const updated = await withTransaction(async (client) => {
+      const row = (await client.query(
+        "UPDATE leave_slips SET activity_id=$1, activity_name=$2, class_names=$3, leave_type=$4, start_time=$5, end_time=$6, original_slip_id=NULL, review_status='待查对', review_note=NULL, reviewed_by_user_id=NULL, reviewed_by_name=NULL, reviewed_at=NULL WHERE id=$7 AND review_status=$8 RETURNING *",
+        [activityId, activityName || null, classNamesJson, leaveType, startTime, endTime, id, current.review_status],
+      )).rows[0] as Record<string, unknown> | undefined;
+      if (row && hasChange) {
+        await writeAuditLog({
+          actor: user,
+          action: 'update_leave_slip',
+          resourceType: 'leave_slip',
+          resourceId: id,
+          details: { reviewStatus: '待查对' },
+        }, client);
+      }
+      return row;
+    });
     if (!updated) return NextResponse.json({ success: false, error: '假条状态已被其他操作更新，请刷新后重试' }, { status: 409 });
     return NextResponse.json({ success: true, data: withWallTime(updated), message: '假条已修改，已解除原对比关联并回到待查对' });
   } catch (error) {

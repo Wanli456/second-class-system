@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ensureDatabaseSchema, lockTransactionKey, query, queryOne, withTransaction } from '@/storage/database/supabase-client';
 import {
   clearSessionCookie,
+  createSessionToken,
+  getActiveSessionToken,
   hashPassword,
+  issueSessionToken,
   publicUser,
   requirePermission,
   requireUser,
+  revokeAdminSession,
   setSessionCookie,
   verifyPassword,
   validatePassword,
@@ -13,6 +17,9 @@ import {
 import type { AuthUser } from '@/lib/auth';
 import { parsePermissionOverrides, type PermissionKey } from '@/lib/department-permissions';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { getAdminAccountRuleError, isLastAdminMutation } from '@/lib/admin-account-rules';
+import { writeAuditLog } from '@/lib/audit-log';
+import { disposeRegisteredUser } from '@/lib/data-retention';
 
 const PUBLIC_USER_FIELDS = `id, username, student_id, role, can_publish, can_score,
   can_submit_activity, can_view_submission_status, can_submit_scoring, can_register_other_college,
@@ -27,18 +34,18 @@ function clientAddress(request: NextRequest): string {
     || request.headers.get('x-real-ip')?.trim()
     || 'unknown';
 }
-
 function rateLimitedResponse(retryAfterSeconds: number) {
   return NextResponse.json({ success: false, error: '请求过于频繁，请稍后再试' }, { status: 429, headers: { 'Retry-After': String(retryAfterSeconds) } });
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { studentId, name, password, department, className } = await request.json();
+    const { studentId, name, password, department, className, role } = await request.json();
     const address = clientAddress(request);
     const limit = checkRateLimit(`auth:register:${address}`, 10, 10 * 60 * 1000);
     if (!limit.allowed) return rateLimitedResponse(limit.retryAfterSeconds);
     if (!studentId || !name || !password) return NextResponse.json({ success: false, error: '请填写学号、姓名和密码' }, { status: 400 });
+    if (role === 'admin') return NextResponse.json({ success: false, error: '管理员账号不能通过公开注册创建，请使用已有账号并由管理员授权' }, { status: 403 });
     if (String(password).length < 6) return NextResponse.json({ success: false, error: '密码至少需要 6 位' }, { status: 400 });
     const existing = await queryOne('SELECT id FROM users WHERE student_id=$1', [String(studentId).trim()]);
     if (existing) return NextResponse.json({ success: false, error: '该学号已注册' }, { status: 400 });
@@ -49,7 +56,7 @@ export async function POST(request: NextRequest) {
     );
     if (!user) return NextResponse.json({ success: false, error: '注册失败' }, { status: 500 });
     const response = NextResponse.json({ success: true, data: publicUser(user) });
-    setSessionCookie(response, user.id, undefined, request);
+    setSessionCookie(response, user.id, await issueSessionToken(user.id), request);
     return response;
   } catch (error) {
     console.error('Registration failed:', error);
@@ -71,7 +78,7 @@ export async function PUT(request: NextRequest) {
     if (!user || !(await verifyPassword(password, user.password))) return NextResponse.json({ success: false, error: '学号、姓名或密码错误' }, { status: 401 });
     if (!user.password.startsWith('scrypt$')) await query('UPDATE users SET password=$1 WHERE id=$2', [await hashPassword(password), user.id]);
     const response = NextResponse.json({ success: true, data: publicUser(user) });
-    setSessionCookie(response, user.id, undefined, request);
+    setSessionCookie(response, user.id, await issueSessionToken(user.id), request);
     return response;
   } catch (error) {
     console.error('Login failed:', error);
@@ -88,7 +95,7 @@ export async function GET(request: NextRequest) {
       if (auth.response) return auth.response;
       const response = NextResponse.json({ success: true, data: publicUser(auth.user!) });
       // A verified legacy bearer session is migrated to an HttpOnly cookie.
-      setSessionCookie(response, auth.user!.id, undefined, request);
+      setSessionCookie(response, auth.user!.id, createSessionToken(auth.user!.id, auth.user!.admin_session_id || undefined), request);
       return response;
     }
     if (searchParams.get('directory') === 'true') {
@@ -118,14 +125,17 @@ export async function PATCH(request: NextRequest) {
       if (passwordError) return NextResponse.json({ success: false, error: passwordError }, { status: 400 });
       const current = await queryOne<Pick<StoredUser, 'password'>>('SELECT password FROM users WHERE id=$1', [body.id]);
       if (!current || !(await verifyPassword(body.oldPassword, current.password))) return NextResponse.json({ success: false, error: '原密码错误' }, { status: 400 });
-      await query('UPDATE users SET password=$1 WHERE id=$2', [await hashPassword(body.password), body.id]);
+      await withTransaction(async (client) => {
+        await client.query('UPDATE users SET password=$1,admin_session_id=NULL WHERE id=$2', [await hashPassword(body.password), body.id]);
+        await writeAuditLog({ actor: auth.user!, action: 'update_user', resourceType: 'user', resourceId: body.id, details: { fields: ['password'] } }, client);
+      });
       return NextResponse.json({ success: true });
     }
     const auth = await requirePermission(request, 'admin');
     if (auth.response) return auth.response;
     const userId = String(body.userId || body.id || '').trim();
     if (!userId) return NextResponse.json({ success: false, error: '缺少用户 ID' }, { status: 400 });
-    const target = await queryOne<{ id: string; role: string; permission_overrides: string | null; department: string | null }>('SELECT id,role,permission_overrides,department FROM users WHERE id=$1', [userId]);
+    const target = await queryOne<{ id: string; role: string; username: string; student_id: string; permission_overrides: string | null; department: string | null }>('SELECT id,role,username,student_id,permission_overrides,department FROM users WHERE id=$1', [userId]);
     if (!target) return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
     const allowedRoles = new Set(['admin', 'leader', 'class_leader', 'student']);
     if (body.role !== undefined && !allowedRoles.has(String(body.role))) {
@@ -134,7 +144,10 @@ export async function PATCH(request: NextRequest) {
     if (body.password) {
       const passwordError = validatePassword(body.password);
       if (passwordError) return NextResponse.json({ success: false, error: passwordError }, { status: 400 });
-      await query('UPDATE users SET password=$1 WHERE id=$2', [await hashPassword(String(body.password)), userId]);
+      await withTransaction(async (client) => {
+        await client.query('UPDATE users SET password=$1,admin_session_id=NULL WHERE id=$2', [await hashPassword(String(body.password)), userId]);
+        await writeAuditLog({ actor: auth.user!, action: 'update_user', resourceType: 'user', resourceId: userId, details: { fields: ['password'] } }, client);
+      });
       return NextResponse.json({ success: true });
     }
     const fields: Record<string, string> = {
@@ -173,99 +186,91 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (!updates.length) return NextResponse.json({ success: false, error: '没有可更新的内容' }, { status: 400 });
-    params.push(userId);
     const requestedDepartment = body.department === undefined
       ? undefined
       : body.department === null
         ? null
         : String(body.department).trim();
-    const departmentLocks = [...new Set([target.department, requestedDepartment].filter((value): value is string => Boolean(value)))].sort();
     const user = await withTransaction(async (client) => {
       await lockTransactionKey(client, 'admin-role');
-      if (target.role === 'admin' && body.role && body.role !== 'admin') {
+      const lockedTarget = (await client.query<{ id: string; role: string; username: string; student_id: string; department: string | null }>(
+        'SELECT id,role,username,student_id,department FROM users WHERE id=$1 FOR UPDATE',
+        [userId],
+      )).rows[0];
+      if (!lockedTarget) throw new Error('USER_NOT_FOUND');
+      if (lockedTarget.role === 'admin' && body.role && body.role !== 'admin') {
         const count = await client.query<{ count: number }>(`SELECT COUNT(*)::int AS count FROM users WHERE role='admin'`);
-        if (Number(count.rows[0]?.count || 0) <= 1) throw new Error('LAST_ADMIN_DEMOTION');
+        if (isLastAdminMutation({ currentRole: lockedTarget.role, nextRole: String(body.role), adminCount: Number(count.rows[0]?.count || 0) })) throw new Error('LAST_ADMIN_DEMOTION');
       }
+      if (body.role === 'admin' && lockedTarget.role !== 'admin') {
+        const duplicate = await client.query<{ id: string; username: string; student_id: string }>(
+          `SELECT id,username,student_id FROM users WHERE role='admin' AND id<>$1 AND student_id=$2 LIMIT 1`,
+          [userId, lockedTarget.student_id],
+        );
+        const match = duplicate.rows[0];
+        const error = getAdminAccountRuleError({
+          role: 'admin',
+          username: lockedTarget.username,
+          studentId: lockedTarget.student_id,
+          existingAdmin: match ? { id: match.id, username: match.username, studentId: match.student_id } : null,
+        });
+        if (error) throw new Error(`DUPLICATE_ADMIN:${error}`);
+      }
+      const paramsForUpdate = [...params];
+      const roleChanged = body.role !== undefined && String(body.role) !== lockedTarget.role;
+      if (roleChanged && (lockedTarget.role === 'admin' || body.role === 'admin')) {
+        updates.push('admin_session_id=NULL');
+      }
+      const departmentLocks = [...new Set([lockedTarget.department, requestedDepartment].filter((value): value is string => Boolean(value)))].sort();
       for (const department of departmentLocks) {
         await lockTransactionKey(client, department);
       }
-      return (await client.query<AuthUser>(`UPDATE users SET ${updates.join(',')} WHERE id=$${params.length} RETURNING ${PUBLIC_USER_FIELDS}`, params)).rows[0] || null;
+      paramsForUpdate.push(userId);
+      const updated = (await client.query<AuthUser>(`UPDATE users SET ${updates.join(',')} WHERE id=$${paramsForUpdate.length} RETURNING ${PUBLIC_USER_FIELDS}`, paramsForUpdate)).rows[0] || null;
+      if (updated) {
+        await writeAuditLog({ actor: auth.user, action: 'update_user', resourceType: 'user', resourceId: userId, details: { fields: Object.keys(body).filter((key) => key !== 'password') } }, client);
+      }
+      return updated;
     });
     if (!user) return NextResponse.json({ success: false, error: '用户更新失败' }, { status: 500 });
     return NextResponse.json({ success: true, data: publicUser(user) });
   } catch (error) {
+    if (error instanceof Error && error.message === 'USER_NOT_FOUND') return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
     if (error instanceof Error && error.message === 'LAST_ADMIN_DEMOTION') return NextResponse.json({ success: false, error: '不能降级最后一个管理员' }, { status: 400 });
+    if (error instanceof Error && error.message.startsWith('DUPLICATE_ADMIN:')) return NextResponse.json({ success: false, error: error.message.slice('DUPLICATE_ADMIN:'.length) }, { status: 409 });
     console.error('Failed to update user:', error);
     return NextResponse.json({ success: false, error: '更新用户失败' }, { status: 500 });
   }
 }
 
 export async function DELETE(request: NextRequest) {
-  const id = new URL(request.url).searchParams.get('id');
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
   if (!id) {
-    const response = NextResponse.json({ success: true });
-    clearSessionCookie(response, request);
-    return response;
+    try {
+      const auth = await requireUser(request);
+      if (auth.response) return auth.response;
+      const session = await getActiveSessionToken(request);
+      if (auth.user!.role === 'admin' && session?.sessionId) await revokeAdminSession(auth.user!.id, session.sessionId);
+      const response = NextResponse.json({ success: true });
+      clearSessionCookie(response, request);
+      return response;
+    } catch (error) {
+      console.error('Failed to revoke session:', error);
+      return NextResponse.json({ success: false, error: '注销失败' }, { status: 500 });
+    }
   }
+  const reason = searchParams.get('reason') === 'graduation' ? 'graduation' : 'manual_delete';
   try {
     const auth = await requirePermission(request, 'admin');
     if (auth.response) return auth.response;
-    const target = await queryOne('SELECT id,role,username,student_id FROM users WHERE id=$1', [id]);
-    if (!target) return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
-    // 保存提交时的身份快照，避免删除账号后历史记录失去原提交人信息。
-    await withTransaction(async (client) => {
-      await lockTransactionKey(client, 'admin-role');
-      if (target.role === 'admin') {
-        const count = await client.query<{ count: number }>(`SELECT COUNT(*)::int AS count FROM users WHERE role='admin'`);
-        if (Number(count.rows[0]?.count || 0) <= 1) throw new Error('LAST_ADMIN_DELETE');
-      }
-      await client.query(
-        `UPDATE activities
-         SET activity_submitter_name=COALESCE(activity_submitter_name,$1),
-             activity_submitter_student_id=COALESCE(activity_submitter_student_id,$2)
-         WHERE activity_submitter_id=$3`,
-        [target.username, target.student_id, id],
-      );
-      await client.query(
-        `UPDATE activities
-         SET scoring_material_submitter_name=COALESCE(scoring_material_submitter_name,$1),
-             scoring_material_submitter_student_id=COALESCE(scoring_material_submitter_student_id,$2)
-         WHERE scoring_material_submitter_id=$3`,
-        [target.username, target.student_id, id],
-      );
-      await client.query(
-        `UPDATE activity_submissions
-         SET scoring_material_submitter_name=COALESCE(scoring_material_submitter_name,$1),
-             scoring_material_submitter_student_id=COALESCE(scoring_material_submitter_student_id,$2)
-         WHERE scoring_material_submitter_id=$3`,
-        [target.username, target.student_id, id],
-      );
-      await client.query(
-        `UPDATE activity_submissions
-         SET activity_submitter_name=COALESCE(activity_submitter_name,$1),
-             activity_submitter_student_id=COALESCE(activity_submitter_student_id,$2)
-         WHERE activity_submitter_id=$3`,
-        [target.username, target.student_id, id],
-      );
-      await client.query(
-        `UPDATE leave_requests
-         SET applicant_name=COALESCE(applicant_name,$1),
-             applicant_student_id=COALESCE(applicant_student_id,$2)
-         WHERE applicant_user_id=$3`,
-        [target.username, target.student_id, id],
-      );
-      await client.query(
-        `UPDATE leave_groups
-         SET applicant_name=COALESCE(applicant_name,$1),
-             applicant_student_id=COALESCE(applicant_student_id,$2)
-         WHERE applicant_user_id=$3`,
-        [target.username, target.student_id, id],
-      );
-      await client.query('DELETE FROM users WHERE id=$1', [id]);
-    });
-    return NextResponse.json({ success: true });
+    const result = await disposeRegisteredUser(auth.user!, id, reason);
+    if (result.error === 'LAST_ADMIN') return NextResponse.json({ success: false, error: '不能删除最后一个管理员' }, { status: 400 });
+    if (result.error === 'DATABASE_FAILURE') return NextResponse.json({ success: false, error: '删除用户失败' }, { status: 500 });
+    if (result.error === 'REVIEW_REQUIRED') return NextResponse.json({ success: false, error: '账号处置需要先处理未能安全去个人化的数据', data: result }, { status: 409 });
+    if (result.alreadyDisposed) return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
+    return NextResponse.json({ success: true, data: result });
   } catch (error) {
-    if (error instanceof Error && error.message === 'LAST_ADMIN_DELETE') return NextResponse.json({ success: false, error: '不能删除最后一个管理员' }, { status: 400 });
     console.error('Failed to delete user:', error);
     return NextResponse.json({ success: false, error: '删除用户失败' }, { status: 500 });
   }

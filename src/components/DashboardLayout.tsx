@@ -12,6 +12,7 @@ import {
   UserCheck,
   Moon,
   Users,
+  ShieldCheck,
   LogOut,
   Menu,
   X,
@@ -150,6 +151,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: '活动审核', href: '/admin?role=admin&tab=review', icon: FileCheck, group: '系统管理', requiredPermission: 'canPublish' },
   { label: '活动赋分', href: '/admin?role=admin&tab=scoring', icon: Award, group: '系统管理', requiredPermission: 'canScore' },
   { label: '用户管理', href: '/admin?role=admin&tab=users', icon: Users, group: '系统管理', requiredRole: 'admin' },
+  { label: '数据治理', href: '/admin?role=admin&tab=governance', icon: ShieldCheck, group: '系统管理', requiredRole: 'admin' },
   { label: '学习竞技部用户管理', href: '/department-users/learning-competition', icon: Users, group: '系统管理', requiredDepartment: '学习竞技部' },
   { label: '第二课堂认证中心用户管理', href: '/department-users/certification-center', icon: Users, group: '系统管理', requiredDepartment: '第二课堂认证中心' },
 ];

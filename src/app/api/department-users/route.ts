@@ -8,7 +8,8 @@ import {
   getManagedUserScope,
   type DepartmentUserManagementDepartment,
 } from '@/lib/department-user-management';
-import { query, queryOne } from '@/storage/database/supabase-client';
+import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
+import { writeAuditLog } from '@/lib/audit-log';
 
 const PERMISSION_COLUMNS: Record<PermissionKey, string> = {
   canPublish: 'can_publish',
@@ -170,9 +171,12 @@ export async function PATCH(request: NextRequest) {
     values.push(contactPhone);
   }
   values.push(target.id);
-  await query('UPDATE users SET ' + setClauses.join(', ') + ' WHERE id = $' + values.length, values);
-
-  const updated = await queryOne(USER_SELECT + ' WHERE id = $1', [target.id]) as DepartmentUserRow | null;
+  const updated = await withTransaction(async (client) => {
+    await client.query('UPDATE users SET ' + setClauses.join(', ') + ' WHERE id = $' + values.length, values);
+    await writeAuditLog({ actor: user, action: 'update_department_user', resourceType: 'user', resourceId: target.id, details: { changedPermissionKeys: entries.map(([key]) => key), roleChanged: requestedRole !== undefined, contactChanged: contactPhoneRequested } }, client);
+    const result = await client.query<DepartmentUserRow>(USER_SELECT + ' WHERE id = $1', [target.id]);
+    return result.rows[0] || null;
+  });
   return NextResponse.json({
     success: true,
     data: updated ? serializeUser(updated, editableKeys) : null,

@@ -1,7 +1,8 @@
 import { getBusinessDate } from '@/lib/business-time';
 import { NextRequest, NextResponse } from "next/server";
-import { query, queryOne } from "@/storage/database/supabase-client";
+import { query, queryOne, withTransaction, lockTransactionKey } from "@/storage/database/supabase-client";
 import { requirePermission } from "@/lib/auth";
+import { writeAuditLog } from "@/lib/audit-log";
 import { readIdempotencyKey, scopeIdempotencyKey } from "@/lib/idempotency";
 import { validateEveningAttendance, validateEveningSchedule } from "@/lib/evening-study-validation";
 
@@ -92,7 +93,11 @@ export async function POST(request: NextRequest) {
       if (!schedule || schedule.date !== data.date || schedule.class_name !== data.class_name) {
         return NextResponse.json({ success: false, error: '考勤安排与晚自习安排不匹配' }, { status: 400 });
       }
-      const result = await queryOne(
+      const result = await withTransaction(async (client) => {
+        await lockTransactionKey(client, idempotencyKey);
+        const repeated = await client.query('SELECT * FROM evening_study_attendance WHERE idempotency_key=$1', [idempotencyKey]);
+        if (repeated.rows[0]) return null;
+        const inserted = await client.query(
         `INSERT INTO evening_study_attendance (schedule_id, date, class_name, total_count, present_count, absent_count, discipline_status, notes, checker_name, idempotency_key)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (idempotency_key) DO NOTHING
          RETURNING *`,
@@ -108,7 +113,10 @@ export async function POST(request: NextRequest) {
           data.checker_name,
           idempotencyKey,
         ]
-      );
+        );
+        if (inserted.rows[0]) await writeAuditLog({ actor: auth.user, action: 'create_evening_study_attendance', resourceType: 'evening_study_attendance', resourceId: inserted.rows[0].id }, client);
+        return inserted.rows[0] || null;
+      });
       if (!result) {
         const repeated = await queryOne('SELECT * FROM evening_study_attendance WHERE idempotency_key=$1', [idempotencyKey]);
         if (!repeated) return NextResponse.json({ success: false, error: "提交未完成，请重试" }, { status: 409 });
@@ -119,12 +127,19 @@ export async function POST(request: NextRequest) {
 
     const validation = validateEveningSchedule(data);
     if (validation) return NextResponse.json({ success: false, error: validation }, { status: 400 });
-    const result = await queryOne(
+    const result = await withTransaction(async (client) => {
+      await lockTransactionKey(client, idempotencyKey);
+      const repeated = await client.query('SELECT * FROM evening_study_schedules WHERE idempotency_key=$1', [idempotencyKey]);
+      if (repeated.rows[0]) return null;
+      const inserted = await client.query(
       `INSERT INTO evening_study_schedules (date, weekday, class_name, classroom, checker_name, checker_phone, notes, idempotency_key)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (idempotency_key) DO NOTHING
        RETURNING *`,
       [data.date, data.weekday, data.class_name, data.classroom, data.checker_name, data.checker_phone, data.notes, idempotencyKey]
-    );
+      );
+      if (inserted.rows[0]) await writeAuditLog({ actor: auth.user, action: 'create_evening_study_schedule', resourceType: 'evening_study_schedule', resourceId: inserted.rows[0].id }, client);
+      return inserted.rows[0] || null;
+    });
     if (!result) {
       const repeated = await queryOne('SELECT * FROM evening_study_schedules WHERE idempotency_key=$1', [idempotencyKey]);
       if (!repeated) return NextResponse.json({ success: false, error: "提交未完成，请重试" }, { status: 409 });
@@ -188,10 +203,14 @@ export async function PUT(request: NextRequest) {
     setClauses.push(`updated_at = NOW()`);
     params.push(id.trim());
 
-    const result = await queryOne(
+    const result = await withTransaction(async (client) => {
+      const updated = await client.query(
       `UPDATE evening_study_schedules SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
       params
-    );
+      );
+      if (updated.rows[0]) await writeAuditLog({ actor: auth.user, action: 'update_evening_study_schedule', resourceType: 'evening_study_schedule', resourceId: id.trim() }, client);
+      return updated.rows[0] || null;
+    });
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
     console.error("更新晚自习记录失败:", error);
@@ -211,9 +230,15 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: "缺少ID参数" }, { status: 400 });
     }
 
-    const attendance = await queryOne<{ count: number }>('SELECT COUNT(*)::int AS count FROM evening_study_attendance WHERE schedule_id=$1', [id]);
-    if (Number(attendance?.count || 0) > 0) return NextResponse.json({ success: false, error: '已有考勤记录，不能删除安排' }, { status: 409 });
-    await query(`DELETE FROM evening_study_schedules WHERE id = $1`, [id]);
+    const deleted = await withTransaction(async (client) => {
+      await lockTransactionKey(client, id);
+      const attendance = await client.query<{ count: number }>('SELECT COUNT(*)::int AS count FROM evening_study_attendance WHERE schedule_id=$1', [id]);
+      if (Number(attendance.rows[0]?.count || 0) > 0) return { kind: 'attendance' as const };
+      const result = await client.query('DELETE FROM evening_study_schedules WHERE id = $1 RETURNING id', [id]);
+      if (result.rows[0]) await writeAuditLog({ actor: auth.user, action: 'delete_evening_study_schedule', resourceType: 'evening_study_schedule', resourceId: id }, client);
+      return result.rows[0] ? { kind: 'deleted' as const } : { kind: 'missing' as const };
+    });
+    if (deleted.kind === 'attendance') return NextResponse.json({ success: false, error: '已有考勤记录，不能删除安排' }, { status: 409 });
     return NextResponse.json({ success: true, message: "删除成功" });
   } catch (error) {
     console.error("删除晚自习记录失败:", error);

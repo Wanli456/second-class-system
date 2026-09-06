@@ -4,12 +4,14 @@ import { POST as submit } from '@/app/api/activities/submit/route';
 import { PUT as review } from '@/app/api/activities/review/route';
 import { POST as create, PUT as update, DELETE as remove } from '@/app/api/activities/route';
 import { PUT as score } from '@/app/api/scoring/route';
-import { createSessionToken } from './auth';
+import { createSessionToken, issueSessionToken } from './auth';
 import { ensureDatabaseSchema, queryOne } from '@/storage/database/supabase-client';
+
+let adminToken = '';
 
 function request(body: Record<string, unknown>, user = 'local-leader', key = 'acceptance-key') {
   return new NextRequest('http://localhost/api/activities', { method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${createSessionToken(user)}`, 'Idempotency-Key': key },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user === 'local-admin' ? adminToken : createSessionToken(user)}`, 'Idempotency-Key': key },
     body: JSON.stringify(body) });
 }
 
@@ -35,6 +37,7 @@ async function run() {
   assert.equal(process.env.NODE_ENV, 'test');
   assert.equal(process.env.PGDATABASE_URL, '');
   await ensureDatabaseSchema();
+  adminToken = await issueSessionToken('local-admin');
   await expectStatus(await submit(request(payload, 'local-student')), 403);
   await expectStatus(await submit(request(payload, 'local-leader', '')), 400);
   const responses = await Promise.all([submit(request(payload)), submit(request(payload))]);
@@ -65,7 +68,7 @@ async function run() {
   await expectStatus(await update(request({ id: activityId, scoring_table_url: '/uploads/replaced.xlsx' })), 400);
   await expectStatus(await submit(request({ ...payload, submission_id: id }, 'local-leader', 'acceptance-after-approval')), 400);
   console.log('PASS scoring materials/concurrent scoring:', scored.map((response) => response.status), 'repeated scoring and replacement: 400');
-  await expectStatus(await remove(new NextRequest(`http://localhost/api/activities?id=${activityId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${createSessionToken('local-admin')}` } })), 200);
+  await expectStatus(await remove(new NextRequest(`http://localhost/api/activities?id=${activityId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${adminToken}` } })), 200);
   assert.equal((await queryOne('SELECT status FROM activities WHERE id=$1', [activityId]))?.status, '活动取消');
   const canceled = await expectStatus(await score(request({ id: activityId }, 'local-scorer')), 400);
   assert.equal(canceled.error, '仅正常活动可以进行赋分');
@@ -75,7 +78,7 @@ async function run() {
   await expectStatus(await update(request({ id: standaloneId, scoring_table_url: '/uploads/acceptance.xlsx' })), 400);
   await expectStatus(await update(request({ id: standaloneId, scoring_table_url: '/uploads/acceptance.xlsx', record_photo_url: '/uploads/acceptance.png' })), 200);
   await expectStatus(await score(request({ id: standaloneId }, 'local-scorer')), 200);
-  await expectStatus(await remove(new NextRequest(`http://localhost/api/activities?id=${standaloneId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${createSessionToken('local-admin')}` } })), 200);
+  await expectStatus(await remove(new NextRequest(`http://localhost/api/activities?id=${standaloneId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${adminToken}` } })), 200);
   assert.equal(await queryOne('SELECT id FROM activities WHERE id=$1', [standaloneId]), null);
   console.log('PASS school-level materials validation and unlinked activity deletion', standaloneId);
 }

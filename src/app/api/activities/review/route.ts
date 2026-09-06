@@ -4,6 +4,7 @@ import { createNotification } from '@/lib/notifications';
 import { requirePermission } from '@/lib/auth';
 import { getActivityScopes, nextActivityId, normalizeIds, scopeMatchesUser } from '@/lib/business-rules';
 import { hydrateActivityLeaderDetails } from '@/lib/hydrate-activity-leaders';
+import { writeAuditLog } from '@/lib/audit-log';
 
 async function notifyUsers(ids: string[], type: string, title: string, content: string, relatedId: string) {
   for (const userId of [...new Set(ids)].filter(Boolean)) await createNotification(userId, type, title, content, relatedId);
@@ -62,6 +63,7 @@ export async function PUT(request: NextRequest) {
         await client.query('UPDATE activities SET leader_details=$1 WHERE id=$2', [submission.leader_details || null, activityId]);
         await client.query('UPDATE activity_submissions SET activity_id=$1 WHERE id=$2', [activityId, id]);
       }
+      await writeAuditLog({ actor: auth.user, action: 'review_activity_submission', resourceType: 'activity_submission', resourceId: id, details: { reviewStatus: review_status, activityId } }, client);
       return claimed;
     });
     if (!updated) return NextResponse.json({ success: false, error: '审核状态已被其他操作更新，请刷新后重试' }, { status: 409 });

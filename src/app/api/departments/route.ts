@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission, requireUser } from '@/lib/auth';
-import { ensureDatabaseSchema, lockTransactionKey, query, queryOne, withTransaction } from '@/storage/database/supabase-client';
+import { ensureDatabaseSchema, lockTransactionKey, query, withTransaction } from '@/storage/database/supabase-client';
+import { writeAuditLog } from '@/lib/audit-log';
 
 function normalizeName(value: unknown) {
   return String(value ?? '').trim();
@@ -51,12 +52,18 @@ export async function POST(request: NextRequest) {
   const name = normalizeName(body.name);
   if (!name) return NextResponse.json({ success: false, error: '请输入部门名称' }, { status: 400 });
 
-  const existing = await queryOne('SELECT id FROM departments WHERE name=$1', [name]);
-  if (existing) return NextResponse.json({ success: false, error: '该部门已经存在' }, { status: 400 });
-  const department = await queryOne<{ id: string; name: string }>(
-    'INSERT INTO departments (name) VALUES ($1) RETURNING id,name',
-    [name],
-  );
+  const department = await withTransaction(async (client) => {
+    await lockTransactionKey(client, name);
+    const existing = (await client.query('SELECT id FROM departments WHERE name=$1', [name])).rows[0];
+    if (existing) return null;
+    const inserted = await client.query<{ id: string; name: string }>(
+      'INSERT INTO departments (name) VALUES ($1) RETURNING id,name', [name],
+    );
+    const result = inserted.rows[0];
+    if (result) await writeAuditLog({ actor: auth.user, action: 'create_department', resourceType: 'department', resourceId: result.id }, client);
+    return result || null;
+  });
+  if (!department) return NextResponse.json({ success: false, error: '该部门已经存在' }, { status: 400 });
   return NextResponse.json({ success: true, data: department });
 }
 
@@ -77,7 +84,8 @@ export async function DELETE(request: NextRequest) {
     await lockTransactionKey(client, department.name);
     const assigned = (await client.query<{ count: number }>('SELECT COUNT(*)::int AS count FROM users WHERE department=$1', [department.name])).rows[0];
     if (Number(assigned?.count || 0) > 0) return { kind: 'assigned' as const };
-    await client.query('DELETE FROM departments WHERE id=$1', [id]);
+    const result = await client.query('DELETE FROM departments WHERE id=$1 RETURNING id', [id]);
+    if (result.rows[0]) await writeAuditLog({ actor: auth.user, action: 'delete_department', resourceType: 'department', resourceId: id }, client);
     return { kind: 'deleted' as const };
   });
   if (deleted.kind === 'missing') return NextResponse.json({ success: false, error: '部门不存在' }, { status: 404 });

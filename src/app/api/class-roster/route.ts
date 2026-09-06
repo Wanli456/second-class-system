@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { calculateUserPermissions, requirePermission, requireUser } from '@/lib/auth';
-import { ensureDatabaseSchema, lockTransactionKey, query, queryOne, withTransaction } from '@/storage/database/supabase-client';
+import { ensureDatabaseSchema, lockTransactionKey, query, withTransaction } from '@/storage/database/supabase-client';
+import { writeAuditLog } from '@/lib/audit-log';
 
 type NormalizedRosterStudent = { className: string; studentId: string; studentName: string };
 
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
         if (inserted.rows[0]) rows.push(inserted.rows[0]);
         await client.query('UPDATE users SET class_name=$1 WHERE student_id=$2', [student.className, student.studentId]);
       }
+      if (rows.length) await writeAuditLog({ actor: auth.user, action: 'create_class_roster', resourceType: 'class_roster', details: { count: rows.length } }, client);
       return rows;
     });
     return NextResponse.json({ success: true, data });
@@ -119,6 +121,7 @@ export async function PUT(request: NextRequest) {
         await client.query('UPDATE users SET class_name=NULL WHERE student_id=$1 AND class_name=$2', [current.student_id, current.class_name]);
       }
       await client.query('UPDATE users SET class_name=$1 WHERE student_id=$2', [current.class_name, student.studentId]);
+      if (updated) await writeAuditLog({ actor: auth.user, action: 'update_class_roster', resourceType: 'class_roster', resourceId: id }, client);
       return updated;
     });
     if (!data) return NextResponse.json({ success: false, error: '花名册学生不存在' }, { status: 404 });
@@ -141,6 +144,7 @@ export async function DELETE(request: NextRequest) {
     await lockTransactionKey(client, current.student_id);
     const deleted = (await client.query('DELETE FROM class_roster WHERE id=$1 RETURNING id', [id])).rows[0];
     await client.query('UPDATE users SET class_name=NULL WHERE student_id=$1 AND class_name=$2', [current.student_id, current.class_name]);
+    if (deleted) await writeAuditLog({ actor: auth.user, action: 'delete_class_roster', resourceType: 'class_roster', resourceId: id }, client);
     return deleted;
   });
   if (!data) return NextResponse.json({ success: false, error: '花名册学生不存在' }, { status: 404 });

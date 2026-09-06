@@ -3,14 +3,15 @@ import { NextRequest } from 'next/server';
 import { GET as getEveningStudy } from '@/app/api/evening-study/route';
 import { GET as getLeaveSlips, POST as submitLeaveSlip } from '@/app/api/leave-slips/route';
 import { PUT as reviewLeaveSlip } from '@/app/api/leave-slips/review/route';
-import { createSessionToken } from '@/lib/auth';
+import { createSessionToken, issueSessionToken } from '@/lib/auth';
 import { ensureDatabaseSchema, query, queryOne } from '@/storage/database/supabase-client';
 
 type Json = Record<string, unknown>;
+let adminToken = '';
 
 function request(url: string, method: string, userId?: string, json?: unknown, key?: string) {
   const headers = new Headers({ 'content-type': 'application/json' });
-  if (userId) headers.set('authorization', `Bearer ${createSessionToken(userId)}`);
+  if (userId) headers.set('authorization', `Bearer ${userId === 'local-admin' ? adminToken : createSessionToken(userId)}`);
   if (key) headers.set('Idempotency-Key', key);
   return new NextRequest(url, { method, headers, body: json === undefined ? undefined : JSON.stringify(json) });
 }
@@ -40,6 +41,7 @@ async function run(): Promise<void> {
   assert.equal(process.env.NODE_ENV, 'test');
   assert.equal(process.env.PGDATABASE_URL, '');
   await ensureDatabaseSchema();
+  adminToken = await issueSessionToken('local-admin');
 
   assert.equal((await submitLeaveSlip(request('http://localhost/api/leave-slips', 'POST', undefined, payload(), 'leave-acceptance-anon'))).status, 401);
   assert.equal((await submitLeaveSlip(request('http://localhost/api/leave-slips', 'POST', 'local-student', payload(), 'leave-acceptance-denied'))).status, 403);

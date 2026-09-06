@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth';
-import { query, queryOne, withWallTime, withWallTimes } from '@/storage/database/supabase-client';
+import { query, queryOne, withTransaction, withWallTime, withWallTimes } from '@/storage/database/supabase-client';
+import { writeAuditLog } from '@/lib/audit-log';
 
 const REVIEW_STATUSES = ['待查对', '已通过', '已驳回'] as const;
 
@@ -80,10 +81,15 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: '不能查对自己上传的假条' }, { status: 403 });
     }
 
-    const data = await queryOne(
-      `UPDATE leave_slips SET review_status=$1, review_note=$2, reviewed_by_user_id=$3, reviewed_by_name=$4, reviewed_at=NOW(), updated_at=NOW() WHERE id=$5 AND review_status='待查对' RETURNING *`,
-      [reviewStatus, body.review_note ? String(body.review_note) : null, reviewer.id, reviewer.username, id],
-    );
+    const data = await withTransaction(async (client) => {
+      const updated = await client.query(
+        `UPDATE leave_slips SET review_status=$1, review_note=$2, reviewed_by_user_id=$3, reviewed_by_name=$4, reviewed_at=NOW(), updated_at=NOW() WHERE id=$5 AND review_status='待查对' RETURNING *`,
+        [reviewStatus, body.review_note ? String(body.review_note) : null, reviewer.id, reviewer.username, id],
+      );
+      const row = updated.rows[0] || null;
+      if (row) await writeAuditLog({ actor: reviewer, action: 'review_leave_slip', resourceType: 'leave_slip', resourceId: id, details: { reviewStatus } }, client);
+      return row;
+    });
     if (!data) return NextResponse.json({ success: false, error: '假条状态已变化，请刷新后重试' }, { status: 409 });
 
     return NextResponse.json({ success: true, data: withWallTime(data) });

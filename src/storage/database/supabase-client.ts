@@ -27,6 +27,7 @@ type LocalDatabaseState = {
 
 const runtimeGlobal = globalThis as typeof globalThis & {
   __secondClassLocalDatabase?: LocalDatabaseState;
+  __secondClassSchemaInitialization?: Promise<void> | null;
 };
 const shouldInitializeLocalDb = useLocalTestDatabase && !runtimeGlobal.__secondClassLocalDatabase;
 
@@ -68,6 +69,7 @@ if (localDb && shouldInitializeLocalDb) {
       department TEXT,
       class_name TEXT,
       contact_phone TEXT,
+      admin_session_id TEXT,
       permission_overrides TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
@@ -183,7 +185,7 @@ if (localDb && shouldInitializeLocalDb) {
     CREATE TABLE leave_groups (
       id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
       class_name TEXT NOT NULL,
-      applicant_user_id TEXT NOT NULL,
+      applicant_user_id TEXT,
       applicant_name TEXT,
       applicant_student_id TEXT,
       leave_type TEXT NOT NULL DEFAULT '活动公假',
@@ -258,7 +260,7 @@ if (localDb && shouldInitializeLocalDb) {
 
     CREATE TABLE upload_assets (
       url TEXT PRIMARY KEY,
-      uploaded_by_user_id TEXT NOT NULL,
+      uploaded_by_user_id TEXT,
       purpose TEXT NOT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
@@ -326,8 +328,6 @@ if (useLocalTestDatabase && !runtimeGlobal.__secondClassLocalDatabase) {
   runtimeGlobal.__secondClassLocalDatabase = { db: localDb!, pool };
 }
 
-let schemaInitialization: Promise<void> | null = null;
-
 async function executeSchemaSql(sql: string): Promise<void> {
   if (useLocalTestDatabase) {
     localDb!.public.none(sql);
@@ -379,6 +379,7 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_phone TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS permission_overrides TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_session_id TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS scope_type TEXT DEFAULT 'department';
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS category_primary TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS category_secondary TEXT;
@@ -480,7 +481,7 @@ async function migrateDatabaseSchema(): Promise<void> {
       CREATE TABLE leave_groups (
       id TEXT PRIMARY KEY DEFAULT ${uuidDefault},
       class_name TEXT NOT NULL,
-      applicant_user_id TEXT NOT NULL,
+      applicant_user_id TEXT,
       applicant_name TEXT,
       applicant_student_id TEXT,
       leave_type TEXT NOT NULL DEFAULT '活动公假',
@@ -550,7 +551,7 @@ async function migrateDatabaseSchema(): Promise<void> {
         end_time TIMESTAMP,
         activity_id TEXT,
         activity_name TEXT,
-        applicant_user_id TEXT NOT NULL,
+      applicant_user_id TEXT,
         applicant_name TEXT,
         applicant_student_id TEXT,
         leave_image_url TEXT,
@@ -606,10 +607,31 @@ async function migrateDatabaseSchema(): Promise<void> {
     await executeSchemaSql(`
       CREATE TABLE upload_assets (
         url TEXT PRIMARY KEY,
-        uploaded_by_user_id TEXT NOT NULL,
+        uploaded_by_user_id TEXT,
         purpose TEXT NOT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
+    `);
+  }
+
+  await executeSchemaSql(`
+    ALTER TABLE upload_assets ALTER COLUMN uploaded_by_user_id DROP NOT NULL;
+    ALTER TABLE leave_groups ALTER COLUMN applicant_user_id DROP NOT NULL;
+    ALTER TABLE leave_slips ALTER COLUMN applicant_user_id DROP NOT NULL;
+  `);
+
+  if (!(await tableExists('file_cleanup_jobs'))) {
+    await executeSchemaSql(`
+    CREATE TABLE file_cleanup_jobs (
+      id TEXT PRIMARY KEY DEFAULT ${uuidDefault},
+      asset_url TEXT NOT NULL UNIQUE,
+      staged_path TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
     `);
   }
 
@@ -652,6 +674,9 @@ async function migrateDatabaseSchema(): Promise<void> {
   }
 
   await executeSchemaSql(`
+    ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS activity_name TEXT;
+    ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS class_names TEXT;
+    ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS student_names TEXT NOT NULL DEFAULT '[]';
     ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS image_list TEXT NOT NULL DEFAULT '[]';
     ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS ocr_names TEXT NOT NULL DEFAULT '[]';
     ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS image_hashes TEXT NOT NULL DEFAULT '[]';
@@ -704,17 +729,19 @@ async function migrateDatabaseSchema(): Promise<void> {
     CREATE UNIQUE INDEX IF NOT EXISTS attendance_work_arrangements_idempotency_key_idx ON attendance_work_arrangements (idempotency_key);
   `);
 
+  await executeSchemaSql(`CREATE TABLE IF NOT EXISTS audit_logs (id TEXT PRIMARY KEY DEFAULT ${uuidDefault}, actor_user_id TEXT, actor_name TEXT, action TEXT NOT NULL, resource_type TEXT NOT NULL, resource_id TEXT, details JSONB NOT NULL DEFAULT '{}'::jsonb, ip_address TEXT, created_at TIMESTAMP NOT NULL DEFAULT NOW()); CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx ON audit_logs (created_at); CREATE INDEX IF NOT EXISTS audit_logs_actor_idx ON audit_logs (actor_user_id); CREATE INDEX IF NOT EXISTS audit_logs_resource_idx ON audit_logs (resource_type, resource_id);`);
+
   await ensureDepartmentsTable();
 }
 
 export function ensureDatabaseSchema(): Promise<void> {
-  if (!schemaInitialization) {
-    schemaInitialization = migrateDatabaseSchema().catch((error: unknown) => {
-      schemaInitialization = null;
+  if (!runtimeGlobal.__secondClassSchemaInitialization) {
+    runtimeGlobal.__secondClassSchemaInitialization = migrateDatabaseSchema().catch((error: unknown) => {
+      runtimeGlobal.__secondClassSchemaInitialization = null;
       throw error;
     });
   }
-  return schemaInitialization;
+  return runtimeGlobal.__secondClassSchemaInitialization;
 }
 
 // 部门功能独立迁移，保证热更新或旧本地进程也能补齐新增表。

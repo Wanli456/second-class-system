@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query, queryOne } from '@/storage/database/supabase-client';
+import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
 import { createNotification } from '@/lib/notifications';
 import { requirePermission } from '@/lib/auth';
 import { getActivityScopes, normalizeIds, scopeMatchesUser } from '@/lib/business-rules';
 import { hasRequiredScoringMaterials } from '@/lib/activity-scoring';
 import { hydrateActivityLeaderDetails } from '@/lib/hydrate-activity-leaders';
+import { writeAuditLog } from '@/lib/audit-log';
 
 async function notifyRecipients(ids: string[], title: string, content: string, activityId: string) {
   for (const userId of [...new Set(ids)].filter(Boolean)) await createNotification(userId, 'activity_scored', title, content, activityId);
@@ -50,7 +51,12 @@ export async function PUT(request: NextRequest) {
       scoring_table_url: activity.scoring_table_url,
       record_photo_url: activity.record_photo_url,
     })) return NextResponse.json({ success: false, error: '校级活动需要上传备案表照片' }, { status: 400 });
-    const updated = await queryOne(`UPDATE activities SET scoring_status='已赋分',updated_at=NOW() WHERE id=$1 AND scoring_status='待赋分' RETURNING *`, [id]);
+    const updated = await withTransaction(async (client) => {
+      const result = await client.query(`UPDATE activities SET scoring_status='已赋分',updated_at=NOW() WHERE id=$1 AND scoring_status='待赋分' RETURNING *`, [id]);
+      const row = result.rows[0] || null;
+      if (row) await writeAuditLog({ actor: auth.user, action: 'score_activity', resourceType: 'activity', resourceId: id, details: { previousStatus: activity.scoring_status, nextStatus: '已赋分' } }, client);
+      return row;
+    });
     if (!updated) return NextResponse.json({ success: false, error: '赋分状态已被其他操作更新，请刷新后重试' }, { status: 409 });
     const recipients = normalizeIds(activity.leader_ids);
     if (activity.activity_submitter_id) recipients.push(activity.activity_submitter_id);

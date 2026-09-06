@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { calculateUserPermissions, requirePermission, requireUser } from '@/lib/auth';
-import { query, queryOne } from '@/storage/database/supabase-client';
+import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
 import { readIdempotencyKey } from '@/lib/idempotency';
+import { writeAuditLog } from '@/lib/audit-log';
 
 const REVIEW_STATUSES = ['待查对', '已通过', '已驳回'] as const;
 
@@ -36,6 +37,12 @@ function shiftDate(date: string, offsetDays: number): string {
   const month = String(shifted.getMonth() + 1).padStart(2, '0');
   const day = String(shifted.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function normalizeStoredDate(value: unknown): string | null {
+  if (typeof value === 'string') return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  return null;
 }
 
 function parseSchedules(value: unknown): Array<{ date: string; weekday: string; students: string[] }> {
@@ -143,19 +150,25 @@ export async function POST(request: NextRequest) {
     if (imageList.length > 20) return NextResponse.json({ success: false, error: '一次最多上传 20 张图片' }, { status: 400 });
 
     const id = `aw-${randomUUID()}`;
-    const inserted = await queryOne(
-      `INSERT INTO attendance_work_arrangements (id, name, start_date, end_date, student_names, schedules, image_list, ocr_names, review_status, created_by_user_id, created_by_name, idempotency_key)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'待查对',$9,$10,$11) ON CONFLICT (idempotency_key) DO NOTHING RETURNING id, review_status`,
-      [id, name, startDate, endDate, JSON.stringify(allNames), JSON.stringify(schedules), JSON.stringify(imageList), JSON.stringify(allNames), user.id, user.username, idempotencyKey],
-    );
-    if (!inserted) {
-      const repeatedAfterRace = await queryOne<Record<string, unknown>>('SELECT id, review_status, created_by_user_id FROM attendance_work_arrangements WHERE idempotency_key=$1', [idempotencyKey]);
-      if (!repeatedAfterRace) return NextResponse.json({ success: false, error: '提交未完成，请重试' }, { status: 409 });
-      if (repeatedAfterRace.created_by_user_id !== user.id && user.role !== 'admin') return NextResponse.json({ success: false, error: '重复请求标识已被其他用户使用' }, { status: 409 });
-      return NextResponse.json({ success: true, data: { id: repeatedAfterRace.id, review_status: repeatedAfterRace.review_status } });
-    }
-
-    return NextResponse.json({ success: true, data: inserted });
+    const result = await withTransaction(async (client) => {
+      const inserted = (await client.query(
+        `INSERT INTO attendance_work_arrangements (id, name, start_date, end_date, student_names, schedules, image_list, ocr_names, review_status, created_by_user_id, created_by_name, idempotency_key)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'待查对',$9,$10,$11) ON CONFLICT (idempotency_key) DO NOTHING RETURNING id, review_status`,
+        [id, name, startDate, endDate, JSON.stringify(allNames), JSON.stringify(schedules), JSON.stringify(imageList), JSON.stringify(allNames), user.id, user.username, idempotencyKey],
+      )).rows[0] as { id: string; review_status: string } | undefined;
+      if (!inserted) return { data: (await client.query('SELECT id, review_status, created_by_user_id FROM attendance_work_arrangements WHERE idempotency_key=$1', [idempotencyKey])).rows[0] as { id: string; review_status: string; created_by_user_id: string | null } | undefined, created: false };
+      await writeAuditLog({
+        actor: user,
+        action: 'create_attendance_work',
+        resourceType: 'attendance_work',
+        resourceId: inserted.id,
+        details: { reviewStatus: inserted.review_status, participantCount: allNames.length },
+      }, client);
+      return { data: { ...inserted, created_by_user_id: user.id }, created: true };
+    });
+    if (!result.data) return NextResponse.json({ success: false, error: '提交未完成，请重试' }, { status: 409 });
+    if (!result.created && result.data.created_by_user_id !== user.id && user.role !== 'admin') return NextResponse.json({ success: false, error: '重复请求标识已被其他用户使用' }, { status: 409 });
+    return NextResponse.json({ success: true, data: { id: result.data.id, review_status: result.data.review_status } });
   } catch (error) {
     console.error('提交考勤工作安排失败:', error);
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '提交失败' }, { status: 500 });
@@ -194,13 +207,25 @@ export async function PUT(request: NextRequest) {
 
       // 用 WHERE review_status='待查对' 做原子守卫，避免两次并发查对同一条记录时，
       // 后一次的更新在没有冲突提示的情况下悄悄覆盖前一次的查对结果。
-      const reviewed = await queryOne(
-        `UPDATE attendance_work_arrangements
-         SET review_status=$1, review_note=$2, reviewed_by_user_id=$3, reviewed_by_name=$4, reviewed_at=NOW(), updated_at=NOW()
-         WHERE id=$5 AND review_status='待查对'
-         RETURNING id`,
-        [reviewStatus, String(body.review_note || '').trim() || null, user.id, user.username, id],
-      );
+      const reviewed = await withTransaction(async (client) => {
+        const row = (await client.query(
+          `UPDATE attendance_work_arrangements
+           SET review_status=$1, review_note=$2, reviewed_by_user_id=$3, reviewed_by_name=$4, reviewed_at=NOW(), updated_at=NOW()
+           WHERE id=$5 AND review_status='待查对'
+           RETURNING id`,
+          [reviewStatus, String(body.review_note || '').trim() || null, user.id, user.username, id],
+        )).rows[0] as { id: string } | undefined;
+        if (row) {
+          await writeAuditLog({
+            actor: user,
+            action: 'review_attendance_work',
+            resourceType: 'attendance_work',
+            resourceId: row.id,
+            details: { reviewStatus },
+          }, client);
+        }
+        return row;
+      });
       if (!reviewed) return NextResponse.json({ success: false, error: '该安排已被其他操作查对，请刷新后重试' }, { status: 409 });
 
       return NextResponse.json({ success: true, data: { id, review_status: reviewStatus } });
@@ -211,8 +236,8 @@ export async function PUT(request: NextRequest) {
     if (auth.response) return auth.response;
     const user = auth.user!;
 
-    const existing = await queryOne<{ created_by_user_id?: string | null; image_list?: string | null }>(
-      'SELECT created_by_user_id, image_list FROM attendance_work_arrangements WHERE id=$1',
+    const existing = await queryOne<{ created_by_user_id?: string | null; image_list?: string | null; name: string; start_date: unknown; end_date: unknown; student_names: string; schedules: string; ocr_names: string; review_status: string; review_note: string | null }>(
+      'SELECT created_by_user_id, image_list, name, start_date, end_date, student_names, schedules, ocr_names, review_status, review_note FROM attendance_work_arrangements WHERE id=$1',
       [id],
     );
     if (!existing) return NextResponse.json({ success: false, error: '考勤工作安排不存在' }, { status: 404 });
@@ -255,13 +280,39 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: '请上传考勤工作安排表截图' }, { status: 400 });
     }
 
-    await query(
-      `UPDATE attendance_work_arrangements
-       SET name=$1, start_date=$2, end_date=$3, student_names=$4, schedules=$5, image_list=$6, ocr_names=$7,
-           review_status='待查对', review_note='临时修改，待重新查对', reviewed_by_user_id=NULL, reviewed_by_name=NULL, reviewed_at=NULL, updated_at=NOW()
-       WHERE id=$8`,
-      [name, startDate, endDate, JSON.stringify(allNames), JSON.stringify(schedules), JSON.stringify(imageList), JSON.stringify(allNames), id],
-    );
+    const namesJson = JSON.stringify(allNames);
+    const schedulesJson = JSON.stringify(schedules);
+    const imageListJson = JSON.stringify(imageList);
+    const hasChange = existing.name !== name
+      || normalizeStoredDate(existing.start_date) !== startDate
+      || normalizeStoredDate(existing.end_date) !== endDate
+      || existing.student_names !== namesJson
+      || existing.schedules !== schedulesJson
+      || existing.image_list !== imageListJson
+      || existing.ocr_names !== namesJson
+      || existing.review_status !== '待查对'
+      || existing.review_note !== '临时修改，待重新查对';
+    const updated = await withTransaction(async (client) => {
+      const row = (await client.query(
+        `UPDATE attendance_work_arrangements
+         SET name=$1, start_date=$2, end_date=$3, student_names=$4, schedules=$5, image_list=$6, ocr_names=$7,
+             review_status='待查对', review_note='临时修改，待重新查对', reviewed_by_user_id=NULL, reviewed_by_name=NULL, reviewed_at=NULL, updated_at=NOW()
+         WHERE id=$8
+         RETURNING id`,
+        [name, startDate, endDate, namesJson, schedulesJson, imageListJson, namesJson, id],
+      )).rows[0] as { id: string } | undefined;
+      if (row && hasChange) {
+        await writeAuditLog({
+          actor: user,
+          action: 'update_attendance_work',
+          resourceType: 'attendance_work',
+          resourceId: row.id,
+          details: { reviewStatus: '待查对', participantCount: allNames.length },
+        }, client);
+      }
+      return row;
+    });
+    if (!updated) return NextResponse.json({ success: false, error: '考勤工作安排不存在' }, { status: 404 });
 
     return NextResponse.json({ success: true, data: { id, review_status: '待查对' } });
   } catch (error) {

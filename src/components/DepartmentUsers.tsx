@@ -208,7 +208,11 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
             <div>
               <div className="flex items-center gap-2 text-xs font-semibold text-teal-700"><ShieldCheck className="size-4" />部门权限管理</div>
               <h1 className="mt-1 text-xl font-bold">{department}用户管理</h1>
-              <p className="mt-1 text-sm text-slate-500">学习竞技部可管理学生、班级负责人与各部门的部门负责人；设为部门负责人后自动获得提交原假条权限；归属部门由管理员在用户管理界面设置。</p>
+              <p className="mt-1 text-sm text-slate-500">
+                {managedDepartment === '第二课堂认证中心'
+                  ? '第二课堂认证中心可管理本部门学生、班级负责人，并为其他部门负责人配置第二课堂业务权限；部门归属和角色由管理员在用户管理界面设置。'
+                  : '学习竞技部可管理学生、班级负责人与各部门的部门负责人；设为部门负责人后自动获得学习竞技部业务权限；归属部门由管理员在用户管理界面设置。'}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600"><Users className="size-4 text-teal-700" />共 {users.length} 人</div>

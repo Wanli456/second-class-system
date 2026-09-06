@@ -1,0 +1,28 @@
+# REFERENCE ONLY — NOT a production deployment manifest.
+# DO NOT install, copy, or overwrite the live unit with this file.
+# The verified live unit has different account, environment-file, and restart
+# settings. Review docs/PRODUCTION-SYSTEMD.md and obtain separate production
+# change authorization before making any systemd change.
+
+[Unit]
+Description=Second Class Activity Management System
+After=network.target
+
+[Service]
+Type=simple
+User=secondclass-admin
+Group=secondclass-admin
+WorkingDirectory=/opt/second-class
+Environment=NODE_ENV=production
+Environment=PORT=5000
+EnvironmentFile=/etc/second-class/second-class.env
+ExecStart=/usr/bin/node /opt/second-class/dist/server.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

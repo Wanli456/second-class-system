@@ -30,6 +30,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import AdminGovernance from '@/components/admin-governance';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -38,7 +39,7 @@ import {
 type ReviewStatus = '待审核' | '已通过' | '已驳回';
 type ScoringStatus = '待赋分' | '已赋分';
 type AdminRole = 'admin' | 'leader' | 'class_leader' | 'student';
-type AdminTab = 'activities' | 'review' | 'scoring' | 'users';
+type AdminTab = 'activities' | 'review' | 'scoring' | 'users' | 'governance';
 type UserPermission = 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canRegisterOtherCollege' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave' | 'canManageAttendanceWork' | 'canUploadLeave' | 'canQueryLeave' | 'canManageOriginalLeave' | 'canSubmitOriginalLeave';
 
 const USER_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
@@ -191,6 +192,7 @@ function AdminPage() {
     review: false,
     scoring: false,
     users: false,
+    governance: false,
   });
   const [dataError, setDataError] = useState('');
 
@@ -279,6 +281,7 @@ function AdminPage() {
       ...(canPublish ? ['review' as const] : []),
       ...(canScore ? ['scoring' as const] : []),
       ...(isAdmin ? ['users' as const] : []),
+      ...(isAdmin ? ['governance' as const] : []),
     ];
 
     setActiveTab(
@@ -341,6 +344,7 @@ function AdminPage() {
           case 'review': return submissions.length > 0;
           case 'scoring': return scoringList.length > 0;
           case 'users': return users.length > 0;
+          case 'governance': return true;
           default: return false;
         }
       })();
@@ -365,6 +369,7 @@ function AdminPage() {
           case 'users':
             if (isAdmin && users.length === 0) await fetchUsers();
             break;
+          case 'governance': break;
         }
       } catch (error) {
         console.error('数据加载失败:', error);
@@ -398,6 +403,7 @@ function AdminPage() {
         case 'users':
           if (isAdmin) await fetchUsers();
           break;
+        case 'governance': break;
       }
     } catch (error) {
       console.error('重试数据加载失败:', error);
@@ -872,6 +878,7 @@ function AdminPage() {
     ...(canScore ? [{ key: 'scoring', label: '活动赋分', icon: Award, count: scoringList.filter(s => s.scoring_status === '待赋分').length }] : []),
     
     ...(isAdmin ? [{ key: 'users', label: '用户管理', icon: Users, count: 0 }] : []),
+    ...(isAdmin ? [{ key: 'governance', label: '数据治理', icon: ShieldCheck, count: 0 }] : []),
   ];
 
   const handleTabChange = (tabKey: string) => {
@@ -958,6 +965,7 @@ function AdminPage() {
             case 'review': return submissions.length === 0;
             case 'scoring': return scoringList.length === 0;
             case 'users': return users.length === 0;
+            case 'governance': return false;
             default: return true;
           }
         })() ? (
@@ -1291,6 +1299,10 @@ function AdminPage() {
                 onChangePassword={handleChangePassword}
                 onDeleteUser={handleDeleteUser}
               />
+            )}
+
+            {activeTab === 'governance' && isAdmin && (
+              <AdminGovernance users={users} onUsersRefresh={fetchUsers} />
             )}
 
             {false && (
@@ -2057,6 +2069,9 @@ function UserManagement({
               className="h-10 bg-white pl-9"
             />
           </div>
+          <p className="mt-3 max-w-3xl text-sm text-amber-700">
+            管理员必须一人一号。系统会阻止重复管理员账号，并始终保留至少一个管理员；系统无法识别现实中的密码共享，请勿共用账号或密码。
+          </p>
         </div>
 
         <div className="p-4 sm:p-6">
@@ -2098,7 +2113,14 @@ function UserManagement({
                         <select
                           aria-label={`${item.name}的角色`}
                           value={item.role}
-                          onChange={(event) => void onUpdateRole(item.id, event.target.value)}
+                          onChange={(event) => {
+                            const nextRole = event.target.value;
+                            if (item.role === 'admin' && nextRole !== 'admin' && users.filter((user) => user.role === 'admin').length <= 1) {
+                              alert('不能降级最后一个管理员，请先设置另一名管理员');
+                              return;
+                            }
+                            void onUpdateRole(item.id, nextRole);
+                          }}
                           className={cn('h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200', meta.text)}
                         >
                           <option value="admin" style={{ color: roleTextColors.admin }}>管理员</option>

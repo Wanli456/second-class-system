@@ -4,6 +4,7 @@ import { query, queryOne, withTransaction, withWallTime, withWallTimes } from '@
 import { computeImageHashes } from '@/lib/image-hash';
 import { normalizeDateTimeInput } from '@/lib/datetime';
 import { readIdempotencyKey } from '@/lib/idempotency';
+import { writeAuditLog } from '@/lib/audit-log';
 
 function parseArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
@@ -112,17 +113,25 @@ export async function POST(request: NextRequest) {
     if (endTime <= startTime) return NextResponse.json({ success: false, error: '结束时间必须晚于开始时间' }, { status: 400 });
     const ocrNames = parseArray(body.ocr_names);
     const imageHashes = await computeImageHashes(imageList.map((item) => item.url));
-    const data = await queryOne(
-      `INSERT INTO original_leave_slips (activity_id, activity_name, class_names, student_names, start_time, end_time, image_url, image_name, image_list, ocr_names, image_hashes, notes, created_by_user_id, created_by_name, idempotency_key)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ON CONFLICT (idempotency_key) DO NOTHING
-       RETURNING *`,
-      [activity.id, activity.full_name, JSON.stringify(classNames), JSON.stringify(studentNames), startTime, endTime, imageList[0].url, imageList[0].name, JSON.stringify(imageList), JSON.stringify(ocrNames), JSON.stringify(imageHashes), body.notes ? String(body.notes) : null, user.id, user.username, idempotencyKey],
-    );
-    if (data) return NextResponse.json({ success: true, data: withWallTime(data) });
-    const repeatedAfterRace = await queryOne<Record<string, unknown>>('SELECT * FROM original_leave_slips WHERE idempotency_key=$1', [idempotencyKey]);
-    if (!repeatedAfterRace) return NextResponse.json({ success: false, error: '提交未完成，请重试' }, { status: 409 });
-    if (repeatedAfterRace.created_by_user_id !== user.id && user.role !== 'admin') return NextResponse.json({ success: false, error: '重复请求标识已被其他用户使用' }, { status: 409 });
-    return NextResponse.json({ success: true, data: withWallTime(repeatedAfterRace) });
+    const result = await withTransaction(async (client) => {
+      const data = (await client.query(
+        `INSERT INTO original_leave_slips (activity_id, activity_name, class_names, student_names, start_time, end_time, image_url, image_name, image_list, ocr_names, image_hashes, notes, created_by_user_id, created_by_name, idempotency_key)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ON CONFLICT (idempotency_key) DO NOTHING
+         RETURNING *`,
+        [activity.id, activity.full_name, JSON.stringify(classNames), JSON.stringify(studentNames), startTime, endTime, imageList[0].url, imageList[0].name, JSON.stringify(imageList), JSON.stringify(ocrNames), JSON.stringify(imageHashes), body.notes ? String(body.notes) : null, user.id, user.username, idempotencyKey],
+      )).rows[0] as Record<string, unknown> | undefined;
+      if (!data) return { data: (await client.query('SELECT * FROM original_leave_slips WHERE idempotency_key=$1', [idempotencyKey])).rows[0] as Record<string, unknown> | undefined, created: false };
+      await writeAuditLog({
+        actor: user,
+        action: 'create_original_leave_slip',
+        resourceType: 'original_leave_slip',
+        resourceId: String(data.id),
+      }, client);
+      return { data, created: true };
+    });
+    if (!result.data) return NextResponse.json({ success: false, error: '提交未完成，请重试' }, { status: 409 });
+    if (!result.created && result.data.created_by_user_id !== user.id && user.role !== 'admin') return NextResponse.json({ success: false, error: '重复请求标识已被其他用户使用' }, { status: 409 });
+    return NextResponse.json({ success: true, data: withWallTime(result.data) });
   } catch (error) {
     console.error('创建原假条失败:', error);
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '创建原假条失败' }, { status: 500 });
@@ -146,7 +155,14 @@ export async function DELETE(request: NextRequest) {
     await withTransaction(async (client) => {
       const locked = await client.query('SELECT 1 FROM leave_slips WHERE original_slip_id=$1 LIMIT 1', [id]);
       if (locked.rows.length) throw new Error('原假条删除时发现新增关联，请稍后重试');
-      await client.query('DELETE FROM original_leave_slips WHERE id=$1', [id]);
+      const deleted = (await client.query('DELETE FROM original_leave_slips WHERE id=$1 RETURNING id', [id])).rows[0] as { id: string } | undefined;
+      if (!deleted) return;
+      await writeAuditLog({
+        actor: user,
+        action: 'delete_original_leave_slip',
+        resourceType: 'original_leave_slip',
+        resourceId: deleted.id,
+      }, client);
     });
     return NextResponse.json({ success: true });
   } catch (error) {

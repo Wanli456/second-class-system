@@ -6,6 +6,7 @@ import { ACTIVITY_STATUSES, isValidCategoryPath } from '@/lib/types';
 import { hydrateActivityLeaderDetails } from '@/lib/hydrate-activity-leaders';
 import { serializeActivityLeaderDetails } from '@/lib/activity-leader-details';
 import { getActivityDeletionAction } from '@/lib/activity-deletion';
+import { writeAuditLog } from '@/lib/audit-log';
 
 export async function GET(request: NextRequest) {
   try {
@@ -81,7 +82,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '查询失败' }, { status: 500 });
   }
 }
-
 export async function POST(request: NextRequest) {
   try {
     const auth = await requirePermission(request, 'admin');
@@ -105,7 +105,9 @@ export async function POST(request: NextRequest) {
         await client.query('UPDATE activities SET leader_details=$1 WHERE id=$2', [serializeActivityLeaderDetails(leaders.rows.map((leader) => ({ id: leader.id, name: leader.username, studentId: leader.student_id, contactPhone: leader.contact_phone || null }))), id]);
       }
       const updated = await client.query('SELECT * FROM activities WHERE id=$1', [id]);
-      return updated.rows[0] || inserted.rows[0] || null;
+      const data = updated.rows[0] || inserted.rows[0] || null;
+      await writeAuditLog({ actor: auth.user, action: 'create_activity', resourceType: 'activity', resourceId: data?.id || null, details: { status } }, client);
+      return data;
     });
     return NextResponse.json({ success: true, data });
   } catch (err) {
@@ -157,7 +159,12 @@ export async function PUT(request: NextRequest) {
     // 赋分材料提交需要用 WHERE scoring_status<>'已赋分' 做原子守卫：如果在读取校验和这次写入
     // 之间，该活动已被赋分完成，这里必须失败，不能在赋分之后还悄悄改动已提交的材料。
     const guard = isScoringMaterialSubmission ? ` AND scoring_status<>'已赋分'` : '';
-    const data = await queryOne(`UPDATE activities SET ${setClauses.join(',')}, updated_at=NOW() WHERE id=$${params.length}${guard} RETURNING *`, params);
+    const data = await withTransaction(async (client) => {
+      const updated = await client.query(`UPDATE activities SET ${setClauses.join(',')}, updated_at=NOW() WHERE id=$${params.length}${guard} RETURNING *`, params);
+      const row = updated.rows[0] || null;
+      if (row) await writeAuditLog({ actor: auth.user, action: isScoringMaterialSubmission ? 'submit_scoring_materials' : 'update_activity', resourceType: 'activity', resourceId: id, details: { updateKind: isScoringMaterialSubmission ? 'scoring_materials' : 'activity_fields' } }, client);
+      return row;
+    });
     if (!data) return NextResponse.json({ success: false, error: isScoringMaterialSubmission ? '该活动已完成赋分，不能重新提交材料' : '更新失败，请刷新后重试' }, { status: 409 });
     return NextResponse.json({ success: true, data });
   } catch (err) {
@@ -184,9 +191,11 @@ export async function DELETE(request: NextRequest) {
       }
       if (getActivityDeletionAction(referenceCount) === 'cancel') {
         const updated = await client.query("UPDATE activities SET status='活动取消',updated_at=NOW() WHERE id=$1 RETURNING *", [id]);
+        if (updated.rows[0]) await writeAuditLog({ actor: auth.user, action: 'cancel_activity', resourceType: 'activity', resourceId: id, details: { reason: 'has_references' } }, client);
         return { found: true, deleted: false, data: updated.rows[0] || null };
       }
       const deleted = await client.query('DELETE FROM activities WHERE id=$1 RETURNING id', [id]);
+      if (deleted.rows[0]) await writeAuditLog({ actor: auth.user, action: 'delete_activity', resourceType: 'activity', resourceId: id }, client);
       return { found: true, deleted: deleted.rows.length > 0, data: null };
     });
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth';
 import { lockTransactionKey, query, withTransaction } from '@/storage/database/supabase-client';
+import { writeAuditLog } from '@/lib/audit-log';
 
 type RosterStudentInput = {
   studentId?: unknown;
@@ -109,6 +110,7 @@ export async function POST(request: NextRequest) {
       }
       await client.query('DELETE FROM class_roster WHERE class_name=$1', [className]);
       await client.query(`INSERT INTO class_roster (class_name, student_id, student_name) VALUES ${placeholders}`, values);
+      await writeAuditLog({ actor: auth.user, action: 'replace_department_class_roster', resourceType: 'class_roster', details: { count: students.length } }, client);
     });
     return NextResponse.json({ success: true, count: students.length });
   } catch (error) {

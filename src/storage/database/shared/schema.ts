@@ -136,7 +136,7 @@ export const leave_requests = pgTable(
 export const leave_groups = pgTable("leave_groups", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
   class_name: varchar("class_name", { length: 50 }).notNull(),
-  applicant_user_id: varchar("applicant_user_id", { length: 36 }).notNull(),
+  applicant_user_id: varchar("applicant_user_id", { length: 36 }),
   applicant_name: varchar("applicant_name", { length: 50 }),
   applicant_student_id: varchar("applicant_student_id", { length: 20 }),
   leave_type: varchar("leave_type", { length: 20 }).notNull().default("活动公假"),
