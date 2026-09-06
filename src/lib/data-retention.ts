@@ -236,8 +236,6 @@ async function redactLeaderJson(client: DatabaseClient, table: 'activities' | 'a
 
 async function preflightRetention(client: DatabaseClient, user: StoredUser): Promise<RetentionIssue[]> {
   const issues: RetentionIssue[] = [];
-  const assets = await client.query<{ url: string }>('SELECT url FROM upload_assets WHERE uploaded_by_user_id=$1', [user.id]);
-  for (const asset of assets.rows) issues.push({ table: 'upload_assets', recordId: asset.url, field: 'content', reason: 'ATTACHMENT_REMAINS' });
 
   for (const table of ['activities', 'activity_submissions'] as const) {
     const rows = await client.query<{ id: string; leader_ids: string | null; leader_details: string | null; leader_name: string; leader_phone: string }>(

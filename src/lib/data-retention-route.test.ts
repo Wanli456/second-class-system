@@ -140,13 +140,11 @@ async function run() {
 
   await query(`INSERT INTO users (id,username,password,student_id,role,created_at) VALUES ('blocked-user','Blocked Name','hash','blocked-student','student',$1)`, [new Date('2022-01-01T00:00:00.000Z')]);
   await query(`INSERT INTO upload_assets (url,uploaded_by_user_id,purpose,created_at) VALUES ('/uploads/blocked.png','blocked-user','test',$1)`, [new Date('2026-09-01T00:00:00.000Z')]);
-  const blocked = await disposeRegisteredUser(actor, 'blocked-user', 'graduation');
-  assert.equal(blocked.deleted, false);
-  assert.equal(blocked.complete, false);
-  assert.equal(blocked.error, 'REVIEW_REQUIRED');
-  assert.ok(blocked.unresolved.some((issue) => issue.reason === 'ATTACHMENT_REMAINS'));
-  assert.ok(await queryOne('SELECT id FROM users WHERE id=$1', ['blocked-user']));
-  assert.equal((await queryOne('SELECT uploaded_by_user_id FROM upload_assets WHERE url=$1', ['/uploads/blocked.png']))?.uploaded_by_user_id, 'blocked-user');
+  const assetOwnerDisposed = await disposeRegisteredUser(actor, 'blocked-user', 'graduation');
+  assert.equal(assetOwnerDisposed.deleted, true);
+  assert.equal(assetOwnerDisposed.complete, true);
+  assert.equal(await queryOne('SELECT id FROM users WHERE id=$1', ['blocked-user']), null);
+  assert.equal((await queryOne('SELECT uploaded_by_user_id FROM upload_assets WHERE url=$1', ['/uploads/blocked.png']))?.uploaded_by_user_id, null);
 
   await query(`INSERT INTO users (id,username,password,student_id,role,created_at) VALUES ('ambiguous-user','Ambiguous Name','hash','ambiguous-student','student',$1)`, [new Date('2022-01-01T00:00:00.000Z')]);
   await query(
