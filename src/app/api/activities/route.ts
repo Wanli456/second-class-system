@@ -201,9 +201,9 @@ export async function DELETE(request: NextRequest) {
 
     if (!result.found) return NextResponse.json({ success: false, error: '活动不存在' }, { status: 404 });
     if (!result.deleted) {
-      return NextResponse.json({ success: true, data: result.data, message: '该活动存在关联记录，已改为活动取消，未删除历史数据' });
+      return NextResponse.json({ success: true, deleted: false, action: 'cancel', data: result.data, message: '该活动存在关联记录，已改为活动取消，未删除历史数据' });
     }
-    return NextResponse.json({ success: true, message: '活动已删除' });
+    return NextResponse.json({ success: true, deleted: true, action: 'delete', message: '活动已删除' });
   } catch (err) {
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '删除失败' }, { status: 500 });
   }

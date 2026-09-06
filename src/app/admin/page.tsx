@@ -684,8 +684,12 @@ function AdminPage() {
     try {
       const res = await apiFetch(`/api/activities?id=${id}`, { method: 'DELETE' });
       const data = await res.json();
-      if (data.success) fetchActivities();
-      else alert(data.error);
+      if (data.success) {
+        await fetchActivities();
+        alert(data.message || '活动处理成功');
+      } else {
+        alert(data.error || `删除活动失败（HTTP ${res.status}）`);
+      }
     } catch (error) {
       console.error('删除活动失败:', error);
       alert('删除活动失败');

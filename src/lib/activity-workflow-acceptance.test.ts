@@ -68,7 +68,10 @@ async function run() {
   await expectStatus(await update(request({ id: activityId, scoring_table_url: '/uploads/replaced.xlsx' })), 400);
   await expectStatus(await submit(request({ ...payload, submission_id: id }, 'local-leader', 'acceptance-after-approval')), 400);
   console.log('PASS scoring materials/concurrent scoring:', scored.map((response) => response.status), 'repeated scoring and replacement: 400');
-  await expectStatus(await remove(new NextRequest(`http://localhost/api/activities?id=${activityId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${adminToken}` } })), 200);
+  const canceledDeletion = await expectStatus(await remove(new NextRequest(`http://localhost/api/activities?id=${activityId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${adminToken}` } })), 200);
+  assert.equal(canceledDeletion.deleted, false);
+  assert.equal(canceledDeletion.action, 'cancel');
+  assert.equal(typeof canceledDeletion.message, 'string');
   assert.equal((await queryOne('SELECT status FROM activities WHERE id=$1', [activityId]))?.status, '活动取消');
   const canceled = await expectStatus(await score(request({ id: activityId }, 'local-scorer')), 400);
   assert.equal(canceled.error, '仅正常活动可以进行赋分');
@@ -78,7 +81,9 @@ async function run() {
   await expectStatus(await update(request({ id: standaloneId, scoring_table_url: '/uploads/acceptance.xlsx' })), 400);
   await expectStatus(await update(request({ id: standaloneId, scoring_table_url: '/uploads/acceptance.xlsx', record_photo_url: '/uploads/acceptance.png' })), 200);
   await expectStatus(await score(request({ id: standaloneId }, 'local-scorer')), 200);
-  await expectStatus(await remove(new NextRequest(`http://localhost/api/activities?id=${standaloneId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${adminToken}` } })), 200);
+  const deletedActivity = await expectStatus(await remove(new NextRequest(`http://localhost/api/activities?id=${standaloneId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${adminToken}` } })), 200);
+  assert.equal(deletedActivity.deleted, true);
+  assert.equal(deletedActivity.action, 'delete');
   assert.equal(await queryOne('SELECT id FROM activities WHERE id=$1', [standaloneId]), null);
   console.log('PASS school-level materials validation and unlinked activity deletion', standaloneId);
 }
