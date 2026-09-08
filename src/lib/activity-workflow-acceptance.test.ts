@@ -17,7 +17,7 @@ function request(body: Record<string, unknown>, user = 'local-leader', key = 'ac
 
 const payload = { full_name: '验收活动-并发提交', start_time: '2026-09-20 10:00:00', end_time: '2026-09-20 12:00:00',
   registration_start_time: '2026-09-10 10:00:00', registration_end_time: '2026-09-19 12:00:00',
-  category: '德', category_primary: '思想政治', category_secondary: '主题学习', level: '院系级',
+  category: '德', category_primary: '思想政治', category_secondary: '主题学习活动', level: '院系级',
   scope_type: 'department', scope_name: '学生会', leader_ids: ['local-leader'] };
 
 async function expectStatus(response: Response, status: number) {
@@ -86,6 +86,28 @@ async function run() {
   assert.equal(deletedActivity.action, 'delete');
   assert.equal(await queryOne('SELECT id FROM activities WHERE id=$1', [standaloneId]), null);
   console.log('PASS school-level materials validation and unlinked activity deletion', standaloneId);
+
+  const newPaths = [
+    ['德', '公民道德扣分项', '遵纪守法行为规范'],
+    ['体', '体育活动', '健康校园活动'],
+    ['美', '美育活动', '美育活动'],
+    ['美', '文化艺术活动扣分项', '文化艺术活动违规'],
+    ['劳', '劳育活动', '劳育活动'],
+  ];
+  for (const [index, [category, category_primary, category_secondary]] of newPaths.entries()) {
+    const classification = { category, category_primary, category_secondary };
+    const body = { ...payload, ...classification, full_name: `新细则验收-${category_primary}` };
+    const submitted = await expectStatus(await submit(request(body, 'local-leader', `category-path-${index}`)), 200);
+    assert.deepEqual(await queryOne('SELECT category, category_primary, category_secondary FROM activity_submissions WHERE id=$1', [submitted.data.id]), classification);
+    const created = await expectStatus(await create(request({ ...body, leader_name: '本地负责人', leader_phone: '9000000005' }, 'local-admin')), 200);
+    assert.deepEqual(await queryOne('SELECT category, category_primary, category_secondary FROM activities WHERE id=$1', [created.data.id]), classification);
+    await expectStatus(await update(request({ id: created.data.id, category: '智', category_primary: '工匠精神', category_secondary: '专利申请' }, 'local-admin')), 200);
+    assert.equal((await queryOne('SELECT category_secondary FROM activities WHERE id=$1', [created.data.id]))?.category_secondary, '专利申请');
+  }
+  const oldClassification = { ...payload, category_secondary: '主题学习', leader_name: '本地负责人', leader_phone: '9000000005' };
+  await expectStatus(await submit(request(oldClassification, 'local-leader', 'old-category')), 400);
+  await expectStatus(await create(request(oldClassification, 'local-admin')), 400);
+  console.log('PASS updated categories: leader submission, admin creation/edit, persisted values, obsolete category rejection');
 }
 
 run().catch((error) => { console.error(error); process.exitCode = 1; });

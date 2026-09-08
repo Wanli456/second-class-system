@@ -54,7 +54,7 @@ function activityPayload(suffix: string): Record<string, unknown> {
     full_name: `核心审计活动-${suffix}`,
     start_time: '2099-09-20 10:00:00', end_time: '2099-09-20 12:00:00',
     registration_start_time: '2099-09-10 10:00:00', registration_end_time: '2099-09-19 12:00:00',
-    category: '德', category_primary: '思想政治', category_secondary: '主题学习', level: '院系级',
+    category: '德', category_primary: '思想政治', category_secondary: '主题学习活动', level: '院系级',
     scope_type: 'department', scope_name: '学生会', leader_ids: ['local-leader'],
   };
 }
