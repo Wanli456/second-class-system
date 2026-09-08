@@ -184,7 +184,7 @@ function FilePicker({ label, file, existingUrl, existingName, onChange, imageOnl
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  return <div className="min-w-0 text-sm font-medium">{label}<label className={'mt-1 flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-3 focus-within:ring-2 focus-within:ring-teal-600 text-sm font-normal ' + (file ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'text-gray-500')}><Upload className="h-4 w-4 shrink-0" /><span className="truncate">{file?.name || existingName || (existingUrl ? '已上传文件，选择新文件可替换' : '选择文件')}</span><input type="file" aria-label={label.replace(' *', '')} className="sr-only" accept={imageOnly ? '.jpg,.jpeg,.png,.gif,.webp,.bmp' : '.pdf,.doc,.docx,.jpg,.jpeg,.png'} onChange={(e) => {
+  return <div className="min-w-0 text-sm font-medium">{label}<label className={'relative mt-1 flex cursor-pointer items-center gap-2 rounded-md border border-dashed px-3 py-3 focus-within:ring-2 focus-within:ring-teal-600 text-sm font-normal ' + (file ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'text-gray-500')}><Upload className="h-4 w-4 shrink-0" /><span className="truncate">{file?.name || existingName || (existingUrl ? '已上传文件，选择新文件可替换' : '选择文件')}</span><input type="file" aria-label={label.replace(' *', '')} className="sr-only" accept={imageOnly ? '.jpg,.jpeg,.png,.gif,.webp,.bmp' : '.pdf,.doc,.docx,.jpg,.jpeg,.png'} onChange={(e) => {
     const selected = e.target.files?.[0];
     e.target.value = '';
     if (!selected) return;
