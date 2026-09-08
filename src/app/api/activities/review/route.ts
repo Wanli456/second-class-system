@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ActivityImageError } from '@/lib/activity-image';
 import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
 import { createNotification } from '@/lib/notifications';
 import { requirePermission } from '@/lib/auth';
@@ -46,12 +47,21 @@ export async function PUT(request: NextRequest) {
     // 才发现状态冲突，留下无提交记录关联的孤儿活动，也避免两步操作中途失败导致状态不一致。
     let activityId: string | null = null;
     const updated = await withTransaction(async (client) => {
+      // 先锁图片，再锁提交记录，与清理顺序一致；旧记录没有图片时不要求补传。
+      if (review_status === '已通过' && submission.activity_image_url) {
+        const asset = await client.query('SELECT url FROM upload_assets WHERE url=$1 FOR UPDATE', [submission.activity_image_url]);
+        const cleanup = await client.query('SELECT id FROM file_cleanup_jobs WHERE asset_url=$1', [submission.activity_image_url]);
+        if (!asset.rows.length || cleanup.rows.length) throw new ActivityImageError('活动图片不可用或正在清理，请重新提交图片后审核');
+      }
       const claimResult = await client.query(
         `UPDATE activity_submissions SET review_status=$1,review_note=$2,updated_at=NOW() WHERE id=$3 AND review_status='待审核' RETURNING *`,
         [review_status, review_note || null, id],
       );
       const claimed = claimResult.rows[0];
       if (!claimed) return null;
+      if (review_status === '已通过' && claimed.activity_image_url !== submission.activity_image_url) {
+        throw new ActivityImageError('活动图片已更新，请刷新后重新审核');
+      }
 
       if (review_status === '已通过') {
         activityId = await nextActivityId(client);
@@ -60,7 +70,7 @@ export async function PUT(request: NextRequest) {
           submission.plan_file_url, submission.plan_file_name || null, submission.record_file_url, submission.record_file_name || null, submission.leader_name, submission.leader_phone,
           submission.scope_type || 'department', submission.scope_name, submission.scope_names || null, submission.leader_ids || '[]', submission.activity_submitter_id || null, submission.activity_submitter_name || null, submission.activity_submitter_student_id || null,
         ]);
-        await client.query('UPDATE activities SET leader_details=$1 WHERE id=$2', [submission.leader_details || null, activityId]);
+        await client.query('UPDATE activities SET leader_details=$1,activity_image_url=$3 WHERE id=$2', [submission.leader_details || null, activityId, claimed.activity_image_url || null]);
         await client.query('UPDATE activity_submissions SET activity_id=$1 WHERE id=$2', [activityId, id]);
       }
       await writeAuditLog({ actor: auth.user, action: 'review_activity_submission', resourceType: 'activity_submission', resourceId: id, details: { reviewStatus: review_status, activityId } }, client);
@@ -76,6 +86,6 @@ export async function PUT(request: NextRequest) {
       : `活动「${submission.full_name}」审核未通过。${review_note ? `原因：${review_note}` : ''}`, activityId || submission.id);
     return NextResponse.json({ success: true, data: updated, activityId });
   } catch (error) {
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '审核活动失败' }, { status: 500 });
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '审核活动失败' }, { status: error instanceof ActivityImageError ? 409 : 500 });
   }
 }

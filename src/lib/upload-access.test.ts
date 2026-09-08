@@ -33,6 +33,8 @@ async function run() {
       'upload-access-attendance-approved',
       JSON.stringify([{ url: '/uploads/attendance-approved.png', name: 'attendance-approved' }]),
     ]);
+    await query(`INSERT INTO activity_submissions (id,full_name,start_time,end_time,category,level,leader_name,leader_phone,activity_submitter_id,activity_image_url)
+      VALUES ('image-access','图片权限',NOW(),NOW(),'德','院系级','负责人','123','local-leader','/uploads/unrelated.png')`);
     process.chdir(root);
     const headers = { Authorization: `Bearer ${createSessionToken(user.id)}` };
     const anonymous = await GET(new NextRequest('http://localhost/api/uploads/second.png'),
@@ -51,6 +53,14 @@ async function run() {
     const denied = await GET(new NextRequest('http://localhost/api/uploads/unrelated.png', { headers }),
       { params: Promise.resolve({ filename: 'unrelated.png' }) });
     assert.equal(denied.status, 403, 'Unreferenced files must remain private');
+
+    for (const userId of ['local-leader', 'local-publisher']) {
+      const response = await GET(new NextRequest('http://localhost/api/uploads/unrelated.png', {
+        headers: { Authorization: `Bearer ${createSessionToken(userId)}` },
+      }), { params: Promise.resolve({ filename: 'unrelated.png' }) });
+      assert.equal(response.status, 200, 'submitter and reviewer can read activity images');
+      assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+    }
 
     const leaderHeaders = { Authorization: `Bearer ${createSessionToken('local-leader')}` };
     const ownAttendance = await GET(new NextRequest('http://localhost/api/uploads/attendance-own.png', { headers: leaderHeaders }),

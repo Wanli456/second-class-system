@@ -5,7 +5,7 @@ import { PUT as review } from '@/app/api/activities/review/route';
 import { POST as create, PUT as update, DELETE as remove } from '@/app/api/activities/route';
 import { PUT as score } from '@/app/api/scoring/route';
 import { createSessionToken, issueSessionToken } from './auth';
-import { ensureDatabaseSchema, queryOne } from '@/storage/database/supabase-client';
+import { ensureDatabaseSchema, query, queryOne } from '@/storage/database/supabase-client';
 
 let adminToken = '';
 
@@ -18,7 +18,7 @@ function request(body: Record<string, unknown>, user = 'local-leader', key = 'ac
 const payload = { full_name: '验收活动-并发提交', start_time: '2026-09-20 10:00:00', end_time: '2026-09-20 12:00:00',
   registration_start_time: '2026-09-10 10:00:00', registration_end_time: '2026-09-19 12:00:00',
   category: '德', category_primary: '思想政治', category_secondary: '主题学习活动', level: '院系级',
-  scope_type: 'department', scope_name: '学生会', leader_ids: ['local-leader'] };
+  scope_type: 'department', scope_name: '学生会', leader_ids: ['local-leader'], activity_image_url: '/uploads/workflow-activity.png' };
 
 async function expectStatus(response: Response, status: number) {
   const body = await response.json();
@@ -37,6 +37,7 @@ async function run() {
   assert.equal(process.env.NODE_ENV, 'test');
   assert.equal(process.env.PGDATABASE_URL, '');
   await ensureDatabaseSchema();
+  await query('INSERT INTO upload_assets (url,uploaded_by_user_id,purpose) VALUES ($1,$2,$3)', ['/uploads/workflow-activity.png', 'local-leader', 'activity']);
   adminToken = await issueSessionToken('local-admin');
   await expectStatus(await submit(request(payload, 'local-student')), 403);
   await expectStatus(await submit(request(payload, 'local-leader', '')), 400);

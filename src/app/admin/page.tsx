@@ -1,5 +1,7 @@
 'use client';
 
+import { ImageUploadPreviews } from '@/components/ImageUploadPreviews';
+
 import { useState, useEffect, useCallback, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -1118,6 +1120,7 @@ function AdminPage() {
                             <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-200 pt-4">
                               {a.plan_file_url ? <FilePreviewLink url={a.plan_file_url} fileName={a.plan_file_name} label="策划书" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /> : <span className="text-xs text-slate-400">未上传策划书</span>}
                               {a.record_file_url ? <FilePreviewLink url={a.record_file_url} fileName={a.record_file_name} label="备案表" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /> : <span className="text-xs text-slate-400">未上传备案表</span>}
+                                  <div className="w-full"><p className="text-xs font-medium text-slate-600">活动图片</p>{a.activity_image_url ? <ImageUploadPreviews imageUrls={[a.activity_image_url]} altPrefix="活动图片" /> : <span className="text-xs text-slate-400">未上传活动图片</span>}</div>
                               {a.scoring_table_url ? <FilePreviewLink url={a.scoring_table_url} fileName={a.scoring_table_file_name} label="赋分表" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /> : <span className="text-xs text-slate-400">未上传赋分表</span>}
                               {a.level === '校级' && (a.record_photo_url ? <FilePreviewLink url={a.record_photo_url} fileName={a.record_photo_file_name} label="备案表照片" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /> : <span className="text-xs text-slate-400">未上传备案表照片</span>)}
                             </div>
@@ -1182,6 +1185,7 @@ function AdminPage() {
                                 <div className="mt-3 flex flex-wrap gap-2">
                                   {s.plan_file_url ? <FilePreviewLink url={s.plan_file_url} fileName={s.plan_file_name} label="策划书" className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50" /> : <span className="text-xs text-gray-400">未上传策划书</span>}
                                   {s.record_file_url ? <FilePreviewLink url={s.record_file_url} fileName={s.record_file_name} label="备案表" className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50" /> : <span className="text-xs text-gray-400">未上传备案表</span>}
+                                  <div className="w-full"><p className="text-xs font-medium text-slate-600">活动图片</p>{s.activity_image_url ? <ImageUploadPreviews imageUrls={[s.activity_image_url]} altPrefix="活动图片" /> : <span className="text-xs text-slate-400">未上传活动图片</span>}</div>
                                 </div>
                                 <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-amber-200 pt-3">
                                   <input type="text" placeholder="审核备注（可选）" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} className="min-w-48 flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-[#1e3a5f] focus:outline-none" />
@@ -1223,6 +1227,7 @@ function AdminPage() {
                                 <div className="mt-3 flex flex-wrap gap-3 border-t border-gray-200 pt-3">
                                   {s.plan_file_url ? <FilePreviewLink url={s.plan_file_url} fileName={s.plan_file_name} label="策划书" className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50" /> : <span className="text-xs text-gray-400">未上传策划书</span>}
                                   {s.record_file_url ? <FilePreviewLink url={s.record_file_url} fileName={s.record_file_name} label="备案表" className="rounded border border-gray-200 bg-white px-2 py-1 text-xs text-[#1e3a5f] hover:bg-blue-50" /> : <span className="text-xs text-gray-400">未上传备案表</span>}
+                                  <div className="w-full"><p className="text-xs font-medium text-slate-600">活动图片</p>{s.activity_image_url ? <ImageUploadPreviews imageUrls={[s.activity_image_url]} altPrefix="活动图片" /> : <span className="text-xs text-slate-400">未上传活动图片</span>}</div>
                                   {s.review_note && <span className="text-xs text-gray-500">备注：{s.review_note}</span>}
                                 </div>
                               </div>

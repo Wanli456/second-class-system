@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ActivityImageError, requireActivityImage } from '@/lib/activity-image';
 import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
 import { requirePermission } from '@/lib/auth';
 import { canSelectActivityLeader } from '@/lib/activity-leader-rules';
@@ -122,9 +123,10 @@ export async function POST(request: NextRequest) {
       // 用 WHERE review_status<>'已通过' 做原子守卫：如果在读取校验和这次写入之间，
       // 该提交已被管理员审核通过（正式活动已生成），这里必须失败，不能把状态强行改回待审核。
       const data = await withTransaction(async (client) => {
+      const imageUrl = await requireActivityImage(client, body.activity_image_url, user);
       const data = (await client.query(`UPDATE activity_submissions SET full_name=$1,start_time=$2,end_time=$3,registration_start_time=$4,registration_end_time=$5,category=$6,category_primary=$7,category_secondary=$8,level=$9,plan_file_url=$10,plan_file_name=$11,record_file_url=$12,record_file_name=$13,leader_name=$14,leader_phone=$15,scope_type=$16,scope_name=$17,scope_names=$18,leader_ids=$19,activity_submitter_id=$20,activity_submitter_name=$21,activity_submitter_student_id=$22,idempotency_key=$23,review_status='待审核',review_note=NULL,updated_at=NOW() WHERE id=$24 AND review_status<>'已通过' RETURNING *`, [full_name, start_time, end_time, registration_start_time, registration_end_time, category, category_primary || null, category_secondary || null, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader.name, leader.phone, firstScope.type, firstScope.name, serializeScopes(originalScopes), serializeIds(leader.ids), user.id, user.username, user.student_id, idempotencyKey, submission_id])).rows[0] as Record<string, unknown> | undefined;
         if (!data) return null;
-        await client.query('UPDATE activity_submissions SET leader_details=$1 WHERE id=$2', [serializeActivityLeaderDetails(leader.details), submission_id]);
+        await client.query('UPDATE activity_submissions SET leader_details=$1,activity_image_url=$3 WHERE id=$2', [serializeActivityLeaderDetails(leader.details), submission_id, imageUrl]);
         const updated = (await client.query('SELECT * FROM activity_submissions WHERE id=$1', [submission_id])).rows[0] as Record<string, unknown> | undefined;
         await writeAuditLog({ actor: user, action: 'resubmit_activity_submission', resourceType: 'activity_submission', resourceId: String(data.id), details: { reviewStatus: '待审核' } }, client);
         return updated || data;
@@ -138,12 +140,13 @@ export async function POST(request: NextRequest) {
     const leader = await resolveLeaders(normalizeIds(body.leader_ids), leader_name, leader_phone, scopes, user);
     const firstScope = scopes[0];
     const result = await withTransaction(async (client) => {
+    const imageUrl = await requireActivityImage(client, body.activity_image_url, user);
     const data = (await client.query(`INSERT INTO activity_submissions (full_name,start_time,end_time,registration_start_time,registration_end_time,category,category_primary,category_secondary,level,plan_file_url,plan_file_name,record_file_url,record_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,leader_ids,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,idempotency_key,review_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,'待审核') ON CONFLICT (idempotency_key) DO NOTHING RETURNING *`, [full_name, start_time, end_time, registration_start_time, registration_end_time, category, category_primary || null, category_secondary || null, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader.name, leader.phone, firstScope.type, firstScope.name, serializeScopes(scopes), serializeIds(leader.ids), user.id, user.username, user.student_id, idempotencyKey])).rows[0] as Record<string, unknown> | undefined;
       if (!data) {
         const repeatedAfterRace = (await client.query('SELECT * FROM activity_submissions WHERE idempotency_key=$1', [idempotencyKey])).rows[0] as Record<string, unknown> | undefined;
         return { data: repeatedAfterRace || null, created: false };
       }
-      await client.query('UPDATE activity_submissions SET leader_details=$1 WHERE id=$2', [serializeActivityLeaderDetails(leader.details), data.id]);
+      await client.query('UPDATE activity_submissions SET leader_details=$1,activity_image_url=$3 WHERE id=$2', [serializeActivityLeaderDetails(leader.details), data.id, imageUrl]);
       const updated = (await client.query('SELECT * FROM activity_submissions WHERE id=$1', [data.id])).rows[0] as Record<string, unknown> | undefined;
       await writeAuditLog({ actor: user, action: 'create_activity_submission', resourceType: 'activity_submission', resourceId: String(data.id), details: { reviewStatus: '待审核' } }, client);
       return { data: updated || data, created: true };
@@ -152,7 +155,7 @@ export async function POST(request: NextRequest) {
     if (!result.created && user.role !== 'admin' && result.data.activity_submitter_id !== user.id) return NextResponse.json({ success: false, error: '重复请求标识已被其他用户使用' }, { status: 409 });
     return NextResponse.json({ success: true, data: result.data });
   } catch (err) {
-    if (err instanceof ActivityLeaderValidationError) {
+    if (err instanceof ActivityLeaderValidationError || err instanceof ActivityImageError) {
       return NextResponse.json({ success: false, error: err.message }, { status: 400 });
     }
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '提交失败' }, { status: 500 });

@@ -36,6 +36,14 @@ async function run() {
   )`);
   await checkSharedInitialization();
   await ensureDatabaseSchema();
+  const imageColumns = await query<{ table_name: string }>(
+    "SELECT table_name FROM information_schema.columns WHERE column_name='activity_image_url' ORDER BY table_name",
+  );
+  assert.deepEqual(imageColumns.map((column) => column.table_name), ['activities', 'activity_submissions']);
+  for (const table of ['activities', 'activity_submissions']) {
+    const legacy = await query<{ activity_image_url: string | null }>(`UPDATE ${table} SET activity_image_url=NULL RETURNING activity_image_url`);
+    assert.ok(legacy.length > 0 && legacy.every((row) => row.activity_image_url === null), 'legacy records accept null images without backfill');
+  }
   const columns = await query<{ column_name: string }>(
     `SELECT column_name
      FROM information_schema.columns

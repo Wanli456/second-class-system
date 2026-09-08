@@ -52,6 +52,7 @@ async function expectCreatedAndReplay(
 function activityPayload(suffix: string): Record<string, unknown> {
   return {
     full_name: `核心审计活动-${suffix}`,
+    activity_image_url: '/uploads/core-audit-activity.png',
     start_time: '2099-09-20 10:00:00', end_time: '2099-09-20 12:00:00',
     registration_start_time: '2099-09-10 10:00:00', registration_end_time: '2099-09-19 12:00:00',
     category: '德', category_primary: '思想政治', category_secondary: '主题学习活动', level: '院系级',
@@ -77,6 +78,7 @@ async function run(): Promise<void> {
     assert.match(source, /withTransaction\(/, `${route} source coverage: transaction`);
   }
   await ensureDatabaseSchema();
+  await query('INSERT INTO upload_assets (url,uploaded_by_user_id,purpose) VALUES ($1,$2,$3)', ['/uploads/core-audit-activity.png', 'local-leader', 'activity']);
   adminToken = await issueSessionToken('local-admin');
   const suffix = 'core-audit';
 

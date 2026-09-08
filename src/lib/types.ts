@@ -1,4 +1,5 @@
 export interface Activity {
+  activity_image_url?: string | null;
   id: string;
   full_name: string;
   start_time: string;
@@ -34,6 +35,7 @@ export interface Activity {
 }
 
 export interface ActivitySubmission {
+  activity_image_url?: string | null;
   id: string;
   full_name: string;
   start_time: string;

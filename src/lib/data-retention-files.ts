@@ -135,16 +135,16 @@ function fieldReferences<T extends Record<string, unknown>>(rows: T[], fields: s
 
 export async function findFileReferences(url: string): Promise<FileReference[]> {
   const [activities, submissions, requests, slips, originals, attendance] = await Promise.all([
-    query<Record<string, unknown>>('SELECT id,plan_file_url,record_file_url,record_photo_url,scoring_table_url FROM activities WHERE plan_file_url=$1 OR record_file_url=$1 OR record_photo_url=$1 OR scoring_table_url=$1', [url]),
-    query<Record<string, unknown>>('SELECT id,plan_file_url,record_file_url FROM activity_submissions WHERE plan_file_url=$1 OR record_file_url=$1', [url]),
+    query<Record<string, unknown>>('SELECT id,plan_file_url,record_file_url,record_photo_url,scoring_table_url,activity_image_url FROM activities WHERE plan_file_url=$1 OR record_file_url=$1 OR record_photo_url=$1 OR scoring_table_url=$1 OR activity_image_url=$1', [url]),
+    query<Record<string, unknown>>('SELECT id,plan_file_url,record_file_url,activity_image_url FROM activity_submissions WHERE plan_file_url=$1 OR record_file_url=$1 OR activity_image_url=$1', [url]),
     query<Record<string, unknown>>('SELECT id,leave_image_url FROM leave_requests WHERE leave_image_url=$1', [url]),
     query<{ id: string; leave_image_url: string | null; image_list: string | null }>('SELECT id,leave_image_url,image_list FROM leave_slips WHERE leave_image_url=$1 OR image_list LIKE $2', [url, '%' + url + '%']),
     query<{ id: string; image_url: string | null; image_list: string | null }>('SELECT id,image_url,image_list FROM original_leave_slips WHERE image_url=$1 OR image_list LIKE $2', [url, '%' + url + '%']),
     query<ImageRow>('SELECT id,image_list FROM attendance_work_arrangements WHERE image_list LIKE $1', ['%' + url + '%']),
   ]);
   return [
-    ...fieldReferences(activities, ['plan_file_url', 'record_file_url', 'record_photo_url', 'scoring_table_url'], 'activities', url),
-    ...fieldReferences(submissions, ['plan_file_url', 'record_file_url'], 'activity_submissions', url),
+    ...fieldReferences(activities, ['plan_file_url', 'record_file_url', 'record_photo_url', 'scoring_table_url', 'activity_image_url'], 'activities', url),
+    ...fieldReferences(submissions, ['plan_file_url', 'record_file_url', 'activity_image_url'], 'activity_submissions', url),
     ...fieldReferences(requests, ['leave_image_url'], 'leave_requests', url),
     ...fieldReferences(slips, ['leave_image_url'], 'leave_slips', url),
     ...fieldReferences(originals, ['image_url'], 'original_leave_slips', url),
@@ -173,6 +173,7 @@ async function clearImageList(client: DatabaseClient, table: 'leave_slips' | 'or
 
 async function detachFileReferencesInTransaction(client: DatabaseClient, url: string): Promise<number> {
   const counts = await Promise.all([
+      clearColumn(client, 'activities', 'activity_image_url', url), clearColumn(client, 'activity_submissions', 'activity_image_url', url),
       clearColumn(client, 'activities', 'plan_file_url', url), clearColumn(client, 'activities', 'record_file_url', url),
       clearColumn(client, 'activities', 'record_photo_url', url), clearColumn(client, 'activities', 'scoring_table_url', url),
       clearColumn(client, 'activity_submissions', 'plan_file_url', url), clearColumn(client, 'activity_submissions', 'record_file_url', url),

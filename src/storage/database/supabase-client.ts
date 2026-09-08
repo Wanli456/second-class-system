@@ -393,6 +393,7 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_material_submitter_id TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_material_submitter_name TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_material_submitter_student_id TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS activity_image_url TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS plan_file_name TEXT;
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_file_name TEXT;
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_photo_url TEXT;
@@ -415,6 +416,7 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scoring_material_submitter_id TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scoring_material_submitter_name TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scoring_material_submitter_student_id TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_image_url TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS plan_file_name TEXT;
      ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS record_file_name TEXT;
      ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS activity_id TEXT;

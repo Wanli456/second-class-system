@@ -20,6 +20,7 @@ export const activities = pgTable(
     category_primary: varchar("category_primary", { length: 50 }),
     category_secondary: varchar("category_secondary", { length: 100 }),
     level: varchar("level", { length: 20 }).notNull(), // 院系级/校级
+    activity_image_url: text("activity_image_url"),
     plan_file_url: text("plan_file_url"),
     plan_file_name: text("plan_file_name"),
     record_file_url: text("record_file_url"),
@@ -69,6 +70,7 @@ export const activity_submissions = pgTable(
     category_primary: varchar("category_primary", { length: 50 }),
     category_secondary: varchar("category_secondary", { length: 100 }),
     level: varchar("level", { length: 20 }).notNull(),
+    activity_image_url: text("activity_image_url"),
     plan_file_url: text("plan_file_url"),
     plan_file_name: text("plan_file_name"),
     record_file_url: text("record_file_url"),
