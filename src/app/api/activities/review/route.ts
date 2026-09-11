@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ActivityImageError } from '@/lib/activity-image';
 import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
-import { createNotification } from '@/lib/notifications';
+import { createNotification, resolveNotifications } from '@/lib/notifications';
 import { requirePermission } from '@/lib/auth';
-import { getActivityScopes, nextActivityId, normalizeIds, scopeMatchesUser } from '@/lib/business-rules';
+import { nextActivityId, normalizeIds } from '@/lib/business-rules';
 import { hydrateActivityLeaderDetails } from '@/lib/hydrate-activity-leaders';
 import { writeAuditLog } from '@/lib/audit-log';
 
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     if (status) { params.push(status); clauses.push(`review_status=$${params.length}`); }
     const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '';
     const allData = await query(`SELECT * FROM activity_submissions${where} ORDER BY created_at DESC`, params);
-    const data = auth.user!.role === 'admin' ? allData : allData.filter((item) => scopeMatchesUser(auth.user!, getActivityScopes(item)));
+    const data = allData;
     return NextResponse.json({ success: true, data: await hydrateActivityLeaderDetails(data) });
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '获取活动审核数据失败' }, { status: 500 });
@@ -68,14 +68,7 @@ export async function POST(request: NextRequest) {
     if (submission.review_status !== '待审核') {
       return NextResponse.json({ success: false, error: '该提交已处理，不能重复审核' }, { status: 409 });
     }
-    const scoped = await queryOne<{ id: string; scope_type: string | null; scope_name: string | null; scope_names: string | null }>(
-      'SELECT id,scope_type,scope_name,scope_names FROM activity_submissions WHERE id=$1',
-      [id],
-    );
-    if (!scoped) return NextResponse.json({ success: false, error: '提交记录不存在' }, { status: 404 });
-    if (auth.user!.role !== 'admin' && !scopeMatchesUser(auth.user!, getActivityScopes(scoped))) {
-      return NextResponse.json({ success: false, error: '你没有审核该范围活动的权限' }, { status: 403 });
-    }
+
 
     const claimedAt = submission.review_claimed_at ? new Date(submission.review_claimed_at).getTime() : 0;
     const heldByOther = Boolean(submission.review_claimed_by_id)
@@ -110,10 +103,7 @@ export async function PUT(request: NextRequest) {
     const submission = await queryOne('SELECT * FROM activity_submissions WHERE id=$1', [id]);
     if (!submission) return NextResponse.json({ success: false, error: '提交记录不存在' }, { status: 404 });
     if (submission.review_status !== '待审核') return NextResponse.json({ success: false, error: '该提交已处理，不能重复审核' }, { status: 400 });
-    if (auth.user!.role !== 'admin') {
-      const allowed = scopeMatchesUser(auth.user!, getActivityScopes(submission));
-      if (!allowed) return NextResponse.json({ success: false, error: '你没有审核该范围活动的权限' }, { status: 403 });
-    }
+
     // 有人正在处理这条提交时，其他人不能抢先提交结果。
     const claimedAt = submission.review_claimed_at ? new Date(submission.review_claimed_at).getTime() : 0;
     const heldByOther = Boolean(submission.review_claimed_by_id)
@@ -169,6 +159,14 @@ export async function PUT(request: NextRequest) {
     const recipients = normalizeIds(submission.leader_ids);
     if (submission.activity_submitter_id) recipients.push(submission.activity_submitter_id);
     const isApproved = review_status === '已通过';
+
+    // 别人已经处理过这条待办时，把之前发给其他审核人的通知改成结果。
+    await resolveNotifications({
+      relatedIds: [id],
+      types: ['activity_pending_review'],
+      title: isApproved ? '活动审核通过' : '活动审核被驳回',
+      content: `活动「${submission.full_name}」已由 ${auth.user!.username} ${isApproved ? '审核通过' : '驳回'}。`,
+    });
     await notifyUsers(recipients, isApproved ? 'activity_approved' : 'activity_rejected', isApproved ? '活动审核通过' : '活动审核被驳回', isApproved
       ? `活动「${submission.full_name}」已审核通过，活动ID：${activityId}`
       : `活动「${submission.full_name}」审核未通过。${review_note ? `原因：${review_note}` : ''}`, activityId || submission.id);

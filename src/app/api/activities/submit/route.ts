@@ -10,6 +10,7 @@ import { serializeActivityLeaderDetails } from '@/lib/activity-leader-details';
 import { hydrateActivityLeaderDetails } from '@/lib/hydrate-activity-leaders';
 import { readIdempotencyKey } from '@/lib/idempotency';
 import { writeAuditLog } from '@/lib/audit-log';
+import { notifyPermissionHolders } from '@/lib/notify-permission-holders';
 
 class ActivityLeaderValidationError extends Error {}
 
@@ -153,6 +154,17 @@ export async function POST(request: NextRequest) {
     });
     if (!result.data) return NextResponse.json({ success: false, error: '提交未完成，请重试' }, { status: 409 });
     if (!result.created && user.role !== 'admin' && result.data.activity_submitter_id !== user.id) return NextResponse.json({ success: false, error: '重复请求标识已被其他用户使用' }, { status: 409 });
+
+    // 只有真正新建的提交才通知审核人，重复提交（幂等命中）不重复打扰。
+    if (result.created) {
+      await notifyPermissionHolders({
+        permission: 'canPublish',
+        type: 'activity_pending_review',
+        title: '有新的活动待审核',
+        content: `活动「${String(result.data.full_name)}」已提交，等待审核。`,
+        relatedId: String(result.data.id),
+      });
+    }
     return NextResponse.json({ success: true, data: result.data });
   } catch (err) {
     if (err instanceof ActivityLeaderValidationError || err instanceof ActivityImageError) {

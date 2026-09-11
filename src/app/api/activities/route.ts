@@ -7,6 +7,7 @@ import { hydrateActivityLeaderDetails } from '@/lib/hydrate-activity-leaders';
 import { serializeActivityLeaderDetails } from '@/lib/activity-leader-details';
 import { getActivityDeletionAction } from '@/lib/activity-deletion';
 import { writeAuditLog } from '@/lib/audit-log';
+import { notifyPermissionHolders } from '@/lib/notify-permission-holders';
 
 export async function GET(request: NextRequest) {
   try {
@@ -166,6 +167,17 @@ export async function PUT(request: NextRequest) {
       return row;
     });
     if (!data) return NextResponse.json({ success: false, error: isScoringMaterialSubmission ? '该活动已完成赋分，不能重新提交材料' : '更新失败，请刷新后重试' }, { status: 409 });
+
+    // 赋分材料提交后，通知有赋分权限且在主办范围内的成员。
+    if (isScoringMaterialSubmission) {
+      await notifyPermissionHolders({
+        permission: 'canScore',
+        type: 'activity_pending_scoring',
+        title: '有活动待赋分',
+        content: `活动「${String(data.full_name)}」已提交赋分材料，等待赋分。`,
+        relatedId: String(data.id),
+      });
+    }
     return NextResponse.json({ success: true, data });
   } catch (err) {
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '更新失败' }, { status: 500 });

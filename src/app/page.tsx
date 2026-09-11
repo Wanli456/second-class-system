@@ -48,6 +48,7 @@ interface User {
   canSubmitOriginalLeave?: boolean;
   department?: string | null;
   contactPhone?: string | null;
+  email?: string | null;
   permissionOverrides?: string | null;
 }
 
@@ -68,6 +69,7 @@ export default function Home() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [phoneMessage, setPhoneMessage] = useState('');
+  const [emailMessage, setEmailMessage] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
 
   const user = globalUser
@@ -142,6 +144,28 @@ export default function Home() {
   };
 
 
+  const handleSaveEmail = async (event: React.FormEvent<HTMLFormElement>) => {
+    if (!user) return;
+    setEmailMessage('保存中...');
+    try {
+      const form = event.currentTarget;
+      const email = String(new FormData(form).get('email') || '');
+      const res = await apiFetch('/api/auth/me/email', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setEmailMessage(data.error || '邮箱保存失败');
+        return;
+      }
+      setGlobalUser({ ...globalUser!, email: data.data?.email ?? (email.trim().toLowerCase() || null) });
+      setEmailMessage(data.data?.email ? '通知邮箱已保存' : '已清空通知邮箱');
+    } catch {
+      setEmailMessage('网络错误');
+    }
+  };
   const handleSaveContactPhone = async (event: React.FormEvent<HTMLFormElement>) => {
     if (!user) return;
     setPhoneMessage('保存中...');
@@ -365,11 +389,32 @@ export default function Home() {
                 修改密码
               </button>
             </div>
-            {user?.role === 'leader' && !globalUser?.contactPhone && (
+            {user?.role === 'leader' && (!globalUser?.contactPhone || !globalUser?.email) && (
               <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                部门负责人需要填写联系方式，方便活动负责人和同学在请假、活动审核时联系到你。请在下方联系方式中填写并保存。
+                部门负责人必须填写联系方式与通知邮箱（QQ 邮箱），用于接收审核/赋分通知和紧急联系。请在下方补全并保存。
               </p>
             )}
+            <form
+              onSubmit={(event) => { event.preventDefault(); void handleSaveEmail(event); }}
+              className="mt-4"
+            >
+              <label htmlFor="profile-email" className="mb-1.5 block text-sm font-medium text-slate-700">
+                通知邮箱{user?.role === 'leader' ? '（部门负责人必填，仅支持 QQ 邮箱）' : '（选填，仅支持 QQ 邮箱）'}
+              </label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  id="profile-email"
+                  name="email"
+                  type="email"
+                  defaultValue={globalUser?.email || ''}
+                  placeholder="例如 123456789@qq.com"
+                  required={user?.role === 'leader'}
+                  className="h-9 w-full min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600"
+                />
+                <button type="submit" className="h-9 w-full shrink-0 rounded-lg bg-teal-700 px-4 text-sm font-medium text-white transition-colors hover:bg-teal-800 sm:w-auto">保存邮箱</button>
+              </div>
+              {emailMessage && <p className="mt-1.5 text-sm text-slate-600">{emailMessage}</p>}
+            </form>
             <form
               onSubmit={(event) => { event.preventDefault(); void handleSaveContactPhone(event); }}
               className="mt-4"

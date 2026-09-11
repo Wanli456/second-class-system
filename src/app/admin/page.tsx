@@ -134,6 +134,7 @@ interface UserData {
   department?: string | null;
   className?: string | null;
   contactPhone?: string | null;
+  email?: string | null;
   permissionOverrides?: string | null;
   createdAt?: string;
 }
@@ -747,6 +748,17 @@ function AdminPage() {
   };
 
 
+  const handleUpdateEmail = async (userId: string, email: string | null) => {
+    try {
+      const res = await apiFetch('/api/auth', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, email }) });
+      const data = await res.json();
+      if (!data.success) { alert(data.error || '更新邮箱失败'); return; }
+      setUsers((previous) => previous.map((item) => item.id === userId ? { ...item, email } : item));
+    } catch (error) {
+      console.error('更新邮箱失败:', error);
+      alert('更新邮箱失败');
+    }
+  };
   const handleDeleteActivity = async (id: string) => {
     if (!confirm('确认删除该活动？')) return;
     try {
@@ -1375,6 +1387,7 @@ function AdminPage() {
                 onUpdateRole={handleUpdateRole}
                 onUpdateDepartment={handleUpdateDepartment}
                 onUpdateContactPhone={handleUpdateContactPhone}
+                onUpdateEmail={handleUpdateEmail}
                 onChangePassword={handleChangePassword}
                 onRefreshUsers={fetchUsers}
                 onDeleteUser={handleDeleteUser}
@@ -1834,6 +1847,7 @@ function UserManagement({
   onUpdateContactPhone,
   onChangePassword,
   onDeleteUser,
+  onUpdateEmail,
   onRefreshUsers,
 }: {
   users: UserData[];
@@ -1843,6 +1857,7 @@ function UserManagement({
   onUpdateRole: (userId: string, role: string) => Promise<void>;
   onUpdateDepartment: (userId: string, department: string | null) => Promise<void>;
   onUpdateContactPhone: (userId: string, contactPhone: string | null) => Promise<void>;
+  onUpdateEmail: (userId: string, email: string | null) => Promise<void>;
   onChangePassword: (userId: string, userName: string) => Promise<void>;
   onRefreshUsers: () => Promise<void> | void;
   onDeleteUser: (userId: string, userName: string) => Promise<void>;
@@ -2339,6 +2354,10 @@ function UserManagement({
                       </label>}
                     </div>
 
+                      <label className="min-w-0 sm:col-span-2">
+                        <span className="mb-1.5 block text-xs font-medium text-slate-500">通知邮箱（QQ 邮箱，部门负责人必填）</span>
+                        <input aria-label={`${item.name}的通知邮箱`} type="email" defaultValue={item.email || ''} onBlur={(event) => void onUpdateEmail(item.id, event.target.value.trim() || null)} placeholder="未填写" className="h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200" />
+                      </label>
                     <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">

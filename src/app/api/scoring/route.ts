@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
-import { createNotification } from '@/lib/notifications';
+import { createNotification, resolveNotifications } from '@/lib/notifications';
 import { requirePermission } from '@/lib/auth';
-import { getActivityScopes, normalizeIds, scopeMatchesUser } from '@/lib/business-rules';
+import { normalizeIds } from '@/lib/business-rules';
 import { hasRequiredScoringMaterials } from '@/lib/activity-scoring';
 import { hydrateActivityLeaderDetails } from '@/lib/hydrate-activity-leaders';
 import { writeAuditLog } from '@/lib/audit-log';
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     else if (!status) { params.push('待赋分'); clauses.push(`scoring_status=$${params.length}`); }
     if (level) { params.push(level); clauses.push(`level=$${params.length}`); }
     const allData = await query(`SELECT id,full_name,start_time,end_time,registration_start_time,registration_end_time,level,scoring_status,scoring_table_url,scoring_table_file_name,record_file_url,record_file_name,record_photo_url,record_photo_file_name,leader_name,leader_phone,leader_ids,leader_details,scope_type,scope_name,scope_names,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,scoring_material_submitter_id,scoring_material_submitter_name,scoring_material_submitter_student_id,category,category_primary,category_secondary,status,reviewed_by_name,scored_by_name,scored_at,scoring_claimed_by_id,scoring_claimed_by_name,scoring_claimed_at FROM activities WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC`, params);
-    const data = auth.user!.role === 'admin' ? allData : allData.filter((item) => scopeMatchesUser(auth.user!, getActivityScopes(item)));
+    const data = allData;
     return NextResponse.json({ success: true, data: await hydrateActivityLeaderDetails(data) });
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '获取赋分数据失败' }, { status: 500 });
@@ -69,13 +69,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: '该活动已完成赋分' }, { status: 409 });
     }
     if (auth.user!.role !== 'admin') {
-      const scoped = await queryOne<{ id: string; scope_type: string | null; scope_name: string | null; scope_names: string | null }>(
-        'SELECT id,scope_type,scope_name,scope_names FROM activities WHERE id=$1',
-        [id],
-      );
-      if (!scoped || !scopeMatchesUser(auth.user!, getActivityScopes(scoped))) {
-        return NextResponse.json({ success: false, error: '你没有该活动的赋分权限' }, { status: 403 });
-      }
+
     }
 
     const claimedAt = activity.scoring_claimed_at ? new Date(activity.scoring_claimed_at).getTime() : 0;
@@ -111,10 +105,7 @@ export async function PUT(request: NextRequest) {
     const activity = await queryOne('SELECT * FROM activities WHERE id=$1', [id]);
     if (!activity) return NextResponse.json({ success: false, error: '活动不存在' }, { status: 404 });
     if (activity.status !== '正常活动') return NextResponse.json({ success: false, error: '仅正常活动可以进行赋分' }, { status: 400 });
-    if (auth.user!.role !== 'admin') {
-      const inScope = scopeMatchesUser(auth.user!, getActivityScopes(activity));
-      if (!inScope) return NextResponse.json({ success: false, error: '你没有该活动的赋分权限' }, { status: 403 });
-    }
+
     if (activity.scoring_status === '已赋分') return NextResponse.json({ success: false, error: '该活动已完成赋分，不能重复操作' }, { status: 400 });
     if (!activity.scoring_table_url) return NextResponse.json({ success: false, error: '请等待活动赋分表提交' }, { status: 400 });
     if (!hasRequiredScoringMaterials({
@@ -149,6 +140,12 @@ export async function PUT(request: NextRequest) {
     if (activity.activity_submitter_id) recipients.push(activity.activity_submitter_id);
     if (activity.scoring_material_submitter_id) recipients.push(activity.scoring_material_submitter_id);
     await notifyRecipients(recipients, '活动赋分完成', `活动「${activity.full_name}」（ID：${id}）已完成赋分`, id);
+    await resolveNotifications({
+      relatedIds: [id],
+      types: ['activity_pending_scoring'],
+      title: '活动赋分完成',
+      content: `活动「${activity.full_name}」已由 ${auth.user!.username} 完成赋分。`,
+    });
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '赋分失败' }, { status: 500 });

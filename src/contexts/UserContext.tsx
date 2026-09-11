@@ -26,6 +26,7 @@ interface User {
   department?: string | null;
   className?: string | null;
   contactPhone?: string | null;
+  email?: string | null;
   permissionOverrides?: string | null;
 }
 
