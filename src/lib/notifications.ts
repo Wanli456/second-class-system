@@ -1,7 +1,6 @@
-import { query, queryOne } from '@/storage/database/supabase-client';
-import { processEmailDeliveries } from '@/lib/email-delivery';
+import { query } from '@/storage/database/supabase-client';
 
-/** 写入站内通知；若该用户绑定了邮箱，同时入队一封邮件。 */
+/** 写入站内通知（右上角铃铛 / 待办列表）。 */
 export async function createNotification(
   userId: string,
   type: string,
@@ -14,19 +13,6 @@ export async function createNotification(
       `INSERT INTO notifications (user_id, type, title, content, related_id) VALUES ($1, $2, $3, $4, $5)`,
       [userId, type, title, content, relatedId || null],
     );
-    const user = await queryOne<{ email: string | null }>('SELECT email FROM users WHERE id=$1', [userId]);
-    if (user?.email) {
-      await query(
-        'INSERT INTO email_deliveries (user_id, recipient_email, subject, content) VALUES ($1, $2, $3, $4)',
-        [userId, user.email, title, content],
-      );
-    }
-    // 邮件失败只影响邮件本身，不能把已经写入的站内通知当成失败。
-    try {
-      await processEmailDeliveries(5);
-    } catch (error) {
-      console.error('邮件投递失败:', error);
-    }
     return true;
   } catch (error) {
     console.error('创建通知失败:', error);

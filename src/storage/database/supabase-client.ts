@@ -69,7 +69,6 @@ if (localDb && shouldInitializeLocalDb) {
       department TEXT,
       class_name TEXT,
       contact_phone TEXT,
-      email TEXT,
       admin_session_id TEXT,
       permission_overrides TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -379,22 +378,7 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_phone TEXT;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
-    CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx ON users (email);
     ALTER TABLE notifications ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT '待处理';
-    CREATE TABLE IF NOT EXISTS email_deliveries (
-      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id TEXT NOT NULL,
-      recipient_email TEXT NOT NULL,
-      subject TEXT NOT NULL,
-      content TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      retry_count INTEGER NOT NULL DEFAULT 0,
-      last_error TEXT,
-      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS email_deliveries_pending_idx ON email_deliveries (status, created_at);
     ALTER TABLE users ADD COLUMN IF NOT EXISTS permission_overrides TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_session_id TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS scope_type TEXT DEFAULT 'department';

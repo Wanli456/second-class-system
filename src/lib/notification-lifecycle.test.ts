@@ -3,11 +3,11 @@ import { ensureDatabaseSchema, query, queryOne } from '@/storage/database/supaba
 import { createNotification, resolveNotifications } from '@/lib/notifications';
 import { notifyPermissionHolders } from '@/lib/notify-permission-holders';
 
-async function createUser(options: { canPublish?: boolean; canScore?: boolean; department?: string | null; email?: string | null }) {
+async function createUser(options: { canPublish?: boolean; canScore?: boolean; department?: string | null }) {
   const suffix = `${Date.now()}-${Math.random()}`;
   const row = await queryOne<{ id: string }>(
-    "INSERT INTO users (username,password,student_id,role,department,email,can_publish,can_score) VALUES ($1,'test',$2,'student',$3,$4,$5,$6) RETURNING id",
-    [`通知测试${suffix}`, `notify-${suffix}`, options.department ?? '学生会', options.email ?? null, options.canPublish ?? false, options.canScore ?? false],
+    "INSERT INTO users (username,password,student_id,role,department,can_publish,can_score) VALUES ($1,'test',$2,'student',$3,$4,$5) RETURNING id",
+    [`通知测试${suffix}`, `notify-${suffix}`, options.department ?? '学生会', options.canPublish ?? false, options.canScore ?? false],
   );
   if (!row) throw new Error('测试用户创建失败');
   return { id: row.id, name: `通知测试${suffix}` };
@@ -19,7 +19,7 @@ async function main() {
   const outsider = await createUser({ canPublish: false });
   // 权限与主办范围互相独立：其他部门但拥有审核权限的人同样要收到通知
   const crossDeptPublisher = await createUser({ canPublish: true, department: '其他学院' });
-  const scorer = await createUser({ canScore: true, email: 'scorer@qq.com' });
+  const scorer = await createUser({ canScore: true });
 
   try {
     // 活动提交后：通知所有拥有审核权限的人（不再按主办范围过滤）
@@ -62,24 +62,17 @@ async function main() {
     assert.equal(resolved?.title, '活动审核通过');
     assert.ok(String(resolved?.content).includes('审核通过'));
 
-    // 绑定邮箱的用户：站内通知之外还会入队一封邮件
+    // 赋分完成通知照常写入
     await createNotification(scorer.id, 'activity_scored', '活动赋分完成', '你的活动已完成赋分', 'activity-1');
-    const deliveries = await query<{ recipient_email: string; subject: string; status: string }>(
-      'SELECT recipient_email,subject,status FROM email_deliveries WHERE user_id=$1',
-      [scorer.id],
-    );
-    assert.equal(deliveries.length, 1);
-    assert.equal(deliveries[0].recipient_email, 'scorer@qq.com');
-    assert.equal(deliveries[0].subject, '活动赋分完成');
-    assert.equal(deliveries[0].status, 'pending');
+    const scoredRows = await query('SELECT id FROM notifications WHERE user_id=$1 AND related_id=$2', [scorer.id, 'activity-1']);
+    assert.equal(scoredRows.length, 1);
   } finally {
     for (const user of [publisher, outsider, crossDeptPublisher, scorer]) {
       await query('DELETE FROM notifications WHERE user_id=$1', [user.id]);
-      await query('DELETE FROM email_deliveries WHERE user_id=$1', [user.id]);
       await query('DELETE FROM users WHERE id=$1', [user.id]);
     }
   }
-  console.log('notification lifecycle + email queue tests passed');
+  console.log('notification lifecycle tests passed');
 }
 
 main().catch((error) => {

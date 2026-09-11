@@ -48,7 +48,6 @@ export type AuthUser = {
   can_manage_original_leave: boolean;
   can_submit_original_leave: boolean;
   contact_phone?: string | null;
-  email?: string | null;
   department?: string | null;
   class_name?: string | null;
   permission_overrides?: string | null;
@@ -180,7 +179,6 @@ function calculateUserPermissions(user: AuthUser) {
     department: user.department || null,
     className: user.class_name || null,
     contactPhone: user.contact_phone || null,
-    email: user.email || null,
     permissionOverrides: user.permission_overrides || null,
     // 权限计算：admin OR 管理员手动覆盖 OR 部门自动权限 OR 手动勾选权限
     canPublish: permission('canPublish', user.can_publish, false),
@@ -213,7 +211,7 @@ async function getAuthenticatedSession(request: NextRequest): Promise<{ user: Au
   const sessions = [request.cookies.get(SESSION_COOKIE)?.value, bearerToken].map(readSessionToken).filter((session): session is SessionToken => !!session);
   for (const session of sessions) {
     const user = await queryOne<AuthUser>(
-      `SELECT id, username, student_id, role, can_publish, can_score, can_submit_activity, can_view_submission_status, can_submit_scoring, can_register_other_college, can_review_leave, can_view_evening_study, can_start_group_leave, can_manage_attendance_work, can_upload_leave, can_query_leave, can_manage_original_leave, can_submit_original_leave, department, class_name, contact_phone, email, permission_overrides, admin_session_id
+      `SELECT id, username, student_id, role, can_publish, can_score, can_submit_activity, can_view_submission_status, can_submit_scoring, can_register_other_college, can_review_leave, can_view_evening_study, can_start_group_leave, can_manage_attendance_work, can_upload_leave, can_query_leave, can_manage_original_leave, can_submit_original_leave, department, class_name, contact_phone, permission_overrides, admin_session_id
        FROM users WHERE id = $1`,
       [session.userId],
     );
