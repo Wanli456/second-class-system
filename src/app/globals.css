@@ -181,3 +181,14 @@ div[style*="bottom:0"][style*="left:0"] button,
   height: 0 !important;
   overflow: hidden !important;
 }
+
+/* 移动端：表单控件字号不低于 16px。
+   iOS Safari 在聚焦 font-size < 16px 的输入框时会自动放大整个页面，
+   导致布局被顶飞、需要手动缩小，这里统一兜底。 */
+@media (max-width: 640px) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

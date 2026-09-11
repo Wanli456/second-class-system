@@ -47,6 +47,7 @@ interface User {
   canManageOriginalLeave?: boolean;
   canSubmitOriginalLeave?: boolean;
   department?: string | null;
+  contactPhone?: string | null;
   permissionOverrides?: string | null;
 }
 
@@ -66,6 +67,7 @@ export default function Home() {
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [phoneMessage, setPhoneMessage] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
 
   const user = globalUser
@@ -136,6 +138,30 @@ export default function Home() {
       }
     } catch {
       setPasswordMessage('网络错误');
+    }
+  };
+
+
+  const handleSaveContactPhone = async (event: React.FormEvent<HTMLFormElement>) => {
+    if (!user) return;
+    setPhoneMessage('保存中...');
+    try {
+      const form = event.currentTarget;
+      const contactPhone = String(new FormData(form).get('contactPhone') || '');
+      const res = await apiFetch('/api/auth/me/contact-phone', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactPhone }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setPhoneMessage(data.error || '联系方式保存失败');
+        return;
+      }
+      setGlobalUser({ ...globalUser!, contactPhone: data.data?.contactPhone || null });
+      setPhoneMessage('联系方式已保存');
+    } catch {
+      setPhoneMessage('网络错误');
     }
   };
 
@@ -339,6 +365,32 @@ export default function Home() {
                 修改密码
               </button>
             </div>
+            {user?.role === 'leader' && !globalUser?.contactPhone && (
+              <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                部门负责人需要填写联系方式，方便活动负责人和同学在请假、活动审核时联系到你。请在下方联系方式中填写并保存。
+              </p>
+            )}
+            <form
+              onSubmit={(event) => { event.preventDefault(); void handleSaveContactPhone(event); }}
+              className="mt-4"
+            >
+              <label htmlFor="profile-contact-phone" className="mb-1.5 block text-sm font-medium text-slate-700">
+                联系方式{user?.role === 'leader' ? '（部门负责人必填）' : '（手机号或微信号，选填）'}
+              </label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  id="profile-contact-phone"
+                  name="contactPhone"
+                  type="tel"
+                  defaultValue={globalUser?.contactPhone || ''}
+                  placeholder="例如 13800000000 或 微信号"
+                  required={user?.role === 'leader'}
+                  className="h-9 w-full min-w-0 flex-1 rounded-lg border border-slate-300 px-3 text-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600"
+                />
+                <button type="submit" className="h-9 w-full shrink-0 rounded-lg bg-teal-700 px-4 text-sm font-medium text-white transition-colors hover:bg-teal-800 sm:w-auto">保存联系方式</button>
+              </div>
+              {phoneMessage && <p className="mt-1.5 text-sm text-slate-600">{phoneMessage}</p>}
+            </form>
           </section>
 
           {quickEntries.length > 0 && (

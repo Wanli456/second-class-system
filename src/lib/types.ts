@@ -30,6 +30,12 @@ export interface Activity {
   scoring_status: '待赋分' | '已赋分';
   scoring_table_url: string | null;
   scoring_table_file_name?: string | null;
+  reviewed_by_id?: string | null;
+  reviewed_by_name?: string | null;
+  reviewed_at?: string | null;
+  scored_by_id?: string | null;
+  scored_by_name?: string | null;
+  scored_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -63,6 +69,12 @@ export interface ActivitySubmission {
   scoring_material_submitter_student_id?: string | null;
   review_status: '待审核' | '已通过' | '已驳回';
   review_note: string | null;
+  reviewed_by_id?: string | null;
+  reviewed_by_name?: string | null;
+  reviewed_at?: string | null;
+  review_claimed_by_id?: string | null;
+  review_claimed_by_name?: string | null;
+  review_claimed_at?: string | null;
   created_at: string;
   updated_at: string;
 }

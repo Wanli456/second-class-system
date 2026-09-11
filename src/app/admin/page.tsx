@@ -7,7 +7,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   GraduationCap, Lock, LogOut, Table, FileCheck, UserCheck, Award, Users,
-  Plus, Pencil, Trash2, Eye, Check, X, Upload, FileText, Image as ImageIcon,
+  Plus, Pencil, Trash2, Eye, Check, X, Upload, FileText, Image as ImageIcon, Loader2,
   ChevronDown, ChevronUp, Search, AlertCircle, Download, Building2, BookOpen,
   KeyRound, ShieldCheck, UserRound, ChevronLeft, ChevronRight,
 } from 'lucide-react';
@@ -207,7 +207,9 @@ function AdminPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
   const [expandedSubmission, setExpandedSubmission] = useState<string | null>(null);
+  const [reviewLocks, setReviewLocks] = useState<Record<string, string>>({});
   const [expandedScoring, setExpandedScoring] = useState<string | null>(null);
+  const [scoringLocks, setScoringLocks] = useState<Record<string, string>>({});
   const [scoringFile, setScoringFile] = useState<File | null>(null);
   const [scoringInProgress, setScoringInProgress] = useState(false);
 
@@ -455,6 +457,34 @@ function AdminPage() {
     return data.url;
   };
 
+  const handleToggleScoring = async (id: string, isExpanded: boolean) => {
+    if (isExpanded) {
+      setExpandedScoring(null);
+      void apiFetch('/api/scoring', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'release' }),
+      }).catch(() => {});
+      return;
+    }
+    setExpandedScoring(id);
+    try {
+      const res = await apiFetch('/api/scoring', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'claim' }),
+      });
+      const data = await res.json();
+      setScoringLocks((previous) => {
+        const next = { ...previous };
+        if (data.success) delete next[id];
+        else next[id] = data.error || '该任务正在被其他人处理';
+        return next;
+      });
+    } catch {
+      setScoringLocks((previous) => ({ ...previous, [id]: '无法确认任务状态，请刷新后重试' }));
+    }
+  };
   const handleScoring = async (activityId: string, level: string) => {
     const activity = scoringList.find(a => a.id === activityId);
     if (!activity) {
@@ -488,6 +518,7 @@ function AdminPage() {
       const data = await res.json();
       if (data.success) {
         alert(data.message || '赋分成功');
+        setScoringLocks((previous) => { const next = { ...previous }; delete next[activityId]; return next; });
         setExpandedScoring(null);
         fetchScoring();
       } else {
@@ -619,6 +650,34 @@ function AdminPage() {
     }
   };
 
+  const handleToggleSubmission = async (id: string, isExpanded: boolean) => {
+    if (isExpanded) {
+      setExpandedSubmission(null);
+      void apiFetch('/api/activities/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'release' }),
+      }).catch(() => {});
+      return;
+    }
+    setExpandedSubmission(id);
+    try {
+      const res = await apiFetch('/api/activities/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'claim' }),
+      });
+      const data = await res.json();
+      setReviewLocks((previous) => {
+        const next = { ...previous };
+        if (data.success) delete next[id];
+        else next[id] = data.error || '该任务已被其他人领取，请稍后再试';
+        return next;
+      });
+    } catch {
+      setReviewLocks((previous) => ({ ...previous, [id]: '无法确认任务状态，请刷新后重试' }));
+    }
+  };
   const handleReviewSubmission = async (id: string, status: ReviewStatus) => {
     try {
       const res = await apiFetch('/api/activities/review', {
@@ -629,6 +688,12 @@ function AdminPage() {
       const data = await res.json();
       if (data.success) {
         setReviewNote('');
+        setExpandedSubmission(null);
+        setReviewLocks((previous) => {
+          const next = { ...previous };
+          delete next[id];
+          return next;
+        });
         fetchSubmissions();
         if (isAdmin) fetchActivities();
       } else {
@@ -680,6 +745,7 @@ function AdminPage() {
       alert('更新联系方式失败');
     }
   };
+
 
   const handleDeleteActivity = async (id: string) => {
     if (!confirm('确认删除该活动？')) return;
@@ -769,7 +835,7 @@ function AdminPage() {
       )}>
         <button
           type="button"
-          onClick={() => setExpandedScoring(isExpanded ? null : a.id)}
+          onClick={() => void handleToggleScoring(a.id, isExpanded)}
           className="flex w-full items-start justify-between gap-4 p-4 text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600"
           aria-expanded={isExpanded}
           aria-controls={`scoring-detail-${a.id}`}
@@ -813,7 +879,8 @@ function AdminPage() {
               <div className="flex items-center gap-2"><span className="text-slate-500">赋分表：</span>{a.scoring_table_url ? <div className="flex items-center gap-2"><FilePreviewLink url={a.scoring_table_url} fileName={a.scoring_table_file_name} label="查看赋分表" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /><a href={a.scoring_table_url} download className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"><Download className="size-3" aria-hidden="true" />下载</a></div> : <span className="text-xs text-red-600">负责人尚未上传赋分表</span>}</div>
               {a.level === '校级' && <div className="flex items-center gap-2"><span className="text-slate-500">备案表照片：</span>{a.record_photo_url ? <div className="flex items-center gap-2"><FilePreviewLink url={a.record_photo_url} fileName={a.record_photo_file_name} label="查看备案表照片" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /><a href={a.record_photo_url} download className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"><Download className="size-3" aria-hidden="true" />下载</a></div> : <span className="text-xs text-red-600">未上传备案表照片（无法赋分）</span>}</div>}
             </div>
-            {a.scoring_status === '待赋分' && <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4"><Button type="button" onClick={() => handleScoring(a.id, a.level)} disabled={scoringInProgress || !canConfirm} className="bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">{scoringInProgress ? '处理中...' : '确认赋分'}</Button>{!canConfirm && <span className="text-xs text-amber-700">请等待负责人上传完整材料</span>}</div>}
+            {scoringLocks[a.id] && <p className="mt-3 rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-800">{scoringLocks[a.id]}</p>}
+            {a.scoring_status === '待赋分' && <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4"><Button type="button" onClick={() => handleScoring(a.id, a.level)} disabled={scoringInProgress || !canConfirm || Boolean(scoringLocks[a.id])} className="bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">{scoringInProgress ? '处理中...' : '确认赋分'}</Button>{!canConfirm && <span className="text-xs text-amber-700">请等待负责人上传完整材料</span>}</div>}
           </div>
         )}
       </article>
@@ -1116,6 +1183,8 @@ function AdminPage() {
                               <span>实际赋分材料提交人：{a.scoring_material_submitter_name || '-'}{a.scoring_material_submitter_student_id ? `（${a.scoring_material_submitter_student_id}）` : ''}</span>
                               <span>活动状态：{a.status}</span>
                               <span>赋分状态：{a.scoring_status || '待赋分'}</span>
+                              <span>审核人：{a.reviewed_by_name || ''}{a.reviewed_at ? `（${formatDateTime(a.reviewed_at)}）` : ''}</span>
+                              <span>赋分人：{a.scored_by_name || ''}{a.scored_at ? `（${formatDateTime(a.scored_at)}）` : ''}</span>
                             </div>
                             <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-200 pt-4">
                               {a.plan_file_url ? <FilePreviewLink url={a.plan_file_url} fileName={a.plan_file_name} label="策划书" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /> : <span className="text-xs text-slate-400">未上传策划书</span>}
@@ -1164,7 +1233,7 @@ function AdminPage() {
                         const isExpanded = expandedSubmission === s.id;
                         return (
                           <div key={s.id} className="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm">
-                            <button type="button" onClick={() => setExpandedSubmission(isExpanded ? null : s.id)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-amber-50">
+                            <button type="button" onClick={() => void handleToggleSubmission(s.id, isExpanded)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-amber-50">
                               <span className="min-w-0">
                                 <span className="block truncate font-medium text-gray-900">{s.full_name}</span>
                                 <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500"><span>{s.leader_name}</span><span>{s.level}</span><CategoryBadge category={s.category} primary={s.category_primary} secondary={s.category_secondary} topLevelOnly /><span>提交于 {formatDateTime(s.created_at)}</span></span>
@@ -1188,9 +1257,10 @@ function AdminPage() {
                                   <div className="w-full"><p className="text-xs font-medium text-slate-600">活动图片</p>{s.activity_image_url ? <ImageUploadPreviews imageUrls={[s.activity_image_url]} altPrefix="活动图片" /> : <span className="text-xs text-slate-400">未上传活动图片</span>}</div>
                                 </div>
                                 <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-amber-200 pt-3">
-                                  <input type="text" placeholder="审核备注（可选）" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} className="min-w-48 flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-[#1e3a5f] focus:outline-none" />
-                                  <button onClick={() => handleReviewSubmission(s.id, '已通过')} className="flex items-center gap-1 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"><Check className="size-3" />通过</button>
-                                  <button onClick={() => handleReviewSubmission(s.id, '已驳回')} className="flex items-center gap-1 rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700"><X className="size-3" />驳回</button>
+                                  {reviewLocks[s.id] && (<p className="w-full rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-800">{reviewLocks[s.id]}</p>)}
+                                  <input type="text" placeholder="审核备注（可选）" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} disabled={Boolean(reviewLocks[s.id])} className="min-w-48 flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-[#1e3a5f] focus:outline-none" />
+                                  <button onClick={() => handleReviewSubmission(s.id, '已通过')} disabled={Boolean(reviewLocks[s.id])} className="flex items-center gap-1 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"><Check className="size-3" />通过</button>
+                                  <button onClick={() => handleReviewSubmission(s.id, '已驳回')} disabled={Boolean(reviewLocks[s.id])} className="flex items-center gap-1 rounded bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"><X className="size-3" />驳回</button>
                                 </div>
                               </div>
                             )}
@@ -1306,6 +1376,7 @@ function AdminPage() {
                 onUpdateDepartment={handleUpdateDepartment}
                 onUpdateContactPhone={handleUpdateContactPhone}
                 onChangePassword={handleChangePassword}
+                onRefreshUsers={fetchUsers}
                 onDeleteUser={handleDeleteUser}
               />
             )}
@@ -1763,6 +1834,7 @@ function UserManagement({
   onUpdateContactPhone,
   onChangePassword,
   onDeleteUser,
+  onRefreshUsers,
 }: {
   users: UserData[];
   userSearch: string;
@@ -1772,6 +1844,7 @@ function UserManagement({
   onUpdateDepartment: (userId: string, department: string | null) => Promise<void>;
   onUpdateContactPhone: (userId: string, contactPhone: string | null) => Promise<void>;
   onChangePassword: (userId: string, userName: string) => Promise<void>;
+  onRefreshUsers: () => Promise<void> | void;
   onDeleteUser: (userId: string, userName: string) => Promise<void>;
 }) {
   const [rosterClassName, setRosterClassName] = useState('');
@@ -1788,6 +1861,10 @@ function UserManagement({
   const [departmentError, setDepartmentError] = useState('');
   const [userPage, setUserPage] = useState(1);
   const [userPageSize, setUserPageSize] = useState<number>(USER_PAGE_SIZE_OPTIONS[0]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [batchPermissionKey, setBatchPermissionKey] = useState<UserPermission | ''>('');
+  const [batchPermissionValue, setBatchPermissionValue] = useState(true);
+  const [batchSaving, setBatchSaving] = useState(false);
 
   const filteredUsers = users.filter((item) => {
     const keyword = userSearch.trim();
@@ -1796,6 +1873,40 @@ function UserManagement({
   const totalUserPages = Math.max(1, Math.ceil(filteredUsers.length / userPageSize));
   const currentUserPage = Math.min(userPage, totalUserPages);
   const paginatedUsers = filteredUsers.slice((currentUserPage - 1) * userPageSize, currentUserPage * userPageSize);
+  const toggleUserSelection = (userId: string, checked: boolean) => {
+    setSelectedIds((current) => (checked ? [...new Set([...current, userId])] : current.filter((id) => id !== userId)));
+  };
+
+  const selectAllFiltered = () => {
+    setSelectedIds(filteredUsers.map((item) => item.id));
+  };
+
+  const applyBatchPermissions = async () => {
+    if (!batchPermissionKey || selectedIds.length === 0) return;
+    setBatchSaving(true);
+    try {
+      const res = await apiFetch('/api/admin/user-permissions', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds: selectedIds, permissions: { [batchPermissionKey]: batchPermissionValue } }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || '批量设置失败');
+        return;
+      }
+      const updatedCount = data.data?.updatedCount ?? (data.data?.users || []).length;
+      const label = permissions.find((item) => item.key === batchPermissionKey)?.label || batchPermissionKey;
+      setSelectedIds([]);
+      await onRefreshUsers();
+      alert(`已批量设置 ${updatedCount} 个用户的「${label}」为${batchPermissionValue ? '开启' : '关闭'}`);
+    } catch (error) {
+      console.error('批量设置失败:', error);
+      alert('批量设置失败');
+    } finally {
+      setBatchSaving(false);
+    }
+  };
   const permissions: Array<{ key: UserPermission; label: string }> = [
     { key: 'canUploadLeave', label: '假条上传权限' },
     { key: 'canStartGroupLeave', label: '临时请假权限' },
@@ -1825,7 +1936,8 @@ function UserManagement({
     student: '#4b5563',
   };
 
-  const getEnabledPermissions = (item: UserData) => permissions.filter((permission) => item.role === 'admin' || item[permission.key]);
+  // 展示实际生效的权限：admin 全开，部门负责人按所属部门自动获得默认权限组。
+  const getEnabledPermissions = (item: UserData) => permissions.filter((permission) => item.role === 'admin' || hasPermission(item, permission.key as PermissionKey));
 
   const getPermissionSummary = (item: UserData) => {
     if (item.role === 'admin') return '全部权限';
@@ -2084,6 +2196,65 @@ function UserManagement({
         </div>
 
         <div className="p-4 sm:p-6">
+          <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <ShieldCheck className="size-4 text-slate-500" />
+              <h3 className="text-sm font-semibold text-slate-800">批量设置权限</h3>
+              <span className="text-xs text-slate-500">已选 {selectedIds.length} 人</span>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={selectAllFiltered}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 sm:py-1.5"
+              >
+                全选筛选结果（{filteredUsers.length} 人）
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedIds([])}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 sm:py-1.5"
+              >
+                清空选择
+              </button>
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                权限
+                <select
+                  aria-label="批量设置的权限"
+                  value={batchPermissionKey}
+                  onChange={(event) => setBatchPermissionKey(event.target.value as UserPermission | '')}
+                  className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs"
+                >
+                  <option value="">请选择权限</option>
+                  {permissions.map((permission) => (
+                    <option key={permission.key} value={permission.key}>{permission.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                操作
+                <select
+                  aria-label="批量设置的操作"
+                  value={batchPermissionValue ? 'on' : 'off'}
+                  onChange={(event) => setBatchPermissionValue(event.target.value === 'on')}
+                  className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs"
+                >
+                  <option value="on">开启</option>
+                  <option value="off">关闭</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => void applyBatchPermissions()}
+                disabled={batchSaving || !batchPermissionKey || selectedIds.length === 0}
+                className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60 sm:py-1.5"
+              >
+                {batchSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                应用到已选用户
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">先勾选下方用户（可全选筛选结果），再选择权限与开启/关闭。部门负责人的部门自动权限会以覆盖方式记录。</p>
+          </div>
           {filteredUsers.length > 0 ? (
             <div className="grid gap-4 xl:grid-cols-2">
               {paginatedUsers.map((item) => {
@@ -2092,9 +2263,16 @@ function UserManagement({
                 const enabledCount = getEnabledPermissions(item).length;
                 const autoPermissionKeys = new Set(getDepartmentAutoPermissionKeys(item));
                 return (
-                  <article key={item.id} className={cn('rounded-xl border bg-white p-4 shadow-sm', meta.surface)}>
+                  <article key={item.id} className={cn('min-w-0 rounded-xl border bg-white p-4 shadow-sm', meta.surface)}>
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex min-w-0 items-center gap-3">
+                        <input
+                          type="checkbox"
+                          aria-label={`选择 ${item.name}`}
+                          checked={selectedIds.includes(item.id)}
+                          onChange={(event) => toggleUserSelection(item.id, event.target.checked)}
+                          className="size-4 shrink-0 accent-teal-700"
+                        />
                         <div className={cn('flex size-11 shrink-0 items-center justify-center rounded-full border bg-white', meta.text, meta.surface)}>
                           <RoleIcon className="size-5" />
                         </div>
@@ -2173,7 +2351,7 @@ function UserManagement({
                       </div>
                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
                         {permissions.map((permission) => {
-                          const checked = item.role === 'admin' || Boolean(item[permission.key]);
+                          const checked = item.role === 'admin' || hasPermission(item, permission.key as PermissionKey);
                           const isAuto = isDepartmentAutoPermission(item, permission.key as PermissionKey);
                           const isOverride = hasPermissionOverride(item, permission.key as PermissionKey);
                           const isDisabled = item.role === 'admin';

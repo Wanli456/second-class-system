@@ -5,6 +5,9 @@ import { writeAuditLog } from '@/lib/audit-log';
 
 const REVIEW_STATUSES = ['待查对', '已通过', '已驳回'] as const;
 
+/** 查对任务领取有效期：超时视为放弃，其他人可接手。 */
+const CLAIM_TTL_MS = 15 * 60 * 1000;
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await requirePermission(request, 'reviewLeave');
@@ -66,8 +69,14 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: '缺少或无效的审核参数' }, { status: 400 });
     }
 
-    const slip = await queryOne<{ applicant_user_id: string; review_status: string }>(
-      'SELECT applicant_user_id, review_status FROM leave_slips WHERE id=$1',
+    const slip = await queryOne<{
+      applicant_user_id: string;
+      review_status: string;
+      review_claimed_by_id: string | null;
+      review_claimed_by_name: string | null;
+      review_claimed_at: string | null;
+    }>(
+      'SELECT applicant_user_id, review_status, review_claimed_by_id, review_claimed_by_name, review_claimed_at FROM leave_slips WHERE id=$1',
       [id],
     );
     if (!slip) return NextResponse.json({ success: false, error: '假条不存在' }, { status: 404 });
@@ -81,9 +90,21 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: '不能查对自己上传的假条' }, { status: 403 });
     }
 
+    // 有人正在查对这条假条时，其他人不能抢先提交结果。
+    const claimedAt = slip.review_claimed_at ? new Date(slip.review_claimed_at).getTime() : 0;
+    const heldByOther = Boolean(slip.review_claimed_by_id)
+      && slip.review_claimed_by_id !== reviewer.id
+      && Date.now() - claimedAt < CLAIM_TTL_MS;
+    if (heldByOther) {
+      return NextResponse.json({
+        success: false,
+        error: `该假条正在由 ${slip.review_claimed_by_name || '其他查对人'} 查对，请稍后再试`,
+      }, { status: 409 });
+    }
+
     const data = await withTransaction(async (client) => {
       const updated = await client.query(
-        `UPDATE leave_slips SET review_status=$1, review_note=$2, reviewed_by_user_id=$3, reviewed_by_name=$4, reviewed_at=NOW(), updated_at=NOW() WHERE id=$5 AND review_status='待查对' RETURNING *`,
+        `UPDATE leave_slips SET review_status=$1, review_note=$2, reviewed_by_user_id=$3, reviewed_by_name=$4, reviewed_at=NOW(), review_claimed_by_id=NULL, review_claimed_by_name=NULL, review_claimed_at=NULL, updated_at=NOW() WHERE id=$5 AND review_status='待查对' RETURNING *`,
         [reviewStatus, body.review_note ? String(body.review_note) : null, reviewer.id, reviewer.username, id],
       );
       const row = updated.rows[0] || null;
@@ -96,5 +117,73 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     console.error('查对假条失败:', error);
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '查对假条失败' }, { status: 500 });
+  }
+}
+
+/**
+ * 领取 / 释放查对任务。
+ *
+ * 两个都有查对权限的人不能同时处理同一条假条：打开时领取，被占用返回 409 并说明是谁在处理；
+ * 关闭或提交后释放，超过 CLAIM_TTL_MS 未处理会自动失效，可被他人接手。
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const auth = await requirePermission(request, 'reviewLeave');
+    if (auth.response) return auth.response;
+    const reviewer = auth.user!;
+    const { id, action } = await request.json() as { id?: string; action?: string };
+    if (!id) return NextResponse.json({ success: false, error: '缺少假条 ID' }, { status: 400 });
+    if (action !== 'claim' && action !== 'release') {
+      return NextResponse.json({ success: false, error: '操作只能是 claim 或 release' }, { status: 400 });
+    }
+
+    const slip = await queryOne<{
+      id: string;
+      applicant_user_id: string | null;
+      review_status: string;
+      review_claimed_by_id: string | null;
+      review_claimed_by_name: string | null;
+      review_claimed_at: string | null;
+    }>('SELECT id,applicant_user_id,review_status,review_claimed_by_id,review_claimed_by_name,review_claimed_at FROM leave_slips WHERE id=$1', [id]);
+    if (!slip) return NextResponse.json({ success: false, error: '假条不存在' }, { status: 404 });
+
+    if (action === 'release') {
+      await query(
+        'UPDATE leave_slips SET review_claimed_by_id=NULL, review_claimed_by_name=NULL, review_claimed_at=NULL WHERE id=$1 AND review_claimed_by_id=$2',
+        [id, reviewer.id],
+      );
+      return NextResponse.json({ success: true, data: { claimed: false } });
+    }
+
+    if (slip.review_status && slip.review_status !== '待查对') {
+      return NextResponse.json({ success: false, error: '假条已处理，不能重复查对' }, { status: 409 });
+    }
+    const canSelfReview = reviewer.role === 'admin' || (reviewer.role === 'leader' && reviewer.department === '学习竞技部');
+    if (!canSelfReview && slip.applicant_user_id === reviewer.id) {
+      return NextResponse.json({ success: false, error: '不能查对自己上传的假条' }, { status: 403 });
+    }
+
+    const claimedAt = slip.review_claimed_at ? new Date(slip.review_claimed_at).getTime() : 0;
+    const heldByOther = Boolean(slip.review_claimed_by_id)
+      && slip.review_claimed_by_id !== reviewer.id
+      && Date.now() - claimedAt < CLAIM_TTL_MS;
+    if (heldByOther) {
+      return NextResponse.json({
+        success: false,
+        error: `该假条正在由 ${slip.review_claimed_by_name || '其他查对人'} 查对，请稍后再试`,
+        data: { claimedBy: slip.review_claimed_by_name || '其他查对人' },
+      }, { status: 409 });
+    }
+
+    const claimed = await queryOne<{ id: string }>(
+      `UPDATE leave_slips SET review_claimed_by_id=$1, review_claimed_by_name=$2, review_claimed_at=NOW()
+       WHERE id=$3 AND review_status='待查对' RETURNING id`,
+      [reviewer.id, reviewer.username, id],
+    );
+    if (!claimed) return NextResponse.json({ success: false, error: '该假条已被其他人处理，请刷新' }, { status: 409 });
+    return NextResponse.json({ success: true, data: { claimed: true } });
+  } catch (error) {
+    console.error('领取查对任务失败:', error);
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '领取查对任务失败' }, { status: 500 });
   }
 }

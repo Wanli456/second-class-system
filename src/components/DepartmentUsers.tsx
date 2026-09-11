@@ -87,6 +87,10 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
   const [message, setMessage] = useState('');
   const [userPage, setUserPage] = useState(1);
   const [userPageSize, setUserPageSize] = useState<number>(USER_PAGE_SIZE_OPTIONS[0]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [batchPermissionKey, setBatchPermissionKey] = useState<PermissionKey | ''>('');
+  const [batchPermissionValue, setBatchPermissionValue] = useState(true);
+  const [batchSaving, setBatchSaving] = useState(false);
 
   const redirectToLogin = async () => {
     await logoutCurrentUser();
@@ -198,6 +202,48 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
   const totalUserPages = Math.max(1, Math.ceil(visibleUsers.length / userPageSize));
   const currentUserPage = Math.min(userPage, totalUserPages);
   const paginatedUsers = visibleUsers.slice((currentUserPage - 1) * userPageSize, currentUserPage * userPageSize);
+  const toggleUserSelection = (userId: string, checked: boolean) => {
+    setSelectedIds((current) => (checked
+      ? [...new Set([...current, userId])]
+      : current.filter((id) => id !== userId)));
+  };
+
+  const selectAllVisible = () => {
+    setSelectedIds(visibleUsers.map((user) => user.id));
+  };
+
+  const applyBatchPermissions = async () => {
+    if (!batchPermissionKey || selectedIds.length === 0) return;
+    setBatchSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const res = await apiFetch('/api/department-users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userIds: selectedIds,
+          permissions: { [batchPermissionKey]: batchPermissionValue },
+          department: managedDepartment,
+        }),
+      });
+      const data = await res.json();
+      if (res.status === 401) {
+        redirectToLogin();
+        return;
+      }
+      if (!res.ok || !data.success) throw new Error(data.error || '批量设置失败');
+      const updatedUsers: ManagedUser[] = data.data?.users || [];
+      setUsers((current) => current.map((item) => updatedUsers.find((updated) => updated.id === item.id) || item));
+      const skippedCount = (data.data?.skippedUserIds || []).length;
+      setMessage(`已批量设置「${PERMISSION_LABELS[batchPermissionKey]}」为${batchPermissionValue ? '开启' : '关闭'}，共 ${data.data?.updatedCount ?? updatedUsers.length} 人${skippedCount ? `，跳过 ${skippedCount} 人（部门自动权限）` : ''}`);
+      setSelectedIds([]);
+    } catch (batchError) {
+      setError(batchError instanceof Error ? batchError.message : '批量设置失败');
+    } finally {
+      setBatchSaving(false);
+    }
+  };
 
   return (
     <main className="text-slate-950">
@@ -232,6 +278,69 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
           </label>
         )}
 
+        {!error && users.length > 0 && (
+          <section className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <ShieldCheck className="size-4 text-teal-700" />
+              <h2 className="text-sm font-semibold text-slate-800">批量设置权限</h2>
+              <span className="text-xs text-slate-500">已选 {selectedIds.length} 人</span>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={selectAllVisible}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 sm:py-1.5"
+              >
+                全选当前结果（{visibleUsers.length} 人）
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedIds([])}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 sm:py-1.5"
+              >
+                清空选择
+              </button>
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                权限
+                <select
+                  aria-label="批量设置的权限"
+                  value={batchPermissionKey}
+                  onChange={(event) => setBatchPermissionKey(event.target.value as PermissionKey | '')}
+                  className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs"
+                >
+                  <option value="">请选择权限</option>
+                  {permissionKeys.map((key) => (
+                    <option key={key} value={key}>{PERMISSION_LABELS[key] || key}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                操作
+                <select
+                  aria-label="批量设置的操作"
+                  value={batchPermissionValue ? 'on' : 'off'}
+                  onChange={(event) => setBatchPermissionValue(event.target.value === 'on')}
+                  className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs"
+                >
+                  <option value="on">开启</option>
+                  <option value="off">关闭</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => void applyBatchPermissions()}
+                disabled={batchSaving || !batchPermissionKey || selectedIds.length === 0}
+                className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-3 py-2 text-xs font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60 sm:py-1.5"
+              >
+                {batchSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                应用到已选用户
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              先勾选下方用户（或全选），再选择权限与开启/关闭。部门自动授予的权限会自动跳过。
+            </p>
+          </section>
+        )}
         {error && <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
         {message && <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div>}
 
@@ -250,7 +359,15 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
               <section key={user.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
                   <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2"><h2 className="font-semibold">{user.name}</h2><span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{roleLabel(user.role)}</span></div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="checkbox"
+                        aria-label={`选择 ${user.name}`}
+                        checked={selectedIds.includes(user.id)}
+                        onChange={(event) => toggleUserSelection(user.id, event.target.checked)}
+                        className="size-4 accent-teal-700"
+                      />
+                      <h2 className="font-semibold">{user.name}</h2><span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{roleLabel(user.role)}</span></div>
                     <p className="mt-1 text-xs text-slate-500">学号：{user.studentId || '—'}　班级：{user.className || '—'}{user.department && user.department !== department ? '　部门：' + user.department : ''}</p>
                     {managedDepartment === '学习竞技部' && (
                       <label className="mt-3 flex w-fit items-center gap-2 text-sm text-slate-700">

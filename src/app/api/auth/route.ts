@@ -218,6 +218,19 @@ export async function PATCH(request: NextRequest) {
       }
       const paramsForUpdate = [...params];
       const roleChanged = body.role !== undefined && String(body.role) !== lockedTarget.role;
+      if (roleChanged) {
+        // 角色自带的基础权限：部门负责人 -> 提交原假条，班级负责人 -> 假条上传。
+        // 与部门用户管理接口保持一致，避免改为部门负责人后原假条提交仍是未勾选。
+        // 同一请求里显式勾选的权限优先，不被角色默认值覆盖。
+        if (body.canSubmitOriginalLeave === undefined) {
+          paramsForUpdate.push(String(body.role) === 'leader');
+          updates.push('can_submit_original_leave=$' + paramsForUpdate.length);
+        }
+        if (body.canUploadLeave === undefined) {
+          paramsForUpdate.push(String(body.role) === 'class_leader');
+          updates.push('can_upload_leave=$' + paramsForUpdate.length);
+        }
+      }
       if (roleChanged && (lockedTarget.role === 'admin' || body.role === 'admin')) {
         updates.push('admin_session_id=NULL');
       }

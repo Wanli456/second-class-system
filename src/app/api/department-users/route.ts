@@ -10,6 +10,7 @@ import {
 } from '@/lib/department-user-management';
 import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
 import { writeAuditLog } from '@/lib/audit-log';
+import { buildBatchPermissionPlan } from '@/lib/department-user-batch';
 
 const PERMISSION_COLUMNS: Record<PermissionKey, string> = {
   canPublish: 'can_publish',
@@ -180,5 +181,83 @@ export async function PATCH(request: NextRequest) {
   return NextResponse.json({
     success: true,
     data: updated ? serializeUser(updated, editableKeys) : null,
+  });
+}
+
+/**
+ * 批量设置部门业务权限。
+ *
+ * 认证中心/学竞的用户管理界面一次可以勾选多个成员，统一开启或关闭某一项权限；
+ * 部门自动授予的权限会被跳过，不会写入数据库。
+ */
+export async function PUT(request: NextRequest) {
+  const { user, response } = await requireUser(request);
+  if (response) return response;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return badRequest('请求数据格式错误');
+  }
+  if (!body || typeof body !== 'object') return badRequest('请求数据格式错误');
+  const payload = body as { userIds?: unknown; permissions?: unknown; department?: unknown };
+
+  const userIds = Array.isArray(payload.userIds)
+    ? [...new Set(payload.userIds
+      .filter((value): value is string => typeof value === 'string')
+      .map((value) => value.trim())
+      .filter(Boolean))]
+    : [];
+  if (!userIds.length) return badRequest('请选择要批量设置的用户');
+
+  const managedDepartment = parseManagedDepartment(payload.department);
+  const scope = getManagedUserScope(user, managedDepartment || undefined);
+  if (!scope) {
+    return NextResponse.json({ success: false, error: '只有指定部门负责人可以管理部门用户' }, { status: 403 });
+  }
+  if (!payload.permissions || typeof payload.permissions !== 'object' || Array.isArray(payload.permissions)) {
+    return badRequest('权限数据格式错误');
+  }
+
+  const placeholders = userIds.map((_, index) => '$' + (index + 1)).join(',');
+  const rows = await query(USER_SELECT + ' WHERE id IN (' + placeholders + ')', userIds) as DepartmentUserRow[];
+  const plan = buildBatchPermissionPlan({
+    manager: user,
+    managedDepartment: scope.department,
+    targets: rows.map((row) => ({ id: row.id, role: row.role, department: row.department })),
+    permissions: payload.permissions as Record<string, unknown>,
+  });
+  if (!plan.ok) return badRequest(plan.error);
+
+  const updatedIds = plan.updates.map((entry) => entry.userId);
+  await withTransaction(async (client) => {
+    for (const entry of plan.updates) {
+      const values: unknown[] = entry.changes.map((change) => change.value);
+      const setClauses = entry.changes.map((change, index) => PERMISSION_COLUMNS[change.key] + ' = $' + (index + 1));
+      values.push(entry.userId);
+      await client.query('UPDATE users SET ' + setClauses.join(', ') + ' WHERE id = $' + values.length, values);
+      await writeAuditLog({
+        actor: user,
+        action: 'batch_update_department_user',
+        resourceType: 'user',
+        resourceId: entry.userId,
+        details: { changedPermissionKeys: entry.changes.map((change) => change.key) },
+      }, client);
+    }
+  });
+
+  const updatedPlaceholders = updatedIds.map((_, index) => '$' + (index + 1)).join(',');
+  const updatedRows = await query(USER_SELECT + ' WHERE id IN (' + updatedPlaceholders + ')', updatedIds) as DepartmentUserRow[];
+  const permissionKeys = getEditablePermissionKeys(user, undefined, scope.department);
+  const byId = new Map(updatedRows.map((row) => [row.id, row]));
+  const users = updatedIds
+    .map((id) => byId.get(id))
+    .filter((row): row is DepartmentUserRow => Boolean(row))
+    .map((row) => serializeUser(row, permissionKeys));
+
+  return NextResponse.json({
+    success: true,
+    data: { users, updatedCount: users.length, skippedUserIds: plan.skippedUserIds },
   });
 }

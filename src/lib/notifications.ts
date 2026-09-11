@@ -1,5 +1,6 @@
 import { query } from "@/storage/database/supabase-client";
 
+/** 写入站内通知（右上角铃铛）。 */
 export async function createNotification(
   userId: string,
   type: string,

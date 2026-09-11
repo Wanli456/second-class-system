@@ -37,6 +37,7 @@ interface Slip {
   is_late: boolean;
   review_status: string;
   review_note: string | null;
+  review_claimed_by_name?: string | null;
   created_at: string;
 }
 interface SlipStudent { id: string; slip_id: string; student_id: string; student_name: string; class_name: string; }
@@ -62,6 +63,8 @@ export default function LeaveSlipReviewPage() {
   const [keyword, setKeyword] = useState('');
   const [loading, setLoading] = useState(false);
   const [reviewNote, setReviewNote] = useState('');
+  const [claimedIds, setClaimedIds] = useState<Record<string, boolean>>({});
+  const [slipLocks, setSlipLocks] = useState<Record<string, string>>({});
   const loadVersionRef = useRef(0);
 
   const canAccess = hasPermission(user, 'canReviewLeave');
@@ -115,6 +118,24 @@ export default function LeaveSlipReviewPage() {
     return map;
   }, [students]);
 
+  const claimSlip = async (id: string) => {
+    try {
+      const res = await apiFetch('/api/leave-slips/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'claim' }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setSlipLocks((previous) => ({ ...previous, [id]: data.error || '该假条正在被其他人查对，请稍后再试' }));
+        return;
+      }
+      setSlipLocks((previous) => { const next = { ...previous }; delete next[id]; return next; });
+      setClaimedIds((previous) => ({ ...previous, [id]: true }));
+    } catch {
+      setSlipLocks((previous) => ({ ...previous, [id]: '无法确认任务状态，请刷新后重试' }));
+    }
+  };
   const review = async (slip: Slip, reviewStatus: '已通过' | '已驳回') => {
     if (reviewStatus === '已驳回' && !reviewNote.trim()) { alert('驳回时必须填写查对意见'); return; }
     try {
@@ -126,6 +147,8 @@ export default function LeaveSlipReviewPage() {
       const data = await res.json();
       if (!data.success) throw new Error(data.error || '操作失败');
       setReviewNote('');
+      setClaimedIds((previous) => { const next = { ...previous }; delete next[slip.id]; return next; });
+      setSlipLocks((previous) => { const next = { ...previous }; delete next[slip.id]; return next; });
       await load();
     } catch (error) {
       alert(error instanceof Error ? error.message : '操作失败');
@@ -227,9 +250,21 @@ export default function LeaveSlipReviewPage() {
                     )}
                   </div>
                   {slip.review_status === '待查对' && (
-                    <div className="flex shrink-0 gap-2 lg:flex-col">
-                      <Button type="button" onClick={() => void review(slip, '已通过')} className="h-10 bg-emerald-700 px-4 text-white hover:bg-emerald-800"><Check className="size-4" />通过</Button>
-                      <Button type="button" onClick={() => void review(slip, '已驳回')} className="h-10 bg-rose-700 px-4 text-white hover:bg-rose-800"><X className="size-4" />驳回</Button>
+                    <div className="flex shrink-0 flex-col gap-2 lg:w-44">
+                      {!claimedIds[slip.id] && (
+                        <>
+                          <p className="rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
+                            {slipLocks[slip.id] || (slip.review_claimed_by_name ? `该假条正在由 ${slip.review_claimed_by_name} 查对` : '请先领取任务，领取后其他人不能同时处理')}
+                          </p>
+                          <Button type="button" onClick={() => void claimSlip(slip.id)} className="h-10 bg-slate-950 px-4 text-white hover:bg-slate-800">开始查对</Button>
+                        </>
+                      )}
+                      {claimedIds[slip.id] && (
+                        <>
+                          <Button type="button" onClick={() => void review(slip, '已通过')} className="h-10 bg-emerald-700 px-4 text-white hover:bg-emerald-800"><Check className="size-4" />通过</Button>
+                          <Button type="button" onClick={() => void review(slip, '已驳回')} className="h-10 bg-rose-700 px-4 text-white hover:bg-rose-800"><X className="size-4" />驳回</Button>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>

@@ -402,6 +402,17 @@ async function migrateDatabaseSchema(): Promise<void> {
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS registration_start_time TIMESTAMP;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS registration_end_time TIMESTAMP;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+
+    -- 审核人 / 赋分人追溯 + 赋分任务领取
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS reviewed_by_id TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS reviewed_by_name TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS scored_by_id TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS scored_by_name TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS scored_at TIMESTAMP;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_claimed_by_id TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_claimed_by_name TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_claimed_at TIMESTAMP;
     CREATE UNIQUE INDEX IF NOT EXISTS activities_idempotency_key_idx ON activities (idempotency_key);
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_type TEXT DEFAULT 'department';
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS category_primary TEXT;
@@ -424,6 +435,14 @@ async function migrateDatabaseSchema(): Promise<void> {
      ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS registration_start_time TIMESTAMP;
      ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS registration_end_time TIMESTAMP;
      ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+
+    -- 审核人追溯 + 审核任务领取（避免两个人同时处理同一条提交）
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS reviewed_by_id TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS reviewed_by_name TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS review_claimed_by_id TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS review_claimed_by_name TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS review_claimed_at TIMESTAMP;
      CREATE UNIQUE INDEX IF NOT EXISTS activity_submissions_idempotency_key_idx ON activity_submissions (idempotency_key);
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_user_id TEXT;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_name TEXT;
@@ -601,6 +620,10 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS reviewed_by_user_id TEXT;
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS reviewed_by_name TEXT;
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP;
+    -- 查对任务领取（避免多人同时查对同一条假条）
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS review_claimed_by_id TEXT;
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS review_claimed_by_name TEXT;
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS review_claimed_at TIMESTAMP;
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
     CREATE UNIQUE INDEX IF NOT EXISTS leave_slips_idempotency_key_idx ON leave_slips (idempotency_key);
   `);
@@ -733,6 +756,7 @@ async function migrateDatabaseSchema(): Promise<void> {
 
   await executeSchemaSql(`CREATE TABLE IF NOT EXISTS audit_logs (id TEXT PRIMARY KEY DEFAULT ${uuidDefault}, actor_user_id TEXT, actor_name TEXT, action TEXT NOT NULL, resource_type TEXT NOT NULL, resource_id TEXT, details JSONB NOT NULL DEFAULT '{}'::jsonb, ip_address TEXT, created_at TIMESTAMP NOT NULL DEFAULT NOW()); CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx ON audit_logs (created_at); CREATE INDEX IF NOT EXISTS audit_logs_actor_idx ON audit_logs (actor_user_id); CREATE INDEX IF NOT EXISTS audit_logs_resource_idx ON audit_logs (resource_type, resource_id);`);
 
+  
   await ensureDepartmentsTable();
 }
 
