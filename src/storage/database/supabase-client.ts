@@ -66,6 +66,7 @@ if (localDb && shouldInitializeLocalDb) {
       can_query_leave BOOLEAN NOT NULL DEFAULT false,
       can_manage_original_leave BOOLEAN NOT NULL DEFAULT false,
       can_submit_original_leave BOOLEAN NOT NULL DEFAULT false,
+      can_import_scoring BOOLEAN NOT NULL DEFAULT false,
       department TEXT,
       class_name TEXT,
       contact_phone TEXT,
@@ -375,6 +376,7 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_query_leave BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_manage_original_leave BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_original_leave BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS can_import_scoring BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_phone TEXT;

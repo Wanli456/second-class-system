@@ -47,6 +47,7 @@ export type AuthUser = {
   can_query_leave: boolean;
   can_manage_original_leave: boolean;
   can_submit_original_leave: boolean;
+  can_import_scoring?: boolean;
   contact_phone?: string | null;
   department?: string | null;
   class_name?: string | null;
@@ -162,7 +163,7 @@ function calculateUserPermissions(user: AuthUser) {
   const overrides = parsePermissionOverrides(user.permission_overrides);
 
   const permission = (
-    key: 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canRegisterOtherCollege' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave' | 'canManageAttendanceWork' | 'canUploadLeave' | 'canQueryLeave' | 'canManageOriginalLeave' | 'canSubmitOriginalLeave',
+    key: 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canRegisterOtherCollege' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave' | 'canManageAttendanceWork' | 'canUploadLeave' | 'canQueryLeave' | 'canManageOriginalLeave' | 'canSubmitOriginalLeave' | 'canImportScoring',
     raw: boolean,
     fallback: boolean,
   ) => {
@@ -195,6 +196,7 @@ function calculateUserPermissions(user: AuthUser) {
     canQueryLeave: permission('canQueryLeave', user.can_query_leave, false),
     canManageOriginalLeave: permission('canManageOriginalLeave', user.can_manage_original_leave, false),
     canSubmitOriginalLeave: permission('canSubmitOriginalLeave', user.can_submit_original_leave, false),
+    canImportScoring: permission('canImportScoring', user.can_import_scoring === true, false),
   };
 }
 
@@ -211,7 +213,7 @@ async function getAuthenticatedSession(request: NextRequest): Promise<{ user: Au
   const sessions = [request.cookies.get(SESSION_COOKIE)?.value, bearerToken].map(readSessionToken).filter((session): session is SessionToken => !!session);
   for (const session of sessions) {
     const user = await queryOne<AuthUser>(
-      `SELECT id, username, student_id, role, can_publish, can_score, can_submit_activity, can_view_submission_status, can_submit_scoring, can_register_other_college, can_review_leave, can_view_evening_study, can_start_group_leave, can_manage_attendance_work, can_upload_leave, can_query_leave, can_manage_original_leave, can_submit_original_leave, department, class_name, contact_phone, permission_overrides, admin_session_id
+      `SELECT id, username, student_id, role, can_publish, can_score, can_submit_activity, can_view_submission_status, can_submit_scoring, can_register_other_college, can_review_leave, can_view_evening_study, can_start_group_leave, can_manage_attendance_work, can_upload_leave, can_query_leave, can_manage_original_leave, can_submit_original_leave, can_import_scoring, department, class_name, contact_phone, permission_overrides, admin_session_id
        FROM users WHERE id = $1`,
       [session.userId],
     );

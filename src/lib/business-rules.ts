@@ -145,6 +145,7 @@ type RawPermissionUser = Pick<AuthUser,
   | 'can_query_leave'
   | 'can_manage_original_leave'
   | 'can_submit_original_leave'
+  | 'can_import_scoring'
 >;
 
 const RAW_PERMISSION_FIELD: Record<PermissionKey, keyof RawPermissionUser> = {
@@ -162,6 +163,7 @@ const RAW_PERMISSION_FIELD: Record<PermissionKey, keyof RawPermissionUser> = {
   canQueryLeave: 'can_query_leave',
   canManageOriginalLeave: 'can_manage_original_leave',
   canSubmitOriginalLeave: 'can_submit_original_leave',
+  canImportScoring: 'can_import_scoring',
 };
 
 function hasEffectivePermission(user: Partial<RawPermissionUser>, key: PermissionKey): boolean {

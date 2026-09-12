@@ -27,6 +27,7 @@ const PERMISSION_COLUMNS: Record<PermissionKey, string> = {
   canQueryLeave: 'can_query_leave',
   canManageOriginalLeave: 'can_manage_original_leave',
   canSubmitOriginalLeave: 'can_submit_original_leave',
+  canImportScoring: 'can_import_scoring',
 };
 
 const USER_SELECT = [
@@ -34,7 +35,7 @@ const USER_SELECT = [
   'can_publish, can_score, can_submit_activity, can_view_submission_status,',
   'can_submit_scoring, can_register_other_college, can_view_evening_study, can_review_leave,',
   'can_start_group_leave, can_manage_attendance_work, can_upload_leave,',
-  'can_query_leave, can_manage_original_leave, can_submit_original_leave',
+  'can_query_leave, can_manage_original_leave, can_submit_original_leave, can_import_scoring',
   'FROM users',
 ].join(' ');
 

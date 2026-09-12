@@ -21,6 +21,7 @@ export const DEPARTMENT_USER_MANAGEMENT = {
       'canRegisterOtherCollege',
       'canViewSubmissionStatus',
       'canSubmitActivity',
+      'canImportScoring',
     ] as PermissionKey[],
   },
 } as const;

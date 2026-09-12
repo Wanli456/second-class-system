@@ -25,7 +25,8 @@ export type PermissionKey =
   | 'canUploadLeave'
   | 'canQueryLeave'
   | 'canManageOriginalLeave'
-  | 'canSubmitOriginalLeave';
+  | 'canSubmitOriginalLeave'
+  | 'canImportScoring';
 
 export const DEPARTMENT_AUTO_PERMISSIONS: Record<string, Partial<Record<PermissionKey, boolean>>> = {
   // 注意：部门名称必须与用户管理/前端文案一致，否则自动权限不会命中。
@@ -109,6 +110,7 @@ export interface PermissionUser {
   canQueryLeave?: boolean | null;
   canManageOriginalLeave?: boolean | null;
   canSubmitOriginalLeave?: boolean | null;
+  canImportScoring?: boolean | null;
 }
 
 /**

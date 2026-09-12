@@ -42,7 +42,7 @@ type ReviewStatus = '待审核' | '已通过' | '已驳回';
 type ScoringStatus = '待赋分' | '已赋分';
 type AdminRole = 'admin' | 'leader' | 'class_leader' | 'student';
 type AdminTab = 'activities' | 'review' | 'scoring' | 'users' | 'governance';
-type UserPermission = 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canRegisterOtherCollege' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave' | 'canManageAttendanceWork' | 'canUploadLeave' | 'canQueryLeave' | 'canManageOriginalLeave' | 'canSubmitOriginalLeave';
+type UserPermission = 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canRegisterOtherCollege' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave' | 'canManageAttendanceWork' | 'canUploadLeave' | 'canQueryLeave' | 'canManageOriginalLeave' | 'canSubmitOriginalLeave' | 'canImportScoring';
 
 const USER_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
@@ -134,6 +134,7 @@ interface UserData {
   department?: string | null;
   className?: string | null;
   contactPhone?: string | null;
+  canImportScoring?: boolean | null;
   permissionOverrides?: string | null;
   createdAt?: string;
 }
@@ -577,6 +578,7 @@ function AdminPage() {
       canQueryLeave: 'canQueryLeave',
       canManageOriginalLeave: 'canManageOriginalLeave',
       canSubmitOriginalLeave: 'canSubmitOriginalLeave',
+      canImportScoring: 'canImportScoring',
     };
     const apiField = apiFieldMap[permission];
     const targetUser = users.find((item) => item.id === userId);
@@ -1914,6 +1916,7 @@ function UserManagement({
     { key: 'canReviewLeave', label: '假条查对权限' },
     { key: 'canQueryLeave', label: '假条查看权限' },
     { key: 'canSubmitOriginalLeave', label: '提交原假条权限' },
+    { key: 'canImportScoring', label: '班级赋分表提交权限' },
     { key: 'canManageOriginalLeave', label: '假条对比权限' },
     { key: 'canPublish', label: '活动审核权限' },
     { key: 'canScore', label: '活动赋分权限' },

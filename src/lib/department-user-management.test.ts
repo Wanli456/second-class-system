@@ -52,6 +52,7 @@ assert.deepEqual(getEditablePermissionKeys(certificationManager, { id: 'other-le
   'canRegisterOtherCollege',
   'canViewSubmissionStatus',
   'canSubmitActivity',
+  'canImportScoring',
 ]);
 // 其他部门的负责人同样可被学竞管理并授予这组业务权限（与班级负责人一致）。
 assert.deepEqual(getEditablePermissionKeys(learningManager, { id: 'other-leader', role: 'leader', department: '其他部门' }), [

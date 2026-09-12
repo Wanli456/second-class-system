@@ -9,7 +9,7 @@ import { writeAuditLog } from '@/lib/audit-log';
 const PUBLIC_USER_FIELDS = `id, username, student_id, role, can_publish, can_score,
   can_submit_activity, can_view_submission_status, can_submit_scoring, can_register_other_college,
   can_review_leave, can_view_evening_study, can_start_group_leave, can_manage_attendance_work,
-  can_upload_leave, can_query_leave, can_manage_original_leave, can_submit_original_leave,
+  can_upload_leave, can_query_leave, can_manage_original_leave, can_submit_original_leave, can_import_scoring,
   department, class_name, contact_phone, permission_overrides`;
 
 /** 单次批量设置权限的人数上限。 */
@@ -31,6 +31,7 @@ const PERMISSION_COLUMNS: Record<string, string> = {
   canQueryLeave: 'can_query_leave',
   canManageOriginalLeave: 'can_manage_original_leave',
   canSubmitOriginalLeave: 'can_submit_original_leave',
+  canImportScoring: 'can_import_scoring',
 };
 
 function badRequest(error: string) {

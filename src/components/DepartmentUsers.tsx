@@ -23,7 +23,8 @@ type PermissionKey =
   | 'canUploadLeave'
   | 'canQueryLeave'
   | 'canManageOriginalLeave'
-  | 'canSubmitOriginalLeave';
+  | 'canSubmitOriginalLeave'
+  | 'canImportScoring';
 
 const PERMISSION_LABELS: Record<PermissionKey, string> = {
   canPublish: '活动审核权限',
@@ -39,6 +40,7 @@ const PERMISSION_LABELS: Record<PermissionKey, string> = {
   canUploadLeave: '假条上传权限',
   canQueryLeave: '请假查询权限',
   canSubmitOriginalLeave: '提交原假条权限',
+  canImportScoring: '班级赋分表提交权限',
   canManageOriginalLeave: '假条对比权限',
 };
 
@@ -56,6 +58,7 @@ const PERMISSION_HINTS: Record<PermissionKey, string> = {
   canUploadLeave: '允许代班级学生上传请假材料。',
   canQueryLeave: '允许查看和查询系统内全部已提交假条。',
   canSubmitOriginalLeave: '允许提交活动方归档用的原假条。',
+  canImportScoring: '允许在赋分材料页提交本班赋分表，并查看自己提交的记录。',
   canManageOriginalLeave: '允许将上传假条与已归档的活动方原假条进行对比，并维护原假条。',
 };
 const USER_PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
