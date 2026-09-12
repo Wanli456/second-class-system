@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "test": "node scripts/test.mjs",
-    "build": "bash ./scripts/build.sh",
+    "build": "node scripts/build.mjs",
     "dev": "node node_modules/tsx/dist/cli.mjs watch src/server.ts",
     "preinstall": "npx only-allow pnpm",
     "lint": "eslint",
@@ -47,6 +47,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
+    "eslint-plugin-import": "^2.32.0",
     "only-allow": "^1.2.2",
     "shadcn": "latest",
     "stylelint": "^16.4.0",
