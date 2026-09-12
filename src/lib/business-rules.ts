@@ -182,7 +182,7 @@ export function canOpenAdminTab(
   if (user.role === 'admin') return true;
   switch (tab) {
     case 'review': return hasEffectivePermission(user, 'canPublish');
-    case 'scoring': return hasEffectivePermission(user, 'canScore');
+    case 'scoring': return hasEffectivePermission(user, 'canScore') || hasEffectivePermission(user, 'canImportScoring');
     case 'leave': return hasEffectivePermission(user, 'canReviewLeave');
     default: return false;
   }

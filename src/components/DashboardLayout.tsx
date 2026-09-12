@@ -149,7 +149,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: '晚自习查询', href: '/evening-study', icon: Moon, group: '考勤与查询', requiredPermission: 'canViewEveningStudy' },
   { label: '活动总表', href: '/admin?role=admin&tab=activities', icon: ClipboardList, group: '系统管理', requiredRole: 'admin' },
   { label: '活动审核', href: '/admin?role=admin&tab=review', icon: FileCheck, group: '系统管理', requiredPermission: 'canPublish' },
-  { label: '活动赋分', href: '/admin?role=admin&tab=scoring', icon: Award, group: '系统管理', requiredPermission: 'canScore' },
+  { label: '活动赋分', href: '/admin?role=admin&tab=scoring', icon: Award, group: '系统管理', requiredAnyPermissions: ['canScore', 'canImportScoring'] },
   { label: '用户管理', href: '/admin?role=admin&tab=users', icon: Users, group: '系统管理', requiredRole: 'admin' },
   { label: '数据治理', href: '/admin?role=admin&tab=governance', icon: ShieldCheck, group: '系统管理', requiredRole: 'admin' },
   { label: '学习竞技部用户管理', href: '/department-users/learning-competition', icon: Users, group: '系统管理', requiredDepartment: '学习竞技部' },

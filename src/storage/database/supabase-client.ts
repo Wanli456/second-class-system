@@ -383,6 +383,7 @@ async function migrateDatabaseSchema(): Promise<void> {
       id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
       class_name TEXT,
       file_name TEXT,
+      file_url TEXT,
       status TEXT NOT NULL DEFAULT '待人工确认',
       total_rows INTEGER NOT NULL DEFAULT 0,
       valid_rows INTEGER NOT NULL DEFAULT 0,
@@ -395,6 +396,7 @@ async function migrateDatabaseSchema(): Promise<void> {
       confirmed_at TIMESTAMP,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE scoring_imports ADD COLUMN IF NOT EXISTS file_url TEXT;
     CREATE INDEX IF NOT EXISTS scoring_imports_status_idx ON scoring_imports (status, created_at);
     CREATE TABLE IF NOT EXISTS scoring_import_rows (
       id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),

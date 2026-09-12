@@ -26,6 +26,7 @@ import { getDepartmentAutoPermissionKeys, hasPermission, hasPermissionOverride, 
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
 import { CategoryBadge } from '@/components/CategoryBadge';
 import { ActivityLeaderDetails } from '@/components/ActivityLeaderDetails';
+import { ClassScoringImport } from '@/components/ClassScoringImport';
 import { parseRosterWorkbook } from '@/lib/class-roster-import';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -218,6 +219,7 @@ function AdminPage() {
   const isAdmin = user?.role === 'admin';
   const canPublish = hasPermission(user, 'canPublish');
   const canScore = hasPermission(user, 'canScore');
+  const canImportScoring = hasPermission(user, 'canImportScoring');
 
   useEffect(() => {
     if (roleParam && roleParam === 'admin') {
@@ -1320,8 +1322,9 @@ function AdminPage() {
             )}
 
             {/* ===== 活动赋分 ===== */}
-            {activeTab === 'scoring' && canScore && (
+            {activeTab === 'scoring' && (canScore || canImportScoring) && (
               <section id="admin-panel-scoring" role="tabpanel" aria-label="活动赋分" className="space-y-5">
+                <ClassScoringImport />
                 <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-end sm:justify-between sm:p-5">
                   <div>
                     <p className="text-sm font-medium text-teal-700">材料核验</p>

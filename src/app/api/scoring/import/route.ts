@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const className = String(body.className || '').trim();
     const fileName = String(body.fileName || '').trim() || null;
+    const fileUrl = String(body.fileUrl || '').trim() || null;
     const rawRows: unknown[] = Array.isArray(body.rows) ? body.rows : [];
     if (!rawRows.length) return NextResponse.json({ success: false, error: '表格里没有数据行' }, { status: 400 });
     if (rawRows.length > 2000) return NextResponse.json({ success: false, error: '单次最多导入 2000 行' }, { status: 400 });
@@ -51,9 +52,9 @@ export async function POST(request: NextRequest) {
 
     const created = await withTransaction(async (client) => {
       const inserted = await client.query<{ id: string }>(
-        `INSERT INTO scoring_imports (class_name,file_name,status,total_rows,valid_rows,issues,submitted_by_id,submitted_by_name)
-         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8) RETURNING id`,
-        [className || null, fileName, status, rows.length, validation.ok ? rows.length : 0, JSON.stringify(issues), auth.user!.id, auth.user!.username],
+        `INSERT INTO scoring_imports (class_name,file_name,file_url,status,total_rows,valid_rows,issues,submitted_by_id,submitted_by_name)
+         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9) RETURNING id`,
+        [className || null, fileName, fileUrl, status, rows.length, validation.ok ? rows.length : 0, JSON.stringify(issues), auth.user!.id, auth.user!.username],
       );
       const importId = inserted.rows[0].id;
       for (const row of rows) {
