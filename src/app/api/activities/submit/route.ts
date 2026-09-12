@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ActivityImageError, requireActivityImage } from '@/lib/activity-image';
-import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
+import { query, queryOne, withActivityWallTime, withActivityWallTimes, withTransaction } from '@/storage/database/supabase-client';
 import { requirePermission } from '@/lib/auth';
 import { canSelectActivityLeader } from '@/lib/activity-leader-rules';
 import { getActivityScopes, hasAnyScopePermission, normalizeIds, normalizeScopes, serializeIds, serializeScopes, validateActivityTimes, validateHostingScope } from '@/lib/business-rules';
@@ -11,6 +11,7 @@ import { hydrateActivityLeaderDetails } from '@/lib/hydrate-activity-leaders';
 import { readIdempotencyKey } from '@/lib/idempotency';
 import { writeAuditLog } from '@/lib/audit-log';
 import { notifyPermissionHolders } from '@/lib/notify-permission-holders';
+import { normalizeDateTimeInput } from '@/lib/datetime';
 
 class ActivityLeaderValidationError extends Error {}
 
@@ -55,13 +56,13 @@ export async function GET(request: NextRequest) {
     const user = auth.user!;
     if (targetSubmissionId) {
       const candidate = await queryOne('SELECT * FROM activity_submissions WHERE id=$1', [targetSubmissionId]);
-      const submission = candidate && (user.role === 'admin' || candidate.activity_submitter_id === user.id || normalizeIds(candidate.leader_ids).includes(user.id)) ? candidate : null;
+      const submission = candidate && (user.role === 'admin' || candidate.activity_submitter_id === user.id || normalizeIds(candidate.leader_ids).includes(user.id)) ? withActivityWallTime(candidate) : null;
       const hydrated = submission ? await hydrateActivityLeaderDetails([{ ...submission, source: 'submission' }]) : [];
       return NextResponse.json({ success: true, data: hydrated });
     }
     if (activityId) {
       const candidate = await queryOne('SELECT * FROM activities WHERE id=$1', [activityId]);
-      const activity = candidate && (user.role === 'admin' || candidate.activity_submitter_id === user.id || candidate.scoring_material_submitter_id === user.id || normalizeIds(candidate.leader_ids).includes(user.id)) ? candidate : null;
+      const activity = candidate && (user.role === 'admin' || candidate.activity_submitter_id === user.id || candidate.scoring_material_submitter_id === user.id || normalizeIds(candidate.leader_ids).includes(user.id)) ? withActivityWallTime(candidate) : null;
       return NextResponse.json({
         success: true,
         data: activity ? await hydrateActivityLeaderDetails([{ ...activity, source: 'activity', review_status: activity.status === '活动取消' ? '活动取消' : '已通过' }]) : [],
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
     }
     if (submissionId) {
       const candidate = await queryOne('SELECT * FROM activity_submissions WHERE id=$1', [submissionId]);
-      const submission = candidate && (user.role === 'admin' || candidate.activity_submitter_id === user.id || hasAnyScopePermission(user, 'submitActivity', getActivityScopes(candidate))) ? candidate : null;
+      const submission = candidate && (user.role === 'admin' || candidate.activity_submitter_id === user.id || hasAnyScopePermission(user, 'submitActivity', getActivityScopes(candidate))) ? withActivityWallTime(candidate) : null;
       const hydrated = submission ? await hydrateActivityLeaderDetails([{ ...submission, source: 'submission' }]) : [];
       return NextResponse.json({ success: true, data: hydrated });
     }
@@ -83,7 +84,7 @@ export async function GET(request: NextRequest) {
     const matches = (item: Record<string, unknown>) => !keyword || String(item.full_name).includes(keyword);
     const visibleSubmissions = submissions.filter((item) => visible(item) && matches(item));
     const visibleActivities = activities.filter((item) => visible(item) && matches(item));
-    return NextResponse.json({ success: true, data: await hydrateActivityLeaderDetails(mergeActivityStatusRecords(visibleSubmissions, visibleActivities)) });
+    return NextResponse.json({ success: true, data: await hydrateActivityLeaderDetails(withActivityWallTimes(mergeActivityStatusRecords(visibleSubmissions, visibleActivities))) });
   } catch (err) {
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '查询失败' }, { status: 500 });
   }
@@ -102,13 +103,17 @@ export async function POST(request: NextRequest) {
       if (user.role !== 'admin' && repeated.activity_submitter_id !== user.id) {
         return NextResponse.json({ success: false, error: '重复请求标识已被其他用户使用' }, { status: 409 });
       }
-      return NextResponse.json({ success: true, data: repeated });
+      return NextResponse.json({ success: true, data: withActivityWallTime(repeated) });
     }
     const { submission_id, full_name, start_time, end_time, registration_start_time, registration_end_time, category, category_primary, category_secondary, level, plan_file_url, plan_file_name, record_file_url, record_file_name, leader_name = '', leader_phone = '' } = body;
+    const startTime = normalizeDateTimeInput(start_time);
+    const endTime = normalizeDateTimeInput(end_time);
+    const registrationStartTime = normalizeDateTimeInput(registration_start_time);
+    const registrationEndTime = normalizeDateTimeInput(registration_end_time);
     const fallbackScope = scopeFromUser(user);
     const scopes = normalizeScopes(body.scope_names, body.scope_type || fallbackScope.scopeType, body.scope_name || fallbackScope.scopeName);
-    if (!full_name || !start_time || !end_time || !registration_start_time || !registration_end_time || !category || !category_primary || !category_secondary || !isValidCategoryPath(category, category_primary, category_secondary) || !level) return NextResponse.json({ success: false, error: '请填写活动报名时间、活动举办时间、完整二课分类和活动级别' }, { status: 400 });
-    const timeValidation = validateActivityTimes({ start_time, end_time, registration_start_time, registration_end_time });
+    if (!full_name || !startTime || !endTime || !registrationStartTime || !registrationEndTime || !category || !category_primary || !category_secondary || !isValidCategoryPath(category, category_primary, category_secondary) || !level) return NextResponse.json({ success: false, error: '请填写活动报名时间、活动举办时间、完整二课分类和活动级别' }, { status: 400 });
+    const timeValidation = validateActivityTimes({ start_time: startTime, end_time: endTime, registration_start_time: registrationStartTime, registration_end_time: registrationEndTime });
     if (!timeValidation.valid) return NextResponse.json({ success: false, error: timeValidation.error }, { status: 400 });
 
     if (submission_id) {
@@ -125,7 +130,7 @@ export async function POST(request: NextRequest) {
       // 该提交已被管理员审核通过（正式活动已生成），这里必须失败，不能把状态强行改回待审核。
       const data = await withTransaction(async (client) => {
       const imageUrl = await requireActivityImage(client, body.activity_image_url, user);
-      const data = (await client.query(`UPDATE activity_submissions SET full_name=$1,start_time=$2,end_time=$3,registration_start_time=$4,registration_end_time=$5,category=$6,category_primary=$7,category_secondary=$8,level=$9,plan_file_url=$10,plan_file_name=$11,record_file_url=$12,record_file_name=$13,leader_name=$14,leader_phone=$15,scope_type=$16,scope_name=$17,scope_names=$18,leader_ids=$19,activity_submitter_id=$20,activity_submitter_name=$21,activity_submitter_student_id=$22,idempotency_key=$23,review_status='待审核',review_note=NULL,updated_at=NOW() WHERE id=$24 AND review_status<>'已通过' RETURNING *`, [full_name, start_time, end_time, registration_start_time, registration_end_time, category, category_primary || null, category_secondary || null, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader.name, leader.phone, firstScope.type, firstScope.name, serializeScopes(originalScopes), serializeIds(leader.ids), user.id, user.username, user.student_id, idempotencyKey, submission_id])).rows[0] as Record<string, unknown> | undefined;
+      const data = (await client.query(`UPDATE activity_submissions SET full_name=$1,start_time=$2,end_time=$3,registration_start_time=$4,registration_end_time=$5,category=$6,category_primary=$7,category_secondary=$8,level=$9,plan_file_url=$10,plan_file_name=$11,record_file_url=$12,record_file_name=$13,leader_name=$14,leader_phone=$15,scope_type=$16,scope_name=$17,scope_names=$18,leader_ids=$19,activity_submitter_id=$20,activity_submitter_name=$21,activity_submitter_student_id=$22,idempotency_key=$23,review_status='待审核',review_note=NULL,updated_at=NOW() WHERE id=$24 AND review_status<>'已通过' RETURNING *`, [full_name, startTime, endTime, registrationStartTime, registrationEndTime, category, category_primary || null, category_secondary || null, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader.name, leader.phone, firstScope.type, firstScope.name, serializeScopes(originalScopes), serializeIds(leader.ids), user.id, user.username, user.student_id, idempotencyKey, submission_id])).rows[0] as Record<string, unknown> | undefined;
         if (!data) return null;
         await client.query('UPDATE activity_submissions SET leader_details=$1,activity_image_url=$3 WHERE id=$2', [serializeActivityLeaderDetails(leader.details), submission_id, imageUrl]);
         const updated = (await client.query('SELECT * FROM activity_submissions WHERE id=$1', [submission_id])).rows[0] as Record<string, unknown> | undefined;
@@ -133,7 +138,7 @@ export async function POST(request: NextRequest) {
         return updated || data;
       });
       if (!data) return NextResponse.json({ success: false, error: '该活动已审核通过，不能重新提交' }, { status: 409 });
-      return NextResponse.json({ success: true, data });    }
+      return NextResponse.json({ success: true, data: data ? withActivityWallTime(data) : data });    }
 
     const scopeValidation = validateHostingScope(user, scopes);
     if (!scopeValidation.valid) return NextResponse.json({ success: false, error: scopeValidation.error || '缺少活动所属部门或班级' }, { status: 400 });
@@ -142,7 +147,7 @@ export async function POST(request: NextRequest) {
     const firstScope = scopes[0];
     const result = await withTransaction(async (client) => {
     const imageUrl = await requireActivityImage(client, body.activity_image_url, user);
-    const data = (await client.query(`INSERT INTO activity_submissions (full_name,start_time,end_time,registration_start_time,registration_end_time,category,category_primary,category_secondary,level,plan_file_url,plan_file_name,record_file_url,record_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,leader_ids,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,idempotency_key,review_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,'待审核') ON CONFLICT (idempotency_key) DO NOTHING RETURNING *`, [full_name, start_time, end_time, registration_start_time, registration_end_time, category, category_primary || null, category_secondary || null, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader.name, leader.phone, firstScope.type, firstScope.name, serializeScopes(scopes), serializeIds(leader.ids), user.id, user.username, user.student_id, idempotencyKey])).rows[0] as Record<string, unknown> | undefined;
+    const data = (await client.query(`INSERT INTO activity_submissions (full_name,start_time,end_time,registration_start_time,registration_end_time,category,category_primary,category_secondary,level,plan_file_url,plan_file_name,record_file_url,record_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,leader_ids,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,idempotency_key,review_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,'待审核') ON CONFLICT (idempotency_key) DO NOTHING RETURNING *`, [full_name, startTime, endTime, registrationStartTime, registrationEndTime, category, category_primary || null, category_secondary || null, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader.name, leader.phone, firstScope.type, firstScope.name, serializeScopes(scopes), serializeIds(leader.ids), user.id, user.username, user.student_id, idempotencyKey])).rows[0] as Record<string, unknown> | undefined;
       if (!data) {
         const repeatedAfterRace = (await client.query('SELECT * FROM activity_submissions WHERE idempotency_key=$1', [idempotencyKey])).rows[0] as Record<string, unknown> | undefined;
         return { data: repeatedAfterRace || null, created: false };
@@ -165,7 +170,7 @@ export async function POST(request: NextRequest) {
         relatedId: String(result.data.id),
       });
     }
-    return NextResponse.json({ success: true, data: result.data });
+    return NextResponse.json({ success: true, data: withActivityWallTime(result.data) });
   } catch (err) {
     if (err instanceof ActivityLeaderValidationError || err instanceof ActivityImageError) {
       return NextResponse.json({ success: false, error: err.message }, { status: 400 });

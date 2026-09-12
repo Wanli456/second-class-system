@@ -235,8 +235,11 @@ export async function POST(request: NextRequest) {
     }
 
     // 18:30 之后允许上传但自动标记迟到，由查对人决定是否采信。
-    const chinaNow = new Date(Date.now() + 8 * 60 * 60 * 1000);
-    const isLate = chinaNow.getUTCHours() > 18 || (chinaNow.getUTCHours() === 18 && chinaNow.getUTCMinutes() > 30);
+    const chinaNow = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date()).reduce<Record<string, string>>((parts, part) => {
+      if (part.type !== 'literal') parts[part.type] = part.value;
+      return parts;
+    }, {});
+    const isLate = Number(chinaNow.hour) > 18 || (Number(chinaNow.hour) === 18 && Number(chinaNow.minute) > 30);
 
     // 临时请假曾经免审自动通过，但花名册以外没有任何人工核实环节，可被用来伪造他人请假记录；
     // 现在统一走待查对，由学习竞技部负责人或管理员人工查对（提交人不能查对自己提交的记录）。

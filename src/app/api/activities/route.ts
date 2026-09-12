@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
+import { query, queryOne, withActivityWallTime, withActivityWallTimes, withTransaction } from '@/storage/database/supabase-client';
 import { calculateUserPermissions, requirePermission, requireUser } from '@/lib/auth';
 import { getActivityScopes, hasAnyScopePermission, nextActivityId, normalizeIds, normalizeScopes, serializeIds, serializeScopes, scopeMatchesUser, validateActivityTimes, validateScopes } from '@/lib/business-rules';
 import { ACTIVITY_STATUSES, isValidCategoryPath } from '@/lib/types';
@@ -8,6 +8,7 @@ import { serializeActivityLeaderDetails } from '@/lib/activity-leader-details';
 import { getActivityDeletionAction } from '@/lib/activity-deletion';
 import { writeAuditLog } from '@/lib/audit-log';
 import { notifyPermissionHolders } from '@/lib/notify-permission-holders';
+import { normalizeDateTimeInput } from '@/lib/datetime';
 
 export async function GET(request: NextRequest) {
   try {
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
       const visible = auth.user!.role === 'admin'
         ? data
         : data.filter((item) => scopeMatchesUser(auth.user!, getActivityScopes(item)));
-      return NextResponse.json({ success: true, data: await hydrateActivityLeaderDetails(visible) });
+      return NextResponse.json({ success: true, data: await hydrateActivityLeaderDetails(withActivityWallTimes(visible)) });
     }
 
     const auth = await requirePermission(request, 'admin');
@@ -78,7 +79,7 @@ export async function GET(request: NextRequest) {
     const visible = auth.user!.role === 'admin' || !canSubmitScoring
       ? data
       : data.filter((item) => scopeMatchesUser(auth.user!, getActivityScopes(item)));
-    return NextResponse.json({ success: true, data: await hydrateActivityLeaderDetails(visible) });
+    return NextResponse.json({ success: true, data: await hydrateActivityLeaderDetails(withActivityWallTimes(visible)) });
   } catch (err) {
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '查询失败' }, { status: 500 });
   }
@@ -89,17 +90,21 @@ export async function POST(request: NextRequest) {
     if (auth.response) return auth.response;
     const body = await request.json();
     const { full_name, start_time, end_time, registration_start_time, registration_end_time, category, category_primary, category_secondary, level, plan_file_url, plan_file_name, record_file_url, record_file_name, leader_name, leader_phone, status = '正常活动' } = body;
+    const startTime = normalizeDateTimeInput(start_time);
+    const endTime = normalizeDateTimeInput(end_time);
+    const registrationStartTime = normalizeDateTimeInput(registration_start_time);
+    const registrationEndTime = normalizeDateTimeInput(registration_end_time);
     const scopes = normalizeScopes(body.scope_names, body.scope_type, body.scope_name || auth.user!.department || auth.user!.class_name);
     const validation = validateScopes(scopes);
-    if (!full_name || !start_time || !end_time || !registration_start_time || !registration_end_time || !category || !category_primary || !category_secondary || !isValidCategoryPath(category, category_primary, category_secondary) || !level || !leader_name || !leader_phone || !validation.valid) return NextResponse.json({ success: false, error: validation.error || '请填写活动报名时间、活动举办时间、完整二课分类和其他必填信息' }, { status: 400 });
+    if (!full_name || !startTime || !endTime || !registrationStartTime || !registrationEndTime || !category || !category_primary || !category_secondary || !isValidCategoryPath(category, category_primary, category_secondary) || !level || !leader_name || !leader_phone || !validation.valid) return NextResponse.json({ success: false, error: validation.error || '请填写活动报名时间、活动举办时间、完整二课分类和其他必填信息' }, { status: 400 });
     if (!ACTIVITY_STATUSES.includes(status)) return NextResponse.json({ success: false, error: '活动状态取值不正确' }, { status: 400 });
-    const timeValidation = validateActivityTimes({ start_time, end_time, registration_start_time, registration_end_time });
+    const timeValidation = validateActivityTimes({ start_time: startTime, end_time: endTime, registration_start_time: registrationStartTime, registration_end_time: registrationEndTime });
     if (!timeValidation.valid) return NextResponse.json({ success: false, error: timeValidation.error }, { status: 400 });
     const firstScope = scopes[0];
     const leaderIds = normalizeIds(body.leader_ids);
     const data = await withTransaction(async (client) => {
       const id = await nextActivityId(client);
-      const inserted = await client.query(`INSERT INTO activities (id,full_name,start_time,end_time,registration_start_time,registration_end_time,category,category_primary,category_secondary,level,plan_file_url,plan_file_name,record_file_url,record_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,leader_ids,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,status,scoring_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'待赋分') RETURNING *`, [id, full_name, start_time, end_time, registration_start_time, registration_end_time, category, category_primary || null, category_secondary || null, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader_name, leader_phone, firstScope.type, firstScope.name, serializeScopes(scopes), serializeIds(leaderIds), auth.user!.id, auth.user!.username, auth.user!.student_id, status]);
+      const inserted = await client.query(`INSERT INTO activities (id,full_name,start_time,end_time,registration_start_time,registration_end_time,category,category_primary,category_secondary,level,plan_file_url,plan_file_name,record_file_url,record_file_name,leader_name,leader_phone,scope_type,scope_name,scope_names,leader_ids,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,status,scoring_status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'待赋分') RETURNING *`, [id, full_name, startTime, endTime, registrationStartTime, registrationEndTime, category, category_primary || null, category_secondary || null, level, plan_file_url || null, plan_file_name || null, record_file_url || null, record_file_name || null, leader_name, leader_phone, firstScope.type, firstScope.name, serializeScopes(scopes), serializeIds(leaderIds), auth.user!.id, auth.user!.username, auth.user!.student_id, status]);
       if (leaderIds.length) {
         const placeholders = leaderIds.map((_, index) => `$${index + 1}`).join(',');
         const leaders = await client.query<{ id: string; username: string; student_id: string; contact_phone: string | null }>(`SELECT id,username,student_id,contact_phone FROM users WHERE id IN (${placeholders})`, leaderIds);
@@ -110,7 +115,7 @@ export async function POST(request: NextRequest) {
       await writeAuditLog({ actor: auth.user, action: 'create_activity', resourceType: 'activity', resourceId: data?.id || null, details: { status } }, client);
       return data;
     });
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true, data: data ? withActivityWallTime(data) : data });
   } catch (err) {
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '创建失败' }, { status: 500 });
   }
@@ -127,7 +132,8 @@ export async function PUT(request: NextRequest) {
     const auth = await requirePermission(request, isScoringMaterialSubmission ? 'submitScoring' : 'admin');
     if (auth.response) return auth.response;
     if (!updateKeys.length) return NextResponse.json({ success: false, error: '没有可更新的内容' }, { status: 400 });
-    const activity = await queryOne('SELECT * FROM activities WHERE id=$1', [id]);
+    const rawActivity = await queryOne('SELECT * FROM activities WHERE id=$1', [id]);
+    const activity = rawActivity ? withActivityWallTime(rawActivity) : null;
     if (!activity) return NextResponse.json({ success: false, error: '活动不存在' }, { status: 404 });
     if (isScoringMaterialSubmission) {
       if (activity.status !== '正常活动') return NextResponse.json({ success: false, error: '仅正常活动可以提交赋分材料' }, { status: 400 });
@@ -144,6 +150,12 @@ export async function PUT(request: NextRequest) {
     if (!safeKeys.length) return NextResponse.json({ success: false, error: '没有可更新的内容' }, { status: 400 });
     if (safeKeys.includes('status') && !ACTIVITY_STATUSES.includes(updates.status)) return NextResponse.json({ success: false, error: '活动状态取值不正确' }, { status: 400 });
     const timeFields = ['start_time', 'end_time', 'registration_start_time', 'registration_end_time'];
+    for (const field of timeFields) {
+      if (!(field in updates)) continue;
+      const normalized = normalizeDateTimeInput(updates[field]);
+      if (!normalized) return NextResponse.json({ success: false, error: '活动时间格式不正确' }, { status: 400 });
+      updates[field] = normalized;
+    }
     if (safeKeys.some((key) => timeFields.includes(key))) {
       const merged = {
         start_time: updates.start_time ?? activity.start_time,
@@ -178,7 +190,7 @@ export async function PUT(request: NextRequest) {
         relatedId: String(data.id),
       });
     }
-    return NextResponse.json({ success: true, data });
+    return NextResponse.json({ success: true, data: withActivityWallTime(data) });
   } catch (err) {
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : '更新失败' }, { status: 500 });
   }

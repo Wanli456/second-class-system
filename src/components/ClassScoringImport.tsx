@@ -8,6 +8,7 @@ import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
 import { extractScoringRows, type ScoringImportIssue, type ScoringImportRow } from '@/lib/scoring-import';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
+import { formatBusinessDateTime } from '@/lib/datetime';
 
 type ImportRecord = {
   id: string;
@@ -224,7 +225,7 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
                     <button type="button" onClick={() => setExpandedId(expanded ? null : record.id)} className="min-w-0 flex-1 text-left">
                       <span className="block truncate font-medium text-slate-900">{record.file_name || '未命名'}  {record.class_name || '未填班级'}</span>
                       <span className="mt-1 block text-xs text-slate-500">
-                        提交人 {record.submitted_by_name || '-'}｜提交时间 {record.submitted_at ? new Date(record.submitted_at).toLocaleString('zh-CN') : '-'}｜第 {record.submission_count || 1} 次提交｜{record.valid_rows}/{record.total_rows} 行
+                        提交人 {record.submitted_by_name || '-'}｜提交时间 {formatBusinessDateTime(record.submitted_at, '-')}｜第 {record.submission_count || 1} 次提交｜{record.valid_rows}/{record.total_rows} 行
                         {record.confirmed_by_name ? `｜确认人 ${record.confirmed_by_name}` : ''}
                       </span>
                     </button>

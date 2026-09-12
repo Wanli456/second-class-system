@@ -12,6 +12,7 @@ import { hasPermission } from '@/lib/department-permissions';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { normalizeDateTimeInput } from '@/lib/datetime';
 
 interface StudentRow { student_id: string; student_name: string; class_name: string; }
 interface ActivityOption { id: string; full_name: string; }
@@ -341,8 +342,10 @@ export default function LeaveSlipUploadPage() {
     if (!canChooseClass && cleanedStudents.some((student) => student.class_name.trim() !== user?.className)) {
       setError(`当前账号只能提交本班（${user?.className || '未设置班级'}）的假条`); return;
     }
-    if (!startTime || !endTime) { setError('请填写请假开始和结束时间'); return; }
-    if (new Date(endTime) <= new Date(startTime)) { setError('结束时间必须晚于开始时间'); return; }
+    const normalizedStartTime = normalizeDateTimeInput(startTime);
+    const normalizedEndTime = normalizeDateTimeInput(endTime);
+    if (!normalizedStartTime || !normalizedEndTime) { setError('请填写正确的请假开始和结束时间'); return; }
+    if (normalizedEndTime <= normalizedStartTime) { setError('结束时间必须晚于开始时间'); return; }
     if (!imageFiles.length) { setError('请上传假条图片（可多选截图）'); return; }
     if (slipType === '校级（且不为数经举办）假条' && imageFiles.length < 2) {
       setError('校级（且不为数经举办）假条必须同时上传：假条截图 + 到梦空间“等待活动”手机截图，共至少 2 张');
@@ -366,8 +369,8 @@ export default function LeaveSlipUploadPage() {
           slip_type: slipType,
           leave_type: leaveType,
           students: cleanedStudents,
-          start_time: startTime,
-          end_time: endTime,
+          start_time: normalizedStartTime,
+          end_time: normalizedEndTime,
           activity_id: slipType === '二课活动请假' ? activityId : null,
           activity_name: slipType === '二课活动请假' ? activityOptions.find((activity) => activity.id === activityId)?.full_name || activityName : null,
           images: uploaded,

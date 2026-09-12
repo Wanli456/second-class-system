@@ -12,6 +12,7 @@ import { hasPermission } from '@/lib/department-permissions';
 import { formatActivityScopes } from '@/lib/business-rules';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
 import { ActivityLeaderDetails } from '@/components/ActivityLeaderDetails';
+import { formatBusinessDateTime } from '@/lib/datetime';
 
 interface Submission {
   id: string;
@@ -183,8 +184,8 @@ export default function SubmitStatusPage() {
                           </span>
                           <span className="text-xs text-gray-500">{s.level}</span>
                         </div>
-                         <p className="mt-1 text-xs text-gray-500">活动时间：{new Date(s.start_time).toLocaleString('zh-CN')} ~ {new Date(s.end_time).toLocaleString('zh-CN')}</p>
-                         <p className="mt-0.5 text-xs text-sky-700">活动报名时间：{s.registration_start_time && s.registration_end_time ? `${new Date(s.registration_start_time).toLocaleString('zh-CN')} ~ ${new Date(s.registration_end_time).toLocaleString('zh-CN')}` : '未填写（历史记录）'}</p>
+                         <p className="mt-1 text-xs text-gray-500">活动时间：{formatBusinessDateTime(s.start_time)} ~ {formatBusinessDateTime(s.end_time)}</p>
+                         <p className="mt-0.5 text-xs text-sky-700">活动报名时间：{s.registration_start_time && s.registration_end_time ? `${formatBusinessDateTime(s.registration_start_time)} ~ ${formatBusinessDateTime(s.registration_end_time)}` : '未填写（历史记录）'}</p>
                         <p className="mt-0.5 text-xs text-gray-500"><ActivityLeaderDetails record={s} /></p>
                         <p className="mt-0.5 text-xs text-gray-500">{formatActivityScopes(s)}</p>
                       </div>

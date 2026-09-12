@@ -5,6 +5,7 @@ import { Download, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { previewKind, type PreviewKind } from '@/lib/file-preview';
 import { apiFetch } from '@/lib/client-api';
+import { formatBusinessDateTime } from '@/lib/datetime';
 
 type ExcelSheet = {
   name: string;
@@ -21,7 +22,7 @@ type DocumentPreviewState =
 const IDLE_DOCUMENT_STATE: DocumentPreviewState = { status: 'idle' };
 
 function formatCellValue(value: unknown): string {
-  if (value instanceof Date) return value.toLocaleString('zh-CN');
+  if (value instanceof Date) return formatBusinessDateTime(value);
   if (value === null || value === undefined) return '';
   return String(value);
 }

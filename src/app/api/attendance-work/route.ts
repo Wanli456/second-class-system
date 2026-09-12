@@ -30,12 +30,12 @@ function parseImages(value: unknown): ImageInput[] {
 const WEEKDAY_OFFSETS: Record<string, number> = { '星期一': 0, '星期二': 1, '星期三': 2, '星期四': 3, '星期五': 4, '星期六': 5, '星期日': 6 };
 
 function shiftDate(date: string, offsetDays: number): string {
-  const parsed = new Date(`${date}T00:00:00`);
+  const parsed = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return '';
   const shifted = new Date(parsed.getTime() + offsetDays * 86400000);
-  const year = shifted.getFullYear();
-  const month = String(shifted.getMonth() + 1).padStart(2, '0');
-  const day = String(shifted.getDate()).padStart(2, '0');
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(shifted.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 

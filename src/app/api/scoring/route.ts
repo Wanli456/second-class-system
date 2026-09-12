@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
+import { query, queryOne, withActivityWallTime, withActivityWallTimes, withTransaction } from '@/storage/database/supabase-client';
 import { createNotification, resolveNotifications } from '@/lib/notifications';
 import { requirePermission } from '@/lib/auth';
 import { normalizeIds } from '@/lib/business-rules';
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     else if (!status) { params.push('待赋分'); clauses.push(`scoring_status=$${params.length}`); }
     if (level) { params.push(level); clauses.push(`level=$${params.length}`); }
     const allData = await query(`SELECT id,full_name,start_time,end_time,registration_start_time,registration_end_time,level,scoring_status,scoring_table_url,scoring_table_file_name,record_file_url,record_file_name,record_photo_url,record_photo_file_name,leader_name,leader_phone,leader_ids,leader_details,scope_type,scope_name,scope_names,activity_submitter_id,activity_submitter_name,activity_submitter_student_id,scoring_material_submitter_id,scoring_material_submitter_name,scoring_material_submitter_student_id,category,category_primary,category_secondary,status,reviewed_by_name,scored_by_name,scored_at,scoring_claimed_by_id,scoring_claimed_by_name,scoring_claimed_at FROM activities WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC`, params);
-    const data = allData;
+    const data = withActivityWallTimes(allData);
     return NextResponse.json({ success: true, data: await hydrateActivityLeaderDetails(data) });
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '获取赋分数据失败' }, { status: 500 });
@@ -146,7 +146,7 @@ export async function PUT(request: NextRequest) {
       title: '活动赋分完成',
       content: `活动「${activity.full_name}」已由 ${auth.user!.username} 完成赋分。`,
     });
-    return NextResponse.json({ success: true, data: updated });
+    return NextResponse.json({ success: true, data: withActivityWallTime(updated) });
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '赋分失败' }, { status: 500 });
   }

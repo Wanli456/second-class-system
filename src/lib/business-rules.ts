@@ -2,6 +2,7 @@ import type { AuthUser } from '@/lib/auth';
 import { computeDepartmentAutoPerms, parsePermissionOverrides, type PermissionKey } from '@/lib/department-permissions';
 import type { DatabaseClient } from '@/storage/database/supabase-client';
 import { getBusinessDate } from './business-time';
+import { normalizeDateTimeInput } from './datetime';
 
 export type ActivityScope = 'department' | 'class';
 
@@ -218,11 +219,11 @@ export function validateActivityTimes(input: {
   registration_start_time: unknown;
   registration_end_time: unknown;
 }): { valid: boolean; error?: string } {
-  const start = new Date(String(input.start_time)).getTime();
-  const end = new Date(String(input.end_time)).getTime();
-  const registrationStart = new Date(String(input.registration_start_time)).getTime();
-  const registrationEnd = new Date(String(input.registration_end_time)).getTime();
-  if ([start, end, registrationStart, registrationEnd].some((value) => Number.isNaN(value))) {
+  const start = normalizeDateTimeInput(input.start_time);
+  const end = normalizeDateTimeInput(input.end_time);
+  const registrationStart = normalizeDateTimeInput(input.registration_start_time);
+  const registrationEnd = normalizeDateTimeInput(input.registration_end_time);
+  if (!start || !end || !registrationStart || !registrationEnd) {
     return { valid: false, error: '活动时间格式不正确' };
   }
   if (end <= start) return { valid: false, error: '活动结束时间必须晚于开始时间' };

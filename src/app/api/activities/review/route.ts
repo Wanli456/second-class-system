@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ActivityImageError } from '@/lib/activity-image';
-import { query, queryOne, withTransaction } from '@/storage/database/supabase-client';
+import { query, queryOne, withActivityWallTime, withActivityWallTimes, withTransaction } from '@/storage/database/supabase-client';
 import { createNotification, resolveNotifications } from '@/lib/notifications';
 import { requirePermission } from '@/lib/auth';
 import { nextActivityId, normalizeIds } from '@/lib/business-rules';
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     const params: unknown[] = [];
     if (status) { params.push(status); clauses.push(`review_status=$${params.length}`); }
     const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '';
-    const allData = await query(`SELECT * FROM activity_submissions${where} ORDER BY created_at DESC`, params);
+    const allData = withActivityWallTimes(await query(`SELECT * FROM activity_submissions${where} ORDER BY created_at DESC`, params));
     const data = allData;
     return NextResponse.json({ success: true, data: await hydrateActivityLeaderDetails(data) });
   } catch (error) {
@@ -170,7 +170,7 @@ export async function PUT(request: NextRequest) {
     await notifyUsers(recipients, isApproved ? 'activity_approved' : 'activity_rejected', isApproved ? '活动审核通过' : '活动审核被驳回', isApproved
       ? `活动「${submission.full_name}」已审核通过，活动ID：${activityId}`
       : `活动「${submission.full_name}」审核未通过。${review_note ? `原因：${review_note}` : ''}`, activityId || submission.id);
-    return NextResponse.json({ success: true, data: updated, activityId });
+    return NextResponse.json({ success: true, data: withActivityWallTime(updated), activityId });
   } catch (error) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '审核活动失败' }, { status: error instanceof ActivityImageError ? 409 : 500 });
   }

@@ -9,6 +9,7 @@ import { PageErrorDialog } from '@/components/PageErrorDialog';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
+import { formatBusinessDateTime } from '@/lib/datetime';
 
 interface SlipRecord {
   id: string;
@@ -35,11 +36,9 @@ interface QueryResult {
 }
 interface PersonRow { id: string; student_id: string; student_name: string; class_name: string; leave_type: string; start_time: string | null; end_time: string | null; }
 
-const BUSINESS_TIME_ZONE = 'Asia/Shanghai';
-
 function businessDate(value: Date) {
   const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: BUSINESS_TIME_ZONE,
+    timeZone: 'Asia/Shanghai',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -50,9 +49,7 @@ function businessDate(value: Date) {
 
 function today() { return businessDate(new Date()); }
 function formatTime(value: string | null) {
-  return value
-    ? new Date(value).toLocaleString('zh-CN', { timeZone: BUSINESS_TIME_ZONE, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-    : '未填写';
+  return formatBusinessDateTime(value);
 }
 
 export default function EveningStudyPage() {

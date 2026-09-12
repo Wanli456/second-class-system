@@ -22,6 +22,7 @@ import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch, logoutCurrentUser, refreshCurrentUser } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { canOpenAdminTab, formatActivityScopes } from '@/lib/business-rules';
+import { formatBusinessDateTime } from '@/lib/datetime';
 import { getDepartmentAutoPermissionKeys, hasPermission, hasPermissionOverride, isDepartmentAutoPermission, type PermissionKey } from '@/lib/department-permissions';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
 import { CategoryBadge } from '@/components/CategoryBadge';
@@ -73,9 +74,7 @@ function canAccessAdminWorkspace(userData: UserData, requestedTab: string) {
   return hasPermission(userData, 'canPublish') || hasPermission(userData, 'canScore');
 }
 
-const formatDateTime = (value?: string | null) => value
-  ? new Date(value).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-  : '未填写';
+const formatDateTime = (value?: string | null) => formatBusinessDateTime(value);
 
 const matchesSearch = (query: string, values: readonly unknown[]) => {
   const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -2737,7 +2736,7 @@ function ActivityForm({ activity, onSubmit, onCancel }: {
         </div>
       </div>
       <div className="mt-3 flex gap-2">
-        <button onClick={() => onSubmit({ ...form, start_time: new Date(form.start_time).toISOString(), end_time: new Date(form.end_time).toISOString(), registration_start_time: form.registration_start_time ? new Date(form.registration_start_time).toISOString() : null, registration_end_time: form.registration_end_time ? new Date(form.registration_end_time).toISOString() : null })}
+        <button onClick={() => onSubmit({ ...form })}
           className="rounded bg-[#1e3a5f] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1e3a5f]/90">保存</button>
         <button onClick={onCancel} className="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">取消</button>
       </div>

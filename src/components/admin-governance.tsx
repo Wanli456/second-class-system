@@ -5,6 +5,7 @@ import { AlertCircle, ChevronLeft, ChevronRight, Download, FileText, RefreshCw, 
 import { apiFetch } from '@/lib/client-api';
 import { formatAuditAction, formatAuditDetails, formatAuditResource } from '@/lib/audit-log-labels';
 import { Button } from '@/components/ui/button';
+import { formatBusinessDateTime } from '@/lib/datetime';
 
 type GovernanceUser = { id: string; name: string; studentId: string; role: string; createdAt?: string };
 type FileItem = { id: string; url: string; purpose: string; createdAt: string | null; references: Array<{ kind: string; recordId: string }>; retentionStatus: 'active' | 'due' };
@@ -74,7 +75,7 @@ function ensureRetentionComplete(data: Record<string, unknown>): void {
   }
 }
 
-function formatDate(value?: string | null): string { return value ? new Date(value).toLocaleString('zh-CN') : '未填写'; }
+function formatDate(value?: string | null): string { return formatBusinessDateTime(value); }
 
 function Pager({ page, total, pageSize, onChange }: { page: number; total: number; pageSize: number; onChange: (page: number) => void }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));

@@ -1,6 +1,15 @@
-import { Pool, type QueryResultRow } from 'pg';
+import { Pool, types as pgTypes, type QueryResultRow } from 'pg';
 import { newDb, DataType } from 'pg-mem';
+import { BUSINESS_TIME_ZONE, normalizeDateTimeInput } from '@/lib/datetime';
 import { LOCAL_TEST_DATA_SQL } from './local-test-data';
+
+const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
+function parsePostgresWallTimestamp(value: string): Date {
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/);
+  if (!match) return new Date(value);
+  const [, year, month, day, hour, minute, second = '00'] = match;
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second)) - SHANGHAI_OFFSET_MS);
+}
 
 const databaseUrl = process.env.PGDATABASE_URL?.trim();
 const isProductionRuntime = process.env.NODE_ENV === 'production'
@@ -11,6 +20,7 @@ if (isProductionRuntime && !databaseUrl) {
 }
 
 const useLocalTestDatabase = !databaseUrl;
+if (!useLocalTestDatabase) pgTypes.setTypeParser(1114, parsePostgresWallTimestamp);
 
 type DatabasePool = {
   query: <T extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]) => Promise<{ rows: T[] }>;
@@ -852,14 +862,18 @@ export async function queryOne<T extends QueryResultRow = QueryResultRow>(sql: s
   return rows[0] || null;
 }
 
-// pg-mem 把无时区 TIMESTAMP 解析为 UTC，生产 pg 按服务器本地时区解析；
-// 读取假条起止时间时按各自约定对称还原成「墙钟」字符串（YYYY-MM-DDTHH:mm:ss），
-// 前端因此不需要再判断服务器时区。ponytail: 若未来更换数据库驱动，需要重新核对解析约定。
+// pg-mem 把无时区 TIMESTAMP 解析为 UTC，生产 pg 返回的 Date 也必须固定按业务时区还原。
+// 纯墙钟字符串直接保留，避免再次经过运行机器时区。ponytail: 若未来更换数据库驱动，需要重新核对解析约定。
 export function toWallTimeString(value: unknown): string | null {
-  if (!(value instanceof Date)) return null;
+  if (typeof value === 'string') {
+    const normalized = normalizeDateTimeInput(value);
+    if (normalized) return normalized;
+    value = new Date(value);
+  }
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
   if (useLocalTestDatabase) return value.toISOString().slice(0, 19);
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone: BUSINESS_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
   }).formatToParts(value).reduce<Record<string, string>>((result, part) => {
     if (part.type !== 'literal') result[part.type] = part.value;
@@ -875,6 +889,20 @@ export function withWallTime<T extends QueryResultRow>(row: T): T {
 
 export function withWallTimes<T extends QueryResultRow>(rows: T[]): T[] {
   return rows.map(withWallTime);
+}
+
+const ACTIVITY_TIME_FIELDS = ['start_time', 'end_time', 'registration_start_time', 'registration_end_time'] as const;
+
+export function withActivityWallTime<T extends QueryResultRow>(row: T): T {
+  const result = { ...row } as Record<string, unknown>;
+  for (const field of ACTIVITY_TIME_FIELDS) {
+    if (field in result) result[field] = toWallTimeString(result[field]);
+  }
+  return result as T;
+}
+
+export function withActivityWallTimes<T extends QueryResultRow>(rows: T[]): T[] {
+  return rows.map(withActivityWallTime);
 }
 
 export async function withTransaction<T>(callback: (client: DatabaseClient) => Promise<T>): Promise<T> {

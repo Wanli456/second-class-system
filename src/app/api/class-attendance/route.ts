@@ -8,6 +8,7 @@ import {
 import { uniqueLookup } from '@/lib/unique-lookup';
 import { query } from '@/storage/database/supabase-client';
 import { requireUser } from '@/lib/auth';
+import { getDayRangeForBusinessDate } from '@/lib/business-time';
 
 interface AttendanceDateRow {
   class_name: string | null;
@@ -52,12 +53,6 @@ function isValidDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(value + 'T00:00:00.000Z');
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
-
-function nextDate(value: string): string {
-  const parsed = new Date(value + 'T00:00:00.000Z');
-  parsed.setUTCDate(parsed.getUTCDate() + 1);
-  return parsed.toISOString().slice(0, 10);
 }
 
 function parseJson(value: unknown): unknown {
@@ -119,7 +114,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const followingDate = nextDate(requestedDate);
+    const { start: dayStart, end: dayEnd } = getDayRangeForBusinessDate(requestedDate);
     const [roster, users, approvedLeaves, attendance, attendanceWork, attendanceSchedules] = await Promise.all([
       query<NamedRosterStudent>(
         'SELECT class_name, student_id, student_name FROM class_roster WHERE class_name IS NOT NULL AND class_name <> \'\' AND student_id IS NOT NULL AND student_id <> \'\'',
@@ -129,7 +124,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       ),
       query<ApprovedLeaveStudent>(
         'SELECT students.class_name, students.student_id FROM leave_slip_students students INNER JOIN leave_slips slips ON slips.id = students.slip_id WHERE slips.review_status = \'已通过\' AND COALESCE(slips.start_time, slips.created_at) < $2 AND COALESCE(slips.end_time, slips.start_time, slips.created_at) >= $1',
-        [requestedDate + 'T00:00:00.000Z', followingDate + 'T00:00:00.000Z'],
+        [dayStart, dayEnd],
       ),
       query<AttendanceDateRow>(
         'SELECT class_name, total_count, present_count FROM evening_study_attendance WHERE date = $1 ORDER BY class_name, created_at DESC',

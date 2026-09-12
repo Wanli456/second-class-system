@@ -10,6 +10,7 @@ import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
 import { Button } from '@/components/ui/button';
 import { ImageUploadPreviews } from '@/components/ImageUploadPreviews';
+import { getBusinessDate } from '@/lib/business-time';
 
 interface ScheduleItem { date: string; weekday: string; students: string[] }
 interface WorkArrangement {
@@ -69,20 +70,16 @@ function parseImageList(raw: string): Array<{ url: string; name?: string }> {
 }
 
 function localDateInput(offsetDays = 0) {
-  const value = new Date(Date.now() + offsetDays * 86400000);
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, '0');
-  const day = String(value.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return shiftDate(getBusinessDate(), offsetDays);
 }
 
 function shiftDate(date: string, offsetDays: number): string {
-  const parsed = new Date(`${date}T00:00:00`);
+  const parsed = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return '';
   const shifted = new Date(parsed.getTime() + offsetDays * 86400000);
-  const year = shifted.getFullYear();
-  const month = String(shifted.getMonth() + 1).padStart(2, '0');
-  const day = String(shifted.getDate()).padStart(2, '0');
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(shifted.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 

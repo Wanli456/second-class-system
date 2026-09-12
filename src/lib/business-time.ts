@@ -1,4 +1,4 @@
-const BUSINESS_TIME_ZONE = 'Asia/Shanghai';
+import { BUSINESS_TIME_ZONE } from './datetime';
 
 export function getBusinessDate(date = new Date()): string {
   if (Number.isNaN(date.getTime())) throw new Error('日期无效');

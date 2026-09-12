@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/auth';
 import { writeAuditLog } from '@/lib/audit-log';
-import { query } from '@/storage/database/supabase-client';
+import { query, toWallTimeString } from '@/storage/database/supabase-client';
 
 type ExportField = readonly [column: string, key: string];
 type ExportConfig = { table: string; fields: readonly ExportField[] };
@@ -24,12 +24,15 @@ function parseLimit(value: string | null): number | null {
   return limit >= 1 && limit <= 1000 ? limit : null;
 }
 
-function serializeValue(value: unknown): unknown {
+const WALL_TIME_FIELDS = new Set(['start_time', 'end_time', 'registration_start_time', 'registration_end_time']);
+
+function serializeValue(column: string, value: unknown): unknown {
+  if (WALL_TIME_FIELDS.has(column)) return toWallTimeString(value) || value;
   return value instanceof Date ? value.toISOString() : value;
 }
 
 function serializeRow(row: Record<string, unknown>, fields: readonly ExportField[]): Record<string, unknown> {
-  return Object.fromEntries(fields.map(([column, key]) => [key, serializeValue(row[column])]));
+  return Object.fromEntries(fields.map(([column, key]) => [key, serializeValue(column, row[column])]));
 }
 
 function csvCell(value: unknown): string {

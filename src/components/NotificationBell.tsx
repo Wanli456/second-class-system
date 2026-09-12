@@ -6,6 +6,7 @@ import { Bell, Check, ExternalLink, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/client-api';
 import { getNotificationHref, getNotificationTargetLabel } from '@/lib/notification-links';
+import { formatBusinessDateTime } from '@/lib/datetime';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -236,7 +237,7 @@ export function NotificationBell({ userId }: { userId: string | null }) {
                         {notification.content}
                       </p>
                       <p className="mt-1 text-xs tabular-nums text-gray-400">
-                        {new Date(notification.created_at).toLocaleString('zh-CN')}
+                        {formatBusinessDateTime(notification.created_at)}
                       </p>
                       {href && targetLabel && (
                         <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-teal-700">

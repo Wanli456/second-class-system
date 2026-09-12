@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { normalizeDateTimeInput } from './datetime';
+import { formatBusinessDateTime, normalizeDateTimeInput } from './datetime';
 
 // datetime-local 的原生值（分钟精度）
 assert.equal(normalizeDateTimeInput('2026-08-27T20:00'), '2026-08-27T20:00:00');
@@ -15,7 +15,11 @@ assert.equal(normalizeDateTimeInput('2026/08/27 20:00'), null);
 assert.equal(normalizeDateTimeInput('abc'), null);
 assert.equal(normalizeDateTimeInput(''), null);
 assert.equal(normalizeDateTimeInput('2026-08-27T25:00'), null);
+assert.equal(normalizeDateTimeInput('2026-02-30T20:00'), null);
+assert.equal(normalizeDateTimeInput('2026-08-27T20:00:60'), null);
 // 归一化后同格式可按字典序比较时间先后
 assert.ok(normalizeDateTimeInput('2026-08-28T08:00')! > normalizeDateTimeInput('2026-08-27T20:00')!);
+assert.equal(formatBusinessDateTime('2026-08-27T20:00:00'), '2026-08-27 20:00');
+assert.equal(formatBusinessDateTime('2026-08-27T12:00:00.000Z'), '2026-08-27 20:00');
 
 console.log('datetime input normalization tests passed');

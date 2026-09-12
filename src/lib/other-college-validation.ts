@@ -1,5 +1,7 @@
+import { normalizeDateTimeInput } from './datetime';
+
 export function isValidDateRange(startTime: string, endTime: string): boolean {
-  const start = new Date(startTime).getTime();
-  const end = new Date(endTime).getTime();
-  return Number.isFinite(start) && Number.isFinite(end) && end > start;
+  const start = normalizeDateTimeInput(startTime);
+  const end = normalizeDateTimeInput(endTime);
+  return Boolean(start && end && end > start);
 }

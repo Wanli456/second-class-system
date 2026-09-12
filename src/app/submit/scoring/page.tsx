@@ -14,6 +14,7 @@ import { ImageUploadPreviews } from '@/components/ImageUploadPreviews';
 import { CategoryBadge } from '@/components/CategoryBadge';
 import { ClassScoringImport } from '@/components/ClassScoringImport';
 import { extractScoringRows, validateScoringRows, type ScoringImportIssue } from '@/lib/scoring-import';
+import { formatBusinessDateTime } from '@/lib/datetime';
 
 interface Activity {
   id: string;
@@ -370,11 +371,11 @@ export default function SubmitScoringPage() {
                      </div>
                      <div className="flex justify-between gap-4">
                        <span className="shrink-0 text-gray-500">活动时间</span>
-                       <span className="text-right font-medium">{selectedActivity.start_time && selectedActivity.end_time ? `${new Date(selectedActivity.start_time).toLocaleString('zh-CN')} 至 ${new Date(selectedActivity.end_time).toLocaleString('zh-CN')}` : '未填写'}</span>
+                       <span className="text-right font-medium">{selectedActivity.start_time && selectedActivity.end_time ? `${formatBusinessDateTime(selectedActivity.start_time)} 至 ${formatBusinessDateTime(selectedActivity.end_time)}` : '未填写'}</span>
                      </div>
                      <div className="flex justify-between gap-4">
                        <span className="shrink-0 text-gray-500">活动报名时间</span>
-                       <span className="text-right font-medium">{selectedActivity.registration_start_time && selectedActivity.registration_end_time ? `${new Date(selectedActivity.registration_start_time).toLocaleString('zh-CN')} 至 ${new Date(selectedActivity.registration_end_time).toLocaleString('zh-CN')}` : '未填写（历史记录）'}</span>
+                       <span className="text-right font-medium">{selectedActivity.registration_start_time && selectedActivity.registration_end_time ? `${formatBusinessDateTime(selectedActivity.registration_start_time)} 至 ${formatBusinessDateTime(selectedActivity.registration_end_time)}` : '未填写（历史记录）'}</span>
                      </div>
                      <div className="flex justify-between">
                       <span className="text-gray-500">活动级别</span>

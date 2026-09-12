@@ -12,12 +12,19 @@ import { useUser } from '@/contexts/UserContext';
 import { ImageUploadPreviews } from '@/components/ImageUploadPreviews';
 import { hasPermission } from '@/lib/department-permissions';
 import { canSelectActivityLeader } from '@/lib/activity-leader-rules';
+import { normalizeDateTimeInput } from '@/lib/datetime';
 
 interface DirectoryUser { id: string; username: string; student_id: string; role?: string | null; can_submit_activity?: boolean | null; can_submit_scoring?: boolean | null; department?: string | null; class_name?: string | null; }
 interface ActivityScope { type: 'department' | 'class'; name: string; label: string; }
 interface Submission { activity_image_url?: string | null; id: string; full_name: string; start_time: string; end_time: string; registration_start_time?: string | null; registration_end_time?: string | null; category: string; category_primary?: string | null; category_secondary?: string | null; level: string; scope_names?: string | null; scope_type?: 'department' | 'class'; scope_name?: string | null; leader_ids?: string | null; plan_file_url: string | null; plan_file_name?: string | null; record_file_url: string | null; record_file_name?: string | null; review_status: string; }
 
-function localDateTime(value: string) { const date = new Date(value); const offset = date.getTimezoneOffset() * 60000; return new Date(date.getTime() - offset).toISOString().slice(0, 16); }
+function localDateTime(value: string) {
+  const wallTime = normalizeDateTimeInput(value);
+  if (wallTime) return wallTime.slice(0, 16);
+  const date = new Date(value);
+  const offset = date.getTimezoneOffset() * 60000;
+  return Number.isNaN(date.getTime()) ? '' : new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
 function parseIds(value?: string | null) { if (!value) return []; try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) ? parsed.map(String) : []; } catch { return value.split(',').map((item) => item.trim()).filter(Boolean); } }
 type ApiResponse<T> = { success?: boolean; data?: T; error?: string };
 
@@ -143,7 +150,7 @@ export default function SubmitPage() {
       const recordUpload = recordFile ? await uploadFile(recordFile) : null;
       const imageUpload = activityImage ? await uploadFile(activityImage) : null;
       const firstScope = hostScope;
-      const response = await apiFetch('/api/activities/submit', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ ...form, activity_image_url: imageUpload?.url || existingImageUrl, scope_type: firstScope.type, scope_name: firstScope.name, scope_names: selectedScopes.map(({ type, name }) => ({ type, name })), leader_ids: leaderIds, ...(submissionId ? { submission_id: submissionId } : {}), plan_file_url: planUpload?.url || existingPlanUrl, plan_file_name: planUpload?.fileName || existingPlanName, record_file_url: recordUpload?.url || existingRecordUrl, record_file_name: recordUpload?.fileName || existingRecordName, registration_start_time: new Date(form.registration_start_time).toISOString(), registration_end_time: new Date(form.registration_end_time).toISOString(), start_time: new Date(form.start_time).toISOString(), end_time: new Date(form.end_time).toISOString() }) });
+      const response = await apiFetch('/api/activities/submit', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ ...form, activity_image_url: imageUpload?.url || existingImageUrl, scope_type: firstScope.type, scope_name: firstScope.name, scope_names: selectedScopes.map(({ type, name }) => ({ type, name })), leader_ids: leaderIds, ...(submissionId ? { submission_id: submissionId } : {}), plan_file_url: planUpload?.url || existingPlanUrl, plan_file_name: planUpload?.fileName || existingPlanName, record_file_url: recordUpload?.url || existingRecordUrl, record_file_name: recordUpload?.fileName || existingRecordName }) });
       const data = await response.json(); if (!data.success) throw new Error(data.error || '提交失败');
       submitKeyRef.current = null; setSuccess(true); setSubmissionId(null); setForm({ full_name: '', registration_start_time: '', registration_end_time: '', start_time: '', end_time: '', category: '', category_primary: '', category_secondary: '', level: '' }); setCohostScopes([]); setLeaderIds(user ? [user.id] : []); setPlanFile(null); setRecordFile(null); setActivityImage(null); setExistingImageUrl(null); setExistingPlanUrl(null); setExistingPlanName(null); setExistingRecordUrl(null); setExistingRecordName(null);
       if (new URLSearchParams(window.location.search).has('submissionId')) router.replace('/submit');
