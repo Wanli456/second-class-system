@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { formatAuditAction, formatAuditDetails, formatAuditResource } from './audit-log';
+import { formatAuditAction, formatAuditDetails, formatAuditResource } from './audit-log-labels';
 
 // 动作名中文化
 assert.equal(formatAuditAction('update_user'), '修改用户');

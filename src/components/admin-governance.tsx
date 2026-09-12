@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, ChevronLeft, ChevronRight, Download, FileText, RefreshCw, RotateCcw, Trash2 } from 'lucide-react';
 import { apiFetch } from '@/lib/client-api';
-import { formatAuditAction, formatAuditDetails, formatAuditResource } from '@/lib/audit-log';
+import { formatAuditAction, formatAuditDetails, formatAuditResource } from '@/lib/audit-log-labels';
 import { Button } from '@/components/ui/button';
 
 type GovernanceUser = { id: string; name: string; studentId: string; role: string; createdAt?: string };
