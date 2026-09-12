@@ -14,6 +14,7 @@ import { formatCategoryPath } from '@/lib/types';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
 import { ImageUploadPreviews } from '@/components/ImageUploadPreviews';
 import { CategoryBadge } from '@/components/CategoryBadge';
+import { ClassScoringImport } from '@/components/ClassScoringImport';
 
 interface Activity {
   id: string;
@@ -215,7 +216,19 @@ export default function SubmitScoringPage() {
     );
   }
 
-  if (!hasPermission(user, 'canSubmitScoring')) {
+  const canSubmitMaterials = hasPermission(user, 'canSubmitScoring');
+  const canImportScoring = hasPermission(user, 'canImportScoring');
+
+  // 只有班级赋分表提交权限的用户：只显示导入窗口
+  if (!canSubmitMaterials && canImportScoring) {
+    return (
+      <DashboardLayout title="提交班级赋分表" user={user}>
+        <ClassScoringImport mode="submit" />
+      </DashboardLayout>
+    );
+  }
+
+  if (!canSubmitMaterials) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
         <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center">
@@ -232,6 +245,7 @@ export default function SubmitScoringPage() {
   return (
     <DashboardLayout title="赋分材料提交" user={user}>
       <div className="space-y-6">
+        <ClassScoringImport mode="submit" />
         <div className="rounded-lg border border-gray-200 bg-white p-6">
           <h2 className="mb-4 text-base font-semibold text-gray-900">查询活动</h2>
           <p className="mb-4 text-sm text-gray-500">输入活动名称关键字，查询已审核通过的活动，提交赋分材料</p>

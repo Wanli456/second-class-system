@@ -40,7 +40,7 @@ function readIssues(value: ImportRecord['issues']): ScoringImportIssue[] {
   return [];
 }
 
-export function ClassScoringImport() {
+export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
   const { user } = useUser();
   const canImport = hasPermission(user, 'canImportScoring');
   const canConfirm = hasPermission(user, 'canScore');
@@ -70,7 +70,7 @@ export function ClassScoringImport() {
     } catch { /* 列表失败不影响提交 */ }
   }, []);
 
-  useEffect(() => { void loadRecords(); }, [loadRecords]);
+  useEffect(() => { if (mode === 'confirm') void loadRecords(); }, [loadRecords, mode]);
 
   const reset = () => {
     setFile(null); setRows([]); setIssues([]); setMessage(''); setError('');
@@ -143,11 +143,14 @@ export function ClassScoringImport() {
     }
   };
 
-  if (!canImport && !canConfirm) return null;
+  // 提交与确认是两个独立板块，各自按自己的权限显示
+  const showSubmit = mode === 'submit' && canImport;
+  const showConfirm = mode === 'confirm' && canConfirm;
+  if (!showSubmit && !showConfirm) return null;
 
   return (
     <div className="space-y-5">
-      {canImport && (
+      {showSubmit && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex items-center gap-2">
             <FileSpreadsheet className="size-5 text-teal-700" />
@@ -213,7 +216,7 @@ export function ClassScoringImport() {
         </section>
       )}
 
-      {canConfirm && records.length > 0 && (
+      {showConfirm && records.length > 0 && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <h3 className="text-base font-semibold text-slate-950">班级赋分表待确认</h3>
           <p className="mt-1.5 text-sm text-slate-500">自动审核通过的记录，需要人工确认后才算完成赋分。</p>

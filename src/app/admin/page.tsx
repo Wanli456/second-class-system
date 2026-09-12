@@ -220,6 +220,7 @@ function AdminPage() {
   const canPublish = hasPermission(user, 'canPublish');
   const canScore = hasPermission(user, 'canScore');
   const canImportScoring = hasPermission(user, 'canImportScoring');
+  const [scoringView, setScoringView] = useState<'list' | 'confirm' | null>(null);
 
   useEffect(() => {
     if (roleParam && roleParam === 'admin') {
@@ -1322,9 +1323,36 @@ function AdminPage() {
             )}
 
             {/* ===== 活动赋分 ===== */}
-            {activeTab === 'scoring' && (canScore || canImportScoring) && (
+            {activeTab === 'scoring' && canScore && (
+              scoringView === null ? (
+                <section className="space-y-5">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+                    <p className="text-sm font-medium text-teal-700">材料核验</p>
+                    <h2 className="mt-1 text-balance text-xl font-semibold text-slate-950">活动赋分</h2>
+                    <p className="mt-2 text-sm text-slate-500">选择一个板块进入。</p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <article className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="flex size-10 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><Award className="size-5" /></div>
+                      <h3 className="mt-3 text-base font-semibold text-slate-950">活动赋分</h3>
+                      <p className="mt-1.5 flex-1 text-sm leading-6 text-slate-500">按处理状态查看活动，确认材料齐全后完成赋分。</p>
+                      <Button type="button" onClick={() => setScoringView('list')} className="mt-4 h-9 w-fit bg-slate-950 px-4 text-white hover:bg-slate-800">进入活动赋分</Button>
+                    </article>
+                    <article className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="flex size-10 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><FileCheck className="size-5" /></div>
+                      <h3 className="mt-3 text-base font-semibold text-slate-950">班级赋分表确认</h3>
+                      <p className="mt-1.5 flex-1 text-sm leading-6 text-slate-500">查看班级导入的赋分表，逐行核对后确认赋分。</p>
+                      <Button type="button" onClick={() => setScoringView('confirm')} className="mt-4 h-9 w-fit bg-slate-950 px-4 text-white hover:bg-slate-800">进入班级赋分表确认</Button>
+                    </article>
+                  </div>
+                </section>
+              ) : (
               <section id="admin-panel-scoring" role="tabpanel" aria-label="活动赋分" className="space-y-5">
-                <ClassScoringImport />
+                  <button type="button" onClick={() => setScoringView(null)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">
+                    <ChevronLeft className="size-4" />返回
+                  </button>
+                  {scoringView === 'confirm' ? <ClassScoringImport mode="confirm" /> : (
+                    <>
                 <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-end sm:justify-between sm:p-5">
                   <div>
                     <p className="text-sm font-medium text-teal-700">材料核验</p>
@@ -1367,8 +1395,8 @@ function AdminPage() {
                   </section>
                 </div>
 
-              </section>
-            )}
+                            </>)}</section>
+            ))}
 
             {/* Users Tab */}
             {activeTab === 'users' && isAdmin && (
