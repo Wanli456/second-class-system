@@ -377,6 +377,43 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_manage_original_leave BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_submit_original_leave BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS can_import_scoring BOOLEAN NOT NULL DEFAULT false;
+
+    -- 班级赋分表导入：每次上传生成一条记录，明细行单独存，便于人工确认前逐行核对
+    CREATE TABLE IF NOT EXISTS scoring_imports (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+      class_name TEXT,
+      file_name TEXT,
+      status TEXT NOT NULL DEFAULT '待人工确认',
+      total_rows INTEGER NOT NULL DEFAULT 0,
+      valid_rows INTEGER NOT NULL DEFAULT 0,
+      issues JSONB NOT NULL DEFAULT '[]'::jsonb,
+      submitted_by_id TEXT,
+      submitted_by_name TEXT,
+      submitted_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      confirmed_by_id TEXT,
+      confirmed_by_name TEXT,
+      confirmed_at TIMESTAMP,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS scoring_imports_status_idx ON scoring_imports (status, created_at);
+    CREATE TABLE IF NOT EXISTS scoring_import_rows (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+      import_id TEXT NOT NULL,
+      row_number INTEGER NOT NULL,
+      student_id TEXT,
+      student_name TEXT,
+      start_time TEXT,
+      end_time TEXT,
+      content TEXT,
+      category_primary TEXT,
+      category_secondary TEXT,
+      level TEXT,
+      award TEXT,
+      credit_type TEXT,
+      credit_value NUMERIC,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS scoring_import_rows_import_idx ON scoring_import_rows (import_id);
     ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS class_name TEXT;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_phone TEXT;
