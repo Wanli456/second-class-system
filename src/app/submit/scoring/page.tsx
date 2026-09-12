@@ -4,17 +4,16 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
-import { GraduationCap, Upload, FileText, Search, CheckCircle2, AlertCircle, LogIn } from 'lucide-react';
-import { LEVELS, SCORING_STATUSES } from '@/lib/types';
+import { Upload, Search, CheckCircle2, AlertCircle, LogIn, Download, Award, FileCheck, ChevronLeft } from 'lucide-react';
 import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
 import { formatActivityScopes } from '@/lib/business-rules';
-import { formatCategoryPath } from '@/lib/types';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
 import { ImageUploadPreviews } from '@/components/ImageUploadPreviews';
 import { CategoryBadge } from '@/components/CategoryBadge';
 import { ClassScoringImport } from '@/components/ClassScoringImport';
+import { extractScoringRows, validateScoringRows, type ScoringImportIssue } from '@/lib/scoring-import';
 
 interface Activity {
   id: string;
@@ -53,12 +52,15 @@ export default function SubmitScoringPage() {
   const [loading, setLoading] = useState(false);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [scoringFile, setScoringFile] = useState<File | null>(null);
+  const [scoringIssues, setScoringIssues] = useState<ScoringImportIssue[]>([]);
+  const [scoringFormatError, setScoringFormatError] = useState('');
   const [recordPhotoFile, setRecordPhotoFile] = useState<File | null>(null);
   const [recordPhotoPreview, setRecordPhotoPreview] = useState<string | null>(null);
   const [selectedActivityId, setSelectedActivityId] = useState<string>('');
   const [targetActivityId, setTargetActivityId] = useState<string | null>(null);
   const [submittedActivityId, setSubmittedActivityId] = useState<string | null>(null);
   const [showResubmit, setShowResubmit] = useState(false);
+  const [scoringView, setScoringView] = useState<'activity' | 'class' | null>(null);
   const canAccessScoringMaterials = hasPermission(user, 'canSubmitScoring');
 
   useEffect(() => {
@@ -131,6 +133,10 @@ export default function SubmitScoringPage() {
       alert('请上传活动赋分表');
       return;
     }
+    if (scoringFormatError || scoringIssues.length) {
+      alert(scoringFormatError || `赋分表格式不正确，发现 ${scoringIssues.length} 处问题`);
+      return;
+    }
 
     const activity = activities.find(a => a.id === selectedActivityId);
     if (!activity) return;
@@ -188,6 +194,31 @@ export default function SubmitScoringPage() {
     }
   };
 
+  const checkScoringFile = async (file: File | null) => {
+    setScoringFile(file); setScoringIssues([]); setScoringFormatError('');
+    if (!file) return;
+    try {
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false, defval: '' });
+      const validation = validateScoringRows(extractScoringRows(matrix));
+      setScoringIssues(validation.issues);
+    } catch {
+      setScoringFormatError('赋分表解析失败，请使用系统模板填写 .xlsx 文件');
+    }
+  };
+
+  const downloadScoringIssues = () => {
+    const text = scoringIssues.map((issue, index) => `${index + 1}. 第 ${issue.rowNumber} 行 ${issue.column}：${issue.message}`).join('\r\n');
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${scoringFile?.name || '活动赋分表'}-错误信息.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
 
   // 登录检查 - 等待用户状态初始化完成后再判断
@@ -242,14 +273,49 @@ export default function SubmitScoringPage() {
     );
   }
 
+  const showOverview = canSubmitMaterials && canImportScoring && scoringView === null;
+  const showActivity = canSubmitMaterials && (scoringView === 'activity' || !canImportScoring);
+  const showClass = canImportScoring && (scoringView === 'class' || !canSubmitMaterials);
+
   return (
     <DashboardLayout title="赋分材料提交" user={user}>
       <div className="space-y-6">
-        <ClassScoringImport mode="submit" />
-        <div className="rounded-lg border border-gray-200 bg-white p-6">
-          <h2 className="mb-4 text-base font-semibold text-gray-900">查询活动</h2>
-          <p className="mb-4 text-sm text-gray-500">输入活动名称关键字，查询已审核通过的活动，提交赋分材料</p>
-          <div className="flex gap-3">
+        {showOverview ? (
+          <section className="space-y-5">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <p className="text-sm font-medium text-teal-700">材料提交</p>
+              <h2 className="mt-1 text-xl font-semibold text-slate-950">赋分材料提交</h2>
+              <p className="mt-2 text-sm text-slate-500">选择一个板块进入。</p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <button type="button" onClick={() => setScoringView('activity')} className="group flex min-h-64 w-full flex-col rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-teal-500">
+                <span className="flex size-10 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><Award className="size-5" /></span>
+                <span className="mt-5 text-base font-semibold text-slate-950">提交活动赋分材料</span>
+                <span className="mt-1.5 flex-1 text-sm leading-6 text-slate-500">查询已审核通过的活动，上传活动赋分表及校级备案表照片。</span>
+                <span className="mt-4 inline-flex w-fit items-center rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white transition group-hover:bg-slate-800">进入活动赋分材料</span>
+              </button>
+              <button type="button" onClick={() => setScoringView('class')} className="group flex min-h-64 w-full flex-col rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-teal-500">
+                <span className="flex size-10 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><FileCheck className="size-5" /></span>
+                <span className="mt-5 text-base font-semibold text-slate-950">提交班级赋分表</span>
+                <span className="mt-1.5 flex-1 text-sm leading-6 text-slate-500">上传班级赋分表，自动审核后进入人工确认流程。</span>
+                <span className="mt-4 inline-flex w-fit items-center rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white transition group-hover:bg-slate-800">进入班级赋分表</span>
+              </button>
+            </div>
+          </section>
+        ) : (
+          <>
+            {canSubmitMaterials && canImportScoring && (
+              <button type="button" onClick={() => setScoringView(null)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm hover:bg-slate-50">
+                <ChevronLeft className="size-4" />返回赋分材料入口
+              </button>
+            )}
+            {showActivity && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">提交活动赋分材料</h2>
+            <p className="mt-1.5 text-sm text-slate-500">输入活动名称关键字，查询已审核通过的活动，提交活动赋分表及备案表照片。</p>
+          </div>
+          <div className="mt-5 flex gap-3">
             <input
               type="text"
               value={activityName}
@@ -265,20 +331,18 @@ export default function SubmitScoringPage() {
               <Search className="h-4 w-4" />
             </button>
           </div>
-        </div>
-
-        {searched && activities.length === 0 && !loading && (
-          <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
+          {searched && activities.length === 0 && !loading && (
+            <div className="mt-5 rounded-lg border border-gray-200 bg-white p-8 text-center">
             <AlertCircle className="mx-auto mb-3 h-10 w-10 text-gray-300" />
             <p className="text-sm text-gray-500">暂无已审核通过的活动</p>
             <p className="mt-1 text-xs text-gray-400">请先提交活动信息并等待审核通过</p>
-          </div>
-        )}
+            </div>
+          )}
 
-        {activities.length > 0 && (
-          <div className="space-y-4">
+          {activities.length > 0 && (
+            <div className="mt-5 space-y-4">
             <div className="rounded-lg border border-gray-200 bg-white p-6">
-              <h3 className="mb-4 text-base font-semibold text-gray-900">提交赋分材料</h3>
+              <h3 className="mb-4 text-base font-semibold text-gray-900">活动赋分材料</h3>
               
               <div className="mb-4">
                 <label className="mb-1 block text-sm font-medium text-gray-700">选择活动 *</label>
@@ -327,15 +391,27 @@ export default function SubmitScoringPage() {
                       </span>
                     </div>
                     {selectedActivity.record_file_url && (
-                      <div className="flex justify-between">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-gray-500">备案表文档</span>
-                        <FilePreviewLink url={selectedActivity.record_file_url} fileName={selectedActivity.record_file_name} label="已上传" className="max-w-[65%] truncate text-right text-teal-600" />
+                        <div className="flex items-center gap-2">
+                          <FilePreviewLink url={selectedActivity.record_file_url} fileName={selectedActivity.record_file_name} label="预览已上传备案表" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-teal-700 hover:border-teal-300 hover:bg-teal-50" />
+                          <a href={selectedActivity.record_file_url} download={selectedActivity.record_file_name || undefined} className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"><Download className="size-3" aria-hidden="true" />下载</a>
+                        </div>
+                      </div>
+                    )}
+                    {selectedActivity.scoring_table_url && (
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-gray-500">活动赋分表</span>
+                        <div className="flex items-center gap-2">
+                          <FilePreviewLink url={selectedActivity.scoring_table_url} fileName={selectedActivity.scoring_table_file_name} label="预览已上传赋分表" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-teal-700 hover:border-teal-300 hover:bg-teal-50" />
+                          <a href={selectedActivity.scoring_table_url} download={selectedActivity.scoring_table_file_name || undefined} className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"><Download className="size-3" aria-hidden="true" />下载</a>
+                        </div>
                       </div>
                     )}
                     {selectedActivity.level === '校级' && (
-                      <div className="flex justify-between">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-gray-500">备案表照片</span>
-                        {selectedActivity.record_photo_url ? <FilePreviewLink url={selectedActivity.record_photo_url} fileName={selectedActivity.record_photo_file_name} label="已上传，可替换" className="max-w-[65%] truncate text-right text-teal-600" /> : <span className="font-medium text-amber-600">待上传（必需）</span>}
+                        {selectedActivity.record_photo_url ? <div className="flex items-center gap-2"><FilePreviewLink url={selectedActivity.record_photo_url} fileName={selectedActivity.record_photo_file_name} label="预览已上传备案表照片" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-teal-700 hover:border-teal-300 hover:bg-teal-50" /><a href={selectedActivity.record_photo_url} download={selectedActivity.record_photo_file_name || undefined} className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"><Download className="size-3" aria-hidden="true" />下载</a></div> : <span className="font-medium text-amber-600">待上传（必需）</span>}
                       </div>
                     )}
                   </div>
@@ -357,7 +433,7 @@ export default function SubmitScoringPage() {
                     type="file"
                     id="scoring-file"
                     accept=".xlsx,.xls"
-                    onChange={(e) => setScoringFile(e.target.files?.[0] || null)}
+                    onChange={(e) => void checkScoringFile(e.target.files?.[0] || null)}
                     className="hidden"
                   />
                   <label
@@ -370,6 +446,10 @@ export default function SubmitScoringPage() {
                   {scoringFile && (
                     <p className="mt-2 text-xs text-emerald-600">已选择：{scoringFile.name}</p>
                   )}
+                  {scoringFormatError && <p className="mt-2 text-left text-xs text-rose-600">{scoringFormatError}</p>}
+                  {scoringIssues.length > 0 && <>
+                    {scoringIssues.length <= 20 ? <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto text-left text-xs text-rose-600">{scoringIssues.map((issue, index) => <li key={`${issue.rowNumber}-${issue.column}-${index}`}>第 {issue.rowNumber} 行 {issue.column}：{issue.message}</li>)}</ul> : <div className="mt-2 text-left text-xs text-rose-700"><p>错误信息超过 20 条，请下载 TXT 文件查看全部错误。</p><button type="button" onClick={downloadScoringIssues} className="mt-1 font-medium underline underline-offset-2 hover:text-rose-900">下载全部 {scoringIssues.length} 条错误信息（TXT）</button></div>}
+                  </>}
                 </div>
               </div>
 
@@ -455,16 +535,25 @@ export default function SubmitScoringPage() {
                         }`}>
                           {a.scoring_status}
                         </span>
-                        {a.scoring_table_url && (
-                          <span className="text-xs text-emerald-600">已提交材料</span>
-                        )}
+                        {a.scoring_table_url && <span className="text-xs text-emerald-600">已提交材料</span>}
                       </div>
                     </div>
+                    {a.scoring_table_url && (
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <FilePreviewLink url={a.scoring_table_url} fileName={a.scoring_table_file_name} label="预览赋分表" className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-teal-700 hover:border-teal-300 hover:bg-teal-50" />
+                        <a href={a.scoring_table_url} download={a.scoring_table_file_name || undefined} className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"><Download className="size-3" aria-hidden="true" />下载</a>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
-          </div>
+            </div>
+          )}
+        </section>
+            )}
+            {showClass && <ClassScoringImport mode="submit" />}
+          </>
         )}
       </div>
     </DashboardLayout>

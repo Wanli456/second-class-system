@@ -61,8 +61,8 @@ async function run(): Promise<void> {
   assert.equal(logs.data.page, 1);
   assert.equal(logs.data.pageSize, 1);
   assert.ok(logs.data.total >= 2, 'each export must be audited');
-  assert.deepEqual(Object.keys(logs.data.items[0]).sort(), ['action', 'actorUserId', 'createdAt', 'details', 'id', 'resourceId', 'resourceType']);
-  assert.equal('actorName' in logs.data.items[0], false);
+  assert.deepEqual(Object.keys(logs.data.items[0]).sort(), ['action', 'actorName', 'actorUserId', 'createdAt', 'details', 'id', 'resourceId', 'resourceType']);
+  assert.equal(logs.data.items[0].actorName, '本地管理员（9000000001）');
   assert.equal('ipAddress' in logs.data.items[0], false);
 }
 

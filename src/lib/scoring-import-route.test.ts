@@ -83,6 +83,8 @@ async function main() {
     );
     assert.equal(after?.status, '已确认');
     assert.equal(after?.confirmed_by_name, '赋分确认人');
+    // 已确认记录不能被同名重提交覆盖
+    assert.equal((await POST(req('POST', { className: '计算机2101', fileName: 't.xlsx', rows: [goodRow] }, tokenSubmitter))).status, 409);
     // 重复确认  409
     assert.equal((await PUT(req('PUT', { id: importId }, tokenScorer))).status, 409);
   } finally {

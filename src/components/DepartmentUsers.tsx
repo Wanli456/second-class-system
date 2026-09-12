@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Check, Loader2, Search, ShieldCheck, Users } from 'lucide-react';
+import { ArrowLeft, Check, Download, FileSpreadsheet, Loader2, Search, ShieldCheck, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DepartmentClassRosterManager } from '@/components/DepartmentClassRosterManager';
@@ -94,6 +94,7 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
   const [batchPermissionKey, setBatchPermissionKey] = useState<PermissionKey | ''>('');
   const [batchPermissionValue, setBatchPermissionValue] = useState(true);
   const [batchSaving, setBatchSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const redirectToLogin = async () => {
     await logoutCurrentUser();
@@ -248,6 +249,67 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
     }
   };
 
+  const importPermissions = async (file: File | null) => {
+    if (!file) return;
+    setImporting(true); setError(''); setMessage('');
+    try {
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+      const headers = Object.keys(rawRows[0] || {});
+      const studentIdHeader = headers.find((header) => ['学号', 'student_id', 'studentId'].includes(header));
+      const nameHeader = headers.find((header) => ['姓名', '姓名（必填）', 'username', 'name'].includes(header));
+      if (!studentIdHeader) throw new Error('Excel 必须包含“学号”列');
+      if (!nameHeader) throw new Error('Excel 必须包含“姓名”列');
+      const truthy = new Set(['true', '1', '是', '有', '开启', '√', '✓', 'yes']);
+      const rows = rawRows.map((raw) => ({
+        studentId: String(raw[studentIdHeader] || '').trim(),
+        name: String(raw[nameHeader] || '').trim(),
+        permissions: Object.fromEntries(permissionKeys.map((key) => {
+          const value = raw[key] ?? raw[PERMISSION_LABELS[key]] ?? '';
+          return [key, truthy.has(String(value).trim().toLowerCase())];
+        })),
+      })).filter((row) => row.studentId && row.name);
+      if (!rows.length) throw new Error('Excel 中没有有效学号');
+      const res = await apiFetch('/api/department-users', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ department: managedDepartment, rows }),
+      });
+      const data = await res.json();
+      if (res.status === 401) { await redirectToLogin(); return; }
+      if (!res.ok || !data.success) throw new Error(data.error || '权限导入失败');
+      setMessage(`已导入 ${data.data?.updatedCount || rows.length} 人的权限；未勾选权限已清空。`);
+      const endpoint = managedDepartment ? `/api/department-users?department=${encodeURIComponent(managedDepartment)}` : '/api/department-users';
+      const refresh = await apiFetch(endpoint);
+      const refreshed = await refresh.json();
+      if (refresh.ok && refreshed.success) setUsers(refreshed.data.users || []);
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : '权限导入失败');
+    } finally { setImporting(false); }
+  };
+
+  const downloadPermissionTemplate = async () => {
+    try {
+      const XLSX = await import('xlsx');
+      const headers = ['学号', '姓名', ...permissionKeys.map((key) => PERMISSION_LABELS[key])];
+      const blankRows = Array.from({ length: 20 }, () => headers.map(() => ''));
+      const sheet = XLSX.utils.aoa_to_sheet([headers, ...blankRows]);
+      sheet['!cols'] = headers.map((header) => ({ wch: Math.max(14, header.length + 4) }));
+      const example = XLSX.utils.aoa_to_sheet([
+        headers,
+        ['请替换为真实学号', '请替换为真实姓名', ...permissionKeys.map((_, index) => index === 0 ? '是' : '')],
+      ]);
+      example['!cols'] = sheet['!cols'];
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, sheet, '权限填写');
+      XLSX.utils.book_append_sheet(workbook, example, '填写示例');
+      XLSX.writeFile(workbook, `${department || '部门'}权限导入模板.xlsx`);
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : '模板下载失败');
+    }
+  };
+
   return (
     <main className="text-slate-950">
       <div className="mx-auto max-w-7xl">
@@ -338,9 +400,17 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
                 {batchSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
                 应用到已选用户
               </button>
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800 hover:bg-teal-100 sm:py-1.5">
+                <FileSpreadsheet className="size-3.5" />
+                {importing ? '导入中…' : 'Excel 覆盖导入'}
+                <input type="file" accept=".xlsx,.xls" className="sr-only" disabled={importing} onChange={(event) => { void importPermissions(event.target.files?.[0] || null); event.currentTarget.value = ''; }} />
+              </label>
+              <button type="button" onClick={() => void downloadPermissionTemplate()} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 sm:py-1.5">
+                <Download className="size-3.5" />下载填写模板
+              </button>
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              先勾选下方用户（或全选），再选择权限与开启/关闭。部门自动授予的权限会自动跳过。
+              先勾选下方用户（或全选），再选择权限与开启/关闭。Excel 第一列使用“学号”，权限列使用页面显示名称或权限键；每次导入会覆盖本页可管理的旧权限，未勾选即清空。
             </p>
           </section>
         )}

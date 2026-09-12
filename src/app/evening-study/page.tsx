@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CalendarDays, ChevronDown, ChevronUp, LogIn, Search, Users } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronRight, ChevronUp, LogIn, Search, Users } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { PageErrorDialog } from '@/components/PageErrorDialog';
@@ -64,12 +64,11 @@ export default function EveningStudyPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState<'approved' | 'pending' | 'rejected' | 'duty' | null>(null);
+  const [expandedGrades, setExpandedGrades] = useState<Record<string, boolean>>({});
   const canView = hasPermission(user, 'canViewEveningStudy');
 
-  useEffect(() => { if (user?.className) setClassName(user.className); }, [user?.className]);
-
   const search = async () => {
-    if (!className.trim() || !date) { setError('请选择班级和查询日期'); return; }
+    if (!className.trim() || !date) { setError('请输入班级或年级并选择日期'); return; }
     setError('');
     setLoading(true);
     try {
@@ -166,10 +165,12 @@ export default function EveningStudyPage() {
   const pending = persons.pending;
   const rejected = persons.rejected;
   const people = expanded === 'duty' ? [] : expanded === 'approved' ? approved : expanded === 'pending' ? pending : rejected;
+  const gradeOf = (value: string) => { const match = value.match(/(\d{4})$/); return match ? `${match[1].slice(0, 2)}级` : '未分年级'; };
+  const groupedPeople = Object.entries(people.reduce<Record<string, PersonRow[]>>((groups, item) => { (groups[gradeOf(item.class_name)] ||= []).push(item); return groups; }, {}));
 
   return <DashboardLayout title="晚自习请假查询" user={user}><div className="mx-auto max-w-4xl space-y-4">
     <div className="rounded-lg border bg-white p-5 shadow-sm"><div className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-teal-700" /><h2 className="font-semibold">按日期和班级查询</h2></div><div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px_auto]"><label className="text-sm font-medium">班级<input value={className} onChange={(e) => setClassName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void search()} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" placeholder="例如：计算机2101" /></label><label className="text-sm font-medium">日期<input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" /></label><button onClick={() => void search()} disabled={loading} className="mt-auto inline-flex h-10 items-center justify-center gap-2 rounded-md bg-slate-900 px-4 text-sm text-white disabled:opacity-50"><Search className="h-4 w-4" />{loading ? '查询中' : '查询'}</button></div></div>
-    <div className="rounded-lg border bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-sm text-gray-600"><Users className="h-4 w-4" />{date} · {className} · 点击人数查看名单</div><div className="mt-4 grid gap-3 sm:grid-cols-4"><CountButton label="已通过" count={approved.length} active={expanded === 'approved'} onClick={() => setExpanded(expanded === 'approved' ? null : 'approved')} color="text-emerald-700" /><CountButton label="待查对" count={pending.length} active={expanded === 'pending'} onClick={() => setExpanded(expanded === 'pending' ? null : 'pending')} color="text-amber-700" /><CountButton label="已驳回" count={rejected.length} active={expanded === 'rejected'} onClick={() => setExpanded(expanded === 'rejected' ? null : 'rejected')} color="text-gray-500" /><CountButton label="考勤工作" count={dutyNames.length} active={expanded === 'duty'} onClick={() => setExpanded(expanded === 'duty' ? null : 'duty')} color="text-sky-700" /></div></div>
+    <div className="rounded-lg border bg-white p-5 shadow-sm"><div className="flex items-center gap-2 text-sm text-gray-600"><Users className="h-4 w-4" />{date} · {className || '全部班级/年级'} · 点击人数查看名单</div><div className="mt-4 grid gap-3 sm:grid-cols-4"><CountButton label="已通过" count={approved.length} active={expanded === 'approved'} onClick={() => setExpanded(expanded === 'approved' ? null : 'approved')} color="text-emerald-700" /><CountButton label="待查对" count={pending.length} active={expanded === 'pending'} onClick={() => setExpanded(expanded === 'pending' ? null : 'pending')} color="text-amber-700" /><CountButton label="已驳回" count={rejected.length} active={expanded === 'rejected'} onClick={() => setExpanded(expanded === 'rejected' ? null : 'rejected')} color="text-gray-500" /><CountButton label="考勤工作" count={dutyNames.length} active={expanded === 'duty'} onClick={() => setExpanded(expanded === 'duty' ? null : 'duty')} color="text-sky-700" /></div></div>
     {expanded === 'duty' ? (
       <div className="rounded-lg border bg-white p-5 shadow-sm">
         <h3 className="font-semibold">考勤工作人员名单</h3>
@@ -180,7 +181,7 @@ export default function EveningStudyPage() {
         ) : <p className="mt-4 text-sm text-gray-400">当天暂无已通过的考勤工作安排</p>}
       </div>
     ) : expanded ? (
-      <div className="rounded-lg border bg-white p-5 shadow-sm"><h3 className="font-semibold">{expanded === 'approved' ? '已通过名单' : expanded === 'pending' ? '待查对名单' : '已驳回名单'}</h3>{people.length ? <div className="mt-3 divide-y">{people.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span className="font-medium">{item.student_name}（{item.student_id}）· {item.class_name}</span><span className="text-gray-500">{item.leave_type} · {formatTime(item.start_time)} 至 {formatTime(item.end_time)}</span></div>)}</div> : <p className="mt-4 text-sm text-gray-400">暂无人员</p>}</div>
+      <div className="rounded-lg border bg-white p-5 shadow-sm"><h3 className="font-semibold">{expanded === 'approved' ? '已通过名单' : expanded === 'pending' ? '待查对名单' : '已驳回名单'}</h3>{people.length ? <div className="mt-3 divide-y">{groupedPeople.map(([grade, gradePeople]) => { const open = Boolean(expandedGrades[grade]); return <div key={grade}><button type="button" onClick={() => setExpandedGrades((current) => ({ ...current, [grade]: !open }))} className="flex w-full items-center gap-2 py-3 text-left text-sm font-semibold hover:bg-gray-50">{open ? <ChevronDown className="size-4 text-gray-400" /> : <ChevronRight className="size-4 text-gray-400" />}{grade}<span className="font-normal text-gray-500">{gradePeople.length} 人</span></button>{open && <div className="divide-y border-t bg-gray-50/50 pl-6">{gradePeople.map((item) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"><span className="font-medium">{item.student_name}（{item.student_id}）· {item.class_name}</span><span className="text-gray-500">{item.leave_type} · {formatTime(item.start_time)} 至 {formatTime(item.end_time)}</span></div>)}</div>}</div>; })}</div> : <p className="mt-4 text-sm text-gray-400">暂无人员</p>}</div>
     ) : null}
   </div>
       <PageErrorDialog open={Boolean(error)} message={error} onClose={() => setError('')} />

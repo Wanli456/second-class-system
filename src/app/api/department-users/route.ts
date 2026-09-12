@@ -98,6 +98,52 @@ export async function GET(request: NextRequest) {
   });
 }
 
+/** 按 Excel 结果覆盖部门可管理权限；表格未勾选的权限会被清空。 */
+export async function POST(request: NextRequest) {
+  const { user, response } = await requireUser(request);
+  if (response) return response;
+  let body: unknown;
+  try { body = await request.json(); } catch { return badRequest('请求数据格式错误'); }
+  if (!body || typeof body !== 'object') return badRequest('请求数据格式错误');
+  const payload = body as { rows?: unknown; department?: unknown };
+  const managedDepartment = parseManagedDepartment(payload.department);
+  const scope = getManagedUserScope(user, managedDepartment || undefined);
+  if (!scope) return NextResponse.json({ success: false, error: '只有指定部门负责人可以管理部门用户' }, { status: 403 });
+  if (!Array.isArray(payload.rows) || !payload.rows.length) return badRequest('Excel 中没有有效用户行');
+  if (payload.rows.length > 2000) return badRequest('单次最多导入 2000 人');
+
+  const editableKeys = getEditablePermissionKeys(user, undefined, scope.department);
+  const rows = payload.rows.filter((item): item is { studentId: string; name: string; permissions?: Record<string, unknown> } => {
+    if (!item || typeof item !== 'object') return false;
+    const value = item as Record<string, unknown>;
+    return typeof value.studentId === 'string' && typeof value.name === 'string' && Boolean(value.studentId.trim()) && Boolean(value.name.trim());
+  }).map((item) => ({ studentId: item.studentId.trim(), name: item.name.trim(), permissions: item.permissions || {} }));
+  const studentIds = [...new Set(rows.map((row) => row.studentId))];
+  if (!studentIds.length) return badRequest('Excel 中没有学号');
+  const placeholders = studentIds.map((_, index) => '$' + (index + 1)).join(',');
+  const targets = await query<DepartmentUserRow>(USER_SELECT + ` WHERE student_id IN (${placeholders})`, studentIds);
+  const byStudentId = new Map(targets.map((target) => [target.student_id, target]));
+  const missing = studentIds.filter((studentId) => !byStudentId.has(studentId));
+  const mismatched = rows.filter((row) => byStudentId.get(row.studentId)?.username !== row.name);
+  const forbidden = targets.filter((target) => !canManageTargetUser(user, target, scope.department));
+  if (missing.length) return badRequest(`未找到学号：${missing.join('、')}`);
+  if (mismatched.length) return badRequest(`学号与姓名不匹配：${mismatched.map((row) => row.studentId).join('、')}`);
+  if (forbidden.length) return badRequest('Excel 中包含当前界面无权管理的用户');
+
+  const updated = await withTransaction(async (client) => {
+    for (const row of rows) {
+      const target = byStudentId.get(row.studentId)!;
+      const values: unknown[] = editableKeys.map((key) => row.permissions?.[key] === true);
+      const setClauses = editableKeys.map((key, index) => PERMISSION_COLUMNS[key] + '=$' + (index + 1));
+      values.push(target.id);
+      await client.query(`UPDATE users SET ${setClauses.join(',')} WHERE id=$${values.length}`, values);
+      await writeAuditLog({ actor: user, action: 'import_department_user_permissions', resourceType: 'user', resourceId: target.id, details: { importedPermissionKeys: editableKeys } }, client);
+    }
+    return rows.length;
+  });
+  return NextResponse.json({ success: true, data: { updatedCount: updated } });
+}
+
 export async function PATCH(request: NextRequest) {
   const { user, response } = await requireUser(request);
   if (response) return response;

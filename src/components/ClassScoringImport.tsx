@@ -7,6 +7,7 @@ import { apiFetch } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
 import { extractScoringRows, type ScoringImportIssue, type ScoringImportRow } from '@/lib/scoring-import';
+import { FilePreviewLink } from '@/components/FilePreviewDialog';
 
 type ImportRecord = {
   id: string;
@@ -19,11 +20,8 @@ type ImportRecord = {
   issues: ScoringImportIssue[] | string;
   submitted_by_name: string | null;
   confirmed_by_name: string | null;
-};
-
-type ImportRow = {
-  id: string; import_id: string; row_number: number; student_id: string; student_name: string;
-  category_primary: string; category_secondary: string; level: string; credit_type: string; credit_value: string;
+  submitted_at: string | null;
+  submission_count: number;
 };
 
 const STATUS_STYLE: Record<string, string> = {
@@ -53,7 +51,6 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
   const [issues, setIssues] = useState<ScoringImportIssue[]>([]);
   const [message, setMessage] = useState('');
   const [records, setRecords] = useState<ImportRecord[]>([]);
-  const [rowsByImport, setRowsByImport] = useState<Record<string, ImportRow[]>>({});
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -64,9 +61,6 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
       const data = await res.json();
       if (!data.success) return;
       setRecords(data.data || []);
-      const grouped: Record<string, ImportRow[]> = {};
-      for (const row of (data.rows || []) as ImportRow[]) (grouped[row.import_id] ||= []).push(row);
-      setRowsByImport(grouped);
     } catch { /* 列表失败不影响提交 */ }
   }, []);
 
@@ -109,15 +103,14 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
       const res = await apiFetch('/api/scoring/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ className, fileName: file.name, fileUrl: uploaded.data?.url || null, rows }),
+        body: JSON.stringify({ className, fileName: file.name, fileUrl: uploaded.url || uploaded.data?.url || null, rows }),
       });
       const data = await res.json();
       if (!data.success) { setError(data.error || '提交失败'); return; }
       setIssues(data.data.issues || []);
       setMessage(data.data.status === '待人工确认'
-        ? `自动审核通过：${data.data.validRows} 行，已进入人工确认队列`
-        : `自动审核未通过：发现 ${(data.data.issues || []).length} 处问题，已自动驳回`);
-      if (data.data.status === '待人工确认') reset();
+        ? `自动审核通过：${data.data.validRows} 行，已进入人工确认队列；第 ${data.data.submissionCount} 次提交`
+        : `自动审核未通过：发现 ${(data.data.issues || []).length} 处问题，已自动驳回；第 ${data.data.submissionCount} 次提交`);
       await loadRecords();
     } catch {
       setError('网络错误，请重试');
@@ -154,7 +147,7 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex items-center gap-2">
             <FileSpreadsheet className="size-5 text-teal-700" />
-            <h3 className="text-base font-semibold text-slate-950">班级赋分表提交</h3>
+            <h3 className="text-base font-semibold text-slate-950">提交班级赋分表</h3>
           </div>
           <p className="mt-1.5 text-sm text-slate-500">
             按《二课分批量导入赋分模板（2026）》填写后上传。系统先自动审核学号、姓名、时间、分类和学分类型，通过后进入人工确认。
@@ -213,6 +206,7 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
               </ul>
             </div>
           )}
+
         </section>
       )}
 
@@ -230,17 +224,21 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
                     <button type="button" onClick={() => setExpandedId(expanded ? null : record.id)} className="min-w-0 flex-1 text-left">
                       <span className="block truncate font-medium text-slate-900">{record.file_name || '未命名'}  {record.class_name || '未填班级'}</span>
                       <span className="mt-1 block text-xs text-slate-500">
-                        提交人 {record.submitted_by_name || '-'}｜{record.valid_rows}/{record.total_rows} 行
+                        提交人 {record.submitted_by_name || '-'}｜提交时间 {record.submitted_at ? new Date(record.submitted_at).toLocaleString('zh-CN') : '-'}｜第 {record.submission_count || 1} 次提交｜{record.valid_rows}/{record.total_rows} 行
                         {record.confirmed_by_name ? `｜确认人 ${record.confirmed_by_name}` : ''}
                       </span>
                     </button>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {record.file_url && (
-                        <a href={record.file_url} download={record.file_name || undefined}
-                          className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50">
-                          <Download className="size-3.5" />下载源文件
-                        </a>
-                      )}
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {record.file_url ? (
+                        <>
+                          <FilePreviewLink url={record.file_url} fileName={record.file_name} label="预览源文件"
+                            className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" />
+                          <a href={record.file_url} download={record.file_name || undefined}
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50">
+                            <Download className="size-3.5" />下载源文件
+                          </a>
+                        </>
+                      ) : <span className="text-xs text-amber-600">原文件链接缺失，请重新提交</span>}
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[record.status] || 'bg-slate-100 text-slate-600'}`}>{record.status}</span>
                     </div>
                   </div>
@@ -253,27 +251,6 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
                           ))}
                         </ul>
                       )}
-                      <div className="max-h-80 overflow-auto rounded-lg border border-slate-200 bg-white">
-                        <table className="w-full min-w-[44rem] text-left text-xs">
-                          <thead className="sticky top-0 bg-slate-50 text-slate-500">
-                            <tr><th className="px-2 py-1.5">行</th><th className="px-2 py-1.5">学号</th><th className="px-2 py-1.5">姓名</th><th className="px-2 py-1.5">一级分类</th><th className="px-2 py-1.5">二级分类</th><th className="px-2 py-1.5">等级</th><th className="px-2 py-1.5">学分类型</th><th className="px-2 py-1.5">学分值</th></tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {(rowsByImport[record.id] || []).map((row) => (
-                              <tr key={row.id}>
-                                <td className="px-2 py-1.5 text-slate-400">{row.row_number}</td>
-                                <td className="px-2 py-1.5 tabular-nums">{row.student_id}</td>
-                                <td className="px-2 py-1.5">{row.student_name}</td>
-                                <td className="px-2 py-1.5">{row.category_primary}</td>
-                                <td className="px-2 py-1.5">{row.category_secondary}</td>
-                                <td className="px-2 py-1.5">{row.level}</td>
-                                <td className="px-2 py-1.5">{row.credit_type}</td>
-                                <td className="px-2 py-1.5 tabular-nums">{row.credit_value}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
                       {record.status === '待人工确认' && (
                         <div className="mt-3 flex flex-wrap items-center gap-3">
                           <Button type="button" onClick={() => void confirm(record.id)} disabled={confirmingId === record.id}

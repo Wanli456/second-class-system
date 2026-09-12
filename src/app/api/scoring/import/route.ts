@@ -51,12 +51,25 @@ export async function POST(request: NextRequest) {
     const status = validation.ok ? IMPORT_STATUS.pending : IMPORT_STATUS.rejected;
 
     const created = await withTransaction(async (client) => {
-      const inserted = await client.query<{ id: string }>(
+      const existing = (await client.query<{ id: string; status: string; submission_count: number }>(
+        `SELECT id, status, submission_count FROM scoring_imports WHERE submitted_by_id=$1 AND file_name=$2 AND COALESCE(class_name,'')=COALESCE($3,'') ORDER BY submitted_at DESC, created_at DESC LIMIT 1`,
+        [auth.user!.id, fileName, className || null],
+      )).rows[0];
+      if (existing?.status === IMPORT_STATUS.confirmed) {
+        const error = new Error('该赋分表已确认，不能覆盖已确认记录；请使用新的文件名提交');
+        (error as Error & { status?: number }).status = 409;
+        throw error;
+      }
+      const importId = existing?.id || (await client.query<{ id: string }>(
         `INSERT INTO scoring_imports (class_name,file_name,file_url,status,total_rows,valid_rows,issues,submitted_by_id,submitted_by_name)
          VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9) RETURNING id`,
         [className || null, fileName, fileUrl, status, rows.length, validation.ok ? rows.length : 0, JSON.stringify(issues), auth.user!.id, auth.user!.username],
-      );
-      const importId = inserted.rows[0].id;
+      )).rows[0].id;
+      const submissionCount = existing ? Number(existing.submission_count || 1) + 1 : 1;
+      if (existing) {
+        await client.query(`UPDATE scoring_imports SET file_url=$1,status=$2,total_rows=$3,valid_rows=$4,issues=$5::jsonb,submitted_by_name=$6,submitted_at=NOW(),submission_count=$7,confirmed_by_id=NULL,confirmed_by_name=NULL,confirmed_at=NULL WHERE id=$8`, [fileUrl, status, rows.length, validation.ok ? rows.length : 0, JSON.stringify(issues), auth.user!.username, submissionCount, importId]);
+        await client.query('DELETE FROM scoring_import_rows WHERE import_id=$1', [importId]);
+      }
       for (const row of rows) {
         await client.query(
           `INSERT INTO scoring_import_rows (import_id,row_number,student_id,student_name,start_time,end_time,content,category_primary,category_secondary,level,award,credit_type,credit_value)
@@ -71,18 +84,19 @@ export async function POST(request: NextRequest) {
         action: validation.ok ? 'import_class_scoring' : 'reject_class_scoring',
         resourceType: 'scoring_import',
         resourceId: importId,
-        details: { fileName: fileName || '未命名', rowCount: rows.length, issueCount: issues.length, status },
+        details: { fileName: fileName || '未命名', rowCount: rows.length, issueCount: issues.length, status, submissionCount },
       }, client);
-      return importId;
+      return { id: importId, submissionCount };
     });
 
     return NextResponse.json({
       success: true,
-      data: { id: created, status, totalRows: rows.length, validRows: validation.ok ? rows.length : 0, issues },
+      data: { id: created.id, submissionCount: created.submissionCount, status, totalRows: rows.length, validRows: validation.ok ? rows.length : 0, issues },
     });
   } catch (error) {
     console.error('导入班级赋分表失败:', error);
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '导入失败' }, { status: 500 });
+    const status = error && typeof error === 'object' && 'status' in error && typeof error.status === 'number' ? error.status : 500;
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '导入失败' }, { status });
   }
 }
 

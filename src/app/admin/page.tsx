@@ -9,7 +9,7 @@ import {
   GraduationCap, Lock, LogOut, Table, FileCheck, UserCheck, Award, Users,
   Plus, Pencil, Trash2, Eye, Check, X, Upload, FileText, Image as ImageIcon, Loader2,
   ChevronDown, ChevronUp, Search, AlertCircle, Download, Building2, BookOpen,
-  KeyRound, ShieldCheck, UserRound, ChevronLeft, ChevronRight,
+  KeyRound, ShieldCheck, UserRound, ChevronLeft, ChevronRight, FileSpreadsheet,
 } from 'lucide-react';
 import {
   Activity, ActivitySubmission,
@@ -952,7 +952,7 @@ function AdminPage() {
 
   const tabs = [
     ...(isAdmin ? [{ key: 'activities', label: '活动总表', icon: Table, count: activities.length }] : []),
-    ...(canPublish ? [{ key: 'review', label: '活动审核', icon: FileCheck, count: pendingSubmissions.length }] : []),
+    ...(canPublish ? [{ key: 'review', label: '活动审核', icon: FileCheck, count: submissions.filter(item => item.review_status === '待审核').length }] : []),
     ...(canScore ? [{ key: 'scoring', label: '活动赋分', icon: Award, count: scoringList.filter(s => s.scoring_status === '待赋分').length }] : []),
     
     ...(isAdmin ? [{ key: 'users', label: '用户管理', icon: Users, count: 0 }] : []),
@@ -1898,6 +1898,7 @@ function UserManagement({
   const [batchPermissionKey, setBatchPermissionKey] = useState<UserPermission | ''>('');
   const [batchPermissionValue, setBatchPermissionValue] = useState(true);
   const [batchSaving, setBatchSaving] = useState(false);
+  const [permissionImporting, setPermissionImporting] = useState(false);
 
   const filteredUsers = users.filter((item) => {
     const keyword = userSearch.trim();
@@ -1939,6 +1940,48 @@ function UserManagement({
     } finally {
       setBatchSaving(false);
     }
+  };
+
+  const importPermissions = async (file: File | null) => {
+    if (!file) return;
+    setPermissionImporting(true);
+    try {
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+      const headers = Object.keys(rawRows[0] || {});
+      const studentIdHeader = headers.find((header) => ['学号', 'student_id', 'studentId'].includes(header));
+      const nameHeader = headers.find((header) => ['姓名', '姓名（必填）', 'username', 'name'].includes(header));
+      if (!studentIdHeader) throw new Error('Excel 必须包含“学号”列');
+      if (!nameHeader) throw new Error('Excel 必须包含“姓名”列');
+      const truthy = new Set(['true', '1', '是', '有', '开启', '√', '✓', 'yes']);
+      const rows = rawRows.map((raw) => ({
+        studentId: String(raw[studentIdHeader] || '').trim(),
+        name: String(raw[nameHeader] || '').trim(),
+        permissions: Object.fromEntries(permissions.map(({ key, label }) => [key, truthy.has(String(raw[key] ?? raw[label] ?? '').trim().toLowerCase())])),
+      })).filter((row) => row.studentId && row.name);
+      if (!rows.length) throw new Error('Excel 中没有有效学号');
+      const response = await apiFetch('/api/admin/user-permissions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows }) });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || '权限导入失败');
+      await onRefreshUsers();
+      alert(`已导入 ${data.data?.updatedCount || rows.length} 人；未勾选权限已清空。`);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '权限导入失败');
+    } finally {
+      setPermissionImporting(false);
+    }
+  };
+
+  const downloadPermissionTemplate = async () => {
+    const XLSX = await import('xlsx');
+    const headers = ['学号', '姓名', ...permissions.map(({ label }) => label)];
+    const sheet = XLSX.utils.aoa_to_sheet([headers, ...Array.from({ length: 20 }, () => headers.map(() => ''))]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, '权限填写');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([headers, ['请替换为真实学号', '请替换为真实姓名', ...permissions.map((_, index) => index === 0 ? '是' : '')]]), '填写示例');
+    XLSX.writeFile(workbook, '管理员权限导入模板.xlsx');
   };
   const permissions: Array<{ key: UserPermission; label: string }> = [
     { key: 'canUploadLeave', label: '假条上传权限' },
@@ -2237,6 +2280,11 @@ function UserManagement({
               <span className="text-xs text-slate-500">已选 {selectedIds.length} 人</span>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800 hover:bg-teal-100 sm:py-1.5">
+                <FileSpreadsheet className="size-3.5" />{permissionImporting ? '导入中…' : 'Excel 覆盖导入'}
+                <input type="file" accept=".xlsx,.xls" className="sr-only" disabled={permissionImporting} onChange={(event) => { void importPermissions(event.target.files?.[0] || null); event.currentTarget.value = ''; }} />
+              </label>
+              <button type="button" onClick={() => void downloadPermissionTemplate()} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 sm:py-1.5"><Download className="size-3.5" />下载填写模板</button>
               <button
                 type="button"
                 onClick={selectAllFiltered}

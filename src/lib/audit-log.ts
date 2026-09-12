@@ -2,7 +2,7 @@ import type { AuthUser } from '@/lib/auth';
 import { query, type DatabaseClient } from '@/storage/database/supabase-client';
 
 export type AuditLogInput = {
-  actor?: Pick<AuthUser, 'id'> | null;
+  actor?: Pick<AuthUser, 'id'> & Partial<Pick<AuthUser, 'username' | 'student_id'>> | null;
   action: string;
   resourceType: string;
   resourceId?: string | null;
@@ -30,10 +30,13 @@ export function sanitizeAuditDetails(details: unknown): Record<string, unknown> 
 
 export async function writeAuditLog(input: AuditLogInput, client?: DatabaseClient): Promise<void> {
   const executor = client ?? { query };
+  const actorName = input.actor?.username
+    ? `${input.actor.username}${input.actor.student_id ? `（${input.actor.student_id}）` : ''}`
+    : null;
   await executor.query(
     `INSERT INTO audit_logs (actor_user_id, actor_name, action, resource_type, resource_id, details, ip_address)
      VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)`,
-    [input.actor?.id || null, null, input.action, input.resourceType, input.resourceId || null, JSON.stringify(sanitizeAuditDetails(input.details)), null],
+    [input.actor?.id || null, actorName, input.action, input.resourceType, input.resourceId || null, JSON.stringify(sanitizeAuditDetails(input.details)), null],
   );
 }
 

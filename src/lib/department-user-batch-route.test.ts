@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
-import { PUT } from '@/app/api/department-users/route';
+import { POST, PUT } from '@/app/api/department-users/route';
 import { createSessionToken } from '@/lib/auth';
 import { ensureDatabaseSchema, query, queryOne } from '@/storage/database/supabase-client';
 
-function request(userId: string, body: unknown): NextRequest {
+function request(userId: string, body: unknown, method = 'PUT'): NextRequest {
   return new NextRequest('http://localhost/api/department-users', {
-    method: 'PUT',
+    method,
     headers: new Headers({
       'content-type': 'application/json',
       Authorization: `Bearer ${createSessionToken(userId)}`,
@@ -61,6 +61,15 @@ async function main() {
     }));
     assert.equal(disable.status, 200);
     assert.deepEqual(await flags(studentA), { can_publish: true, can_score: false });
+
+    // Excel 覆盖导入：未勾选的可管理权限会被清空
+    const studentARecord = await queryOne<{ student_id: string; username: string }>('SELECT student_id, username FROM users WHERE id=$1', [studentA]);
+    const imported = await POST(request(managerId, {
+      department: '第二课堂认证中心',
+      rows: [{ studentId: studentARecord!.student_id, name: studentARecord!.username, permissions: { canScore: true } }],
+    }, 'POST'));
+    assert.equal(imported.status, 200);
+    assert.deepEqual(await flags(studentA), { can_publish: false, can_score: true });
 
     // 越权用户与管理员都要拒绝，且不能写库
     assert.equal((await PUT(request(managerId, {

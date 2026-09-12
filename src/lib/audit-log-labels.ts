@@ -51,6 +51,9 @@ export const AUDIT_FIELD_LABELS: Record<string, string> = {
   canManageAttendanceWork: '考勤工作安排权限', canUploadLeave: '假条上传权限', canQueryLeave: '假条查看权限',
   canManageOriginalLeave: '假条对比权限', canSubmitOriginalLeave: '提交原假条权限', canImportScoring: '班级赋分表提交权限',
   rowCount: '数据行数', validRows: '通过行数', issueCount: '错误数', confirmedRows: '确认行数',
+  status: '状态', table: '数据表', format: '导出格式', limit: '数量上限',
+  scoringStatus: '赋分状态', participantCount: '参与人数', automatic: '自动触发',
+  physicalCleanup: '物理清理', detachedReferences: '解除引用',
 };
 
 export function formatAuditAction(action: string): string {

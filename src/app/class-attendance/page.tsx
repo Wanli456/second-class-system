@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, type JSX } from 'react';
-import { CalendarDays, Info, RefreshCw, Users } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronRight, Info, RefreshCw, Users } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { useUser } from '@/contexts/UserContext';
@@ -37,6 +37,7 @@ export default function ClassAttendancePage() {
   const [rows, setRows] = useState<ClassAttendanceRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [expandedGrades, setExpandedGrades] = useState<Record<string, boolean>>({});
 
   const loadSummary = useCallback(async (targetDate: string): Promise<void> => {
     setLoading(true);
@@ -69,6 +70,14 @@ export default function ClassAttendancePage() {
     }),
     { expected: 0, present: 0, leave: 0, workers: 0 },
   );
+  const gradeOf = (className: string) => {
+    const match = className.match(/(\d{4})$/);
+    return match ? `${match[1].slice(0, 2)}级` : '未分年级';
+  };
+  const grades = Object.entries(rows.reduce<Record<string, ClassAttendanceRow[]>>((groups, row) => {
+    (groups[gradeOf(row.class_name)] ||= []).push(row);
+    return groups;
+  }, {}));
 
   return (
     <DashboardLayout title="班级考勤统计" activeNavHref="/class-attendance">
@@ -106,35 +115,23 @@ export default function ClassAttendancePage() {
 
         <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-4">
-            <h3 className="font-semibold text-slate-950">{date} · 班级明细</h3>
-            <span className="text-sm text-slate-500">共 {rows.length} 个班级</span>
+            <h3 className="font-semibold text-slate-950">{date} · 年级汇总</h3>
+            <span className="text-sm text-slate-500">共 {grades.length} 个年级、{rows.length} 个班级</span>
           </div>
           {rows.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-5 py-3 font-semibold">班级</th>
-                    <th className="px-5 py-3 font-semibold">应到</th>
-                    <th className="px-5 py-3 font-semibold">实到</th>
-                    <th className="px-5 py-3 font-semibold">请假</th>
-                    <th className="px-5 py-3 font-semibold">考勤人员</th>
-                    <th className="px-5 py-3 font-semibold">实到来源</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {rows.map((row) => (
-                    <tr key={row.class_name} className="text-slate-700">
-                      <td className="px-5 py-4 font-medium text-slate-950">{row.class_name}</td>
-                      <td className="px-5 py-4">{row.expected_count}</td>
-                      <td className="px-5 py-4 font-semibold text-emerald-700">{row.present_count}</td>
-                      <td className="px-5 py-4 text-amber-700">{row.leave_count}</td>
-                      <td className="px-5 py-4 text-teal-700">{row.attendance_worker_count}</td>
-                      <td className="px-5 py-4 text-slate-500">{row.present_source === 'recorded' ? '已录入考勤' : '自动计算（应到−请假−考勤）'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="divide-y divide-slate-100">
+              {grades.map(([grade, gradeRows]) => {
+                const gradeTotals = gradeRows.reduce((sum, row) => ({ expected: sum.expected + row.expected_count, present: sum.present + row.present_count, leave: sum.leave + row.leave_count, workers: sum.workers + row.attendance_worker_count }), { expected: 0, present: 0, leave: 0, workers: 0 });
+                const expanded = Boolean(expandedGrades[grade]);
+                return <div key={grade}>
+                  <button type="button" onClick={() => setExpandedGrades((current) => ({ ...current, [grade]: !expanded }))} className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-slate-50">
+                    {expanded ? <ChevronDown className="size-4 text-slate-400" /> : <ChevronRight className="size-4 text-slate-400" />}
+                    <span className="font-semibold text-slate-950">{grade}</span><span className="text-sm text-slate-500">{gradeRows.length} 个班级</span>
+                    <span className="ml-auto text-sm text-slate-600">应到 {gradeTotals.expected} · 实到 <b className="text-emerald-700">{gradeTotals.present}</b> · 请假 <b className="text-amber-700">{gradeTotals.leave}</b></span>
+                  </button>
+                  {expanded && <div className="overflow-x-auto border-t border-slate-100 bg-slate-50/50"><table className="w-full min-w-[720px] text-left text-sm"><thead className="text-xs text-slate-500"><tr><th className="px-12 py-3 font-semibold">班级</th><th className="px-5 py-3 font-semibold">应到</th><th className="px-5 py-3 font-semibold">实到</th><th className="px-5 py-3 font-semibold">请假</th><th className="px-5 py-3 font-semibold">考勤人员</th><th className="px-5 py-3 font-semibold">实到来源</th></tr></thead><tbody className="divide-y divide-slate-100">{gradeRows.map((row) => <tr key={row.class_name} className="text-slate-700"><td className="px-12 py-3 font-medium text-slate-950">{row.class_name}</td><td className="px-5 py-3">{row.expected_count}</td><td className="px-5 py-3 font-semibold text-emerald-700">{row.present_count}</td><td className="px-5 py-3 text-amber-700">{row.leave_count}</td><td className="px-5 py-3 text-teal-700">{row.attendance_worker_count}</td><td className="px-5 py-3 text-slate-500">{row.present_source === 'recorded' ? '已录入考勤' : '自动计算（应到−请假−考勤）'}</td></tr>)}</tbody></table></div>}
+                </div>;
+              })}
             </div>
           ) : (
             <div className="px-5 py-12 text-center text-sm text-slate-500">当前日期暂无班级花名册数据。</div>

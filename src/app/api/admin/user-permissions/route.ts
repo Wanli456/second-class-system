@@ -133,3 +133,47 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: false, error: '批量设置权限失败' }, { status: 500 });
   }
 }
+
+/** Excel 导入按表格覆盖全部手动权限；未勾选项清空。 */
+export async function POST(request: NextRequest) {
+  try {
+    await ensureDatabaseSchema();
+    const auth = await requirePermission(request, 'admin');
+    if (auth.response) return auth.response;
+    const body = await request.json() as { rows?: unknown };
+    if (!Array.isArray(body.rows) || !body.rows.length) return badRequest('Excel 中没有有效用户行');
+    if (body.rows.length > BATCH_PERMISSION_USER_LIMIT) return badRequest(`单次最多导入 ${BATCH_PERMISSION_USER_LIMIT} 个用户`);
+    const rows = body.rows.filter((item): item is { studentId: string; name: string; permissions?: Record<string, unknown> } => {
+      if (!item || typeof item !== 'object') return false;
+      const value = item as Record<string, unknown>;
+      return typeof value.studentId === 'string' && typeof value.name === 'string' && Boolean(value.studentId.trim()) && Boolean(value.name.trim());
+    }).map((item) => ({ studentId: item.studentId.trim(), name: item.name.trim(), permissions: item.permissions || {} }));
+    const studentIds = [...new Set(rows.map((row) => row.studentId))];
+    if (!studentIds.length) return badRequest('Excel 中没有学号');
+    const placeholders = studentIds.map((_, index) => '$' + (index + 1)).join(',');
+    const targets = await query<{ id: string; student_id: string; username: string }>(`SELECT id, student_id, username FROM users WHERE student_id IN (${placeholders})`, studentIds);
+    if (targets.length !== studentIds.length) return badRequest('Excel 中包含不存在的学号');
+    const byStudentId = new Map(targets.map((target) => [target.student_id, target]));
+    const mismatched = rows.filter((row) => byStudentId.get(row.studentId)?.username !== row.name);
+    if (mismatched.length) return badRequest(`学号与姓名不匹配：${mismatched.map((row) => row.studentId).join('、')}`);
+    const permissionColumns = Object.values(PERMISSION_COLUMNS);
+    await withTransaction(async (client) => {
+      for (const row of rows) {
+        const target = byStudentId.get(row.studentId)!;
+        const values: unknown[] = permissionColumns.map(() => false);
+        const setClauses = permissionColumns.map((column, index) => `${column}=$${index + 1}`);
+        for (const [key, column] of Object.entries(PERMISSION_COLUMNS)) {
+          if (row.permissions?.[key] === true) values[permissionColumns.indexOf(column)] = true;
+        }
+        values.push(null, target.id);
+        setClauses.push(`permission_overrides=$${values.length - 1}`);
+        await client.query(`UPDATE users SET ${setClauses.join(',')} WHERE id=$${values.length}`, values);
+        await writeAuditLog({ actor: auth.user, action: 'import_user_permissions', resourceType: 'user', resourceId: target.id, details: { importedPermissionKeys: Object.keys(PERMISSION_COLUMNS) } }, client);
+      }
+    });
+    return NextResponse.json({ success: true, data: { updatedCount: rows.length } });
+  } catch (error) {
+    console.error('Failed to import user permissions:', error);
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '权限导入失败' }, { status: 500 });
+  }
+}

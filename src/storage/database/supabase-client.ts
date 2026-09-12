@@ -391,12 +391,14 @@ async function migrateDatabaseSchema(): Promise<void> {
       submitted_by_id TEXT,
       submitted_by_name TEXT,
       submitted_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      submission_count INTEGER NOT NULL DEFAULT 1,
       confirmed_by_id TEXT,
       confirmed_by_name TEXT,
       confirmed_at TIMESTAMP,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
     ALTER TABLE scoring_imports ADD COLUMN IF NOT EXISTS file_url TEXT;
+    ALTER TABLE scoring_imports ADD COLUMN IF NOT EXISTS submission_count INTEGER NOT NULL DEFAULT 1;
     CREATE INDEX IF NOT EXISTS scoring_imports_status_idx ON scoring_imports (status, created_at);
     CREATE TABLE IF NOT EXISTS scoring_import_rows (
       id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
