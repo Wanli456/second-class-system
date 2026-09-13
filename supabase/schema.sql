@@ -413,11 +413,13 @@ CREATE INDEX IF NOT EXISTS audit_logs_resource_idx ON audit_logs (resource_type,
 
 CREATE TABLE IF NOT EXISTS upload_assets (
   url TEXT PRIMARY KEY,
+  original_file_name TEXT,
   uploaded_by_user_id TEXT,
   purpose TEXT NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 ALTER TABLE upload_assets ALTER COLUMN uploaded_by_user_id DROP NOT NULL;
+ALTER TABLE upload_assets ADD COLUMN IF NOT EXISTS original_file_name TEXT;
 
 CREATE TABLE IF NOT EXISTS file_cleanup_jobs (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,

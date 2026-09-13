@@ -75,8 +75,8 @@ export async function POST(request: NextRequest) {
     try {
       await withTransaction(async (client) => {
         await client.query(
-          'INSERT INTO upload_assets (url, uploaded_by_user_id, purpose) VALUES ($1,$2,$3)',
-          [publicUrl, auth.user!.id, purpose],
+          'INSERT INTO upload_assets (url, original_file_name, uploaded_by_user_id, purpose) VALUES ($1,$2,$3,$4)',
+          [publicUrl, originalName, auth.user!.id, purpose],
         );
         await writeAuditLog({ actor: auth.user, action: 'upload', resourceType: 'file', details: { purpose, size: file.size } }, client);
       });

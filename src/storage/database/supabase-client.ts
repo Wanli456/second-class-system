@@ -279,6 +279,7 @@ if (localDb && shouldInitializeLocalDb) {
 
     CREATE TABLE upload_assets (
       url TEXT PRIMARY KEY,
+      original_file_name TEXT,
       uploaded_by_user_id TEXT,
       purpose TEXT NOT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -705,6 +706,7 @@ async function migrateDatabaseSchema(): Promise<void> {
     await executeSchemaSql(`
       CREATE TABLE upload_assets (
         url TEXT PRIMARY KEY,
+        original_file_name TEXT,
         uploaded_by_user_id TEXT,
         purpose TEXT NOT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -714,6 +716,7 @@ async function migrateDatabaseSchema(): Promise<void> {
 
   await executeSchemaSql(`
     ALTER TABLE upload_assets ALTER COLUMN uploaded_by_user_id DROP NOT NULL;
+    ALTER TABLE upload_assets ADD COLUMN IF NOT EXISTS original_file_name TEXT;
     ALTER TABLE leave_groups ALTER COLUMN applicant_user_id DROP NOT NULL;
     ALTER TABLE leave_slips ALTER COLUMN applicant_user_id DROP NOT NULL;
   `);

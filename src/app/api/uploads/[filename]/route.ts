@@ -66,11 +66,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   try {
+    const asset = await queryOne<{ original_file_name: string | null }>(
+      'SELECT original_file_name FROM upload_assets WHERE url=$1',
+      [url],
+    );
+    const downloadName = safeUploadFileName(asset?.original_file_name || '') || filename;
     const buffer = await readFile(path.join(process.cwd(), 'public', 'uploads', filename));
     return new NextResponse(buffer, {
       headers: {
         'Content-Type': getUploadContentType(filename, ''),
-        'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(filename)}`,
+        'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(downloadName)}`,
         'Cache-Control': 'private, no-store',
         'X-Content-Type-Options': 'nosniff',
       },
