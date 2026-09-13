@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Download, FileText, Image as ImageIcon, Loader2, Maximize2, Minimize2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { previewKind, type PreviewKind } from '@/lib/file-preview';
@@ -306,6 +307,10 @@ export function FilePreviewDialog({
   const [minimized, setMinimized] = useState(false);
 
   useEffect(() => {
+    if (!open) setMinimized(false);
+  }, [open]);
+
+  useEffect(() => {
     if (!open || !url || (kind !== 'word' && kind !== 'excel')) {
       return;
     }
@@ -335,14 +340,14 @@ export function FilePreviewDialog({
     <>
       <Dialog open={open && !minimized} onOpenChange={handleOpenChange}>
       <DialogContent className={`flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 ${kind === 'excel' ? 'sm:max-w-[calc(100vw-2rem)]' : 'sm:max-w-5xl'}`} style={kind === 'excel' ? { width: 'calc(100vw - 2rem)', maxWidth: 'calc(100vw - 2rem)' } : undefined}>
-        <DialogHeader className="border-b px-5 py-4 pr-12 sm:flex-row sm:items-center sm:justify-between">
+        <DialogHeader className="flex-wrap border-b px-3 py-3 pr-12 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-4">
           <DialogTitle className="flex min-w-0 items-center gap-2 text-base">
             {kind === 'image' ? <ImageIcon className="size-4 shrink-0" /> : <FileText className="size-4 shrink-0" />}
             <span className="truncate">{label}</span>
           </DialogTitle>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">
             {url && (
-              <a href={url} download={fileName || undefined} className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
+              <a href={url} download={fileName || undefined} className="inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 sm:flex-none">
                 <Download className="size-4" />下载文件
               </a>
             )}
@@ -369,10 +374,11 @@ export function FilePreviewDialog({
         </div>
       </DialogContent>
       </Dialog>
-      {open && minimized && (
-        <button type="button" onClick={() => setMinimized(false)} className="fixed right-4 bottom-4 z-[60] inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-lg hover:bg-slate-50" aria-label="恢复文件预览">
+      {open && minimized && typeof document !== 'undefined' && createPortal(
+        <button type="button" onClick={() => setMinimized(false)} className="fixed right-3 bottom-3 z-[100] inline-flex max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-full sm:right-4 sm:bottom-4 border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-lg hover:bg-slate-50" aria-label="恢复文件预览">
           <Maximize2 className="size-4" />恢复预览
-        </button>
+        </button>,
+        document.body,
       )}
     </>
   );
