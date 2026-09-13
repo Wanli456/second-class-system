@@ -43,6 +43,7 @@ interface Activity {
   activity_submitter_student_id?: string | null;
   scoring_material_submitter_name?: string | null;
   scoring_material_submitter_student_id?: string | null;
+  submission_count?: number;
 }
 
 export default function SubmitScoringPage() {
@@ -536,13 +537,14 @@ export default function SubmitScoringPage() {
                         }`}>
                           {a.scoring_status}
                         </span>
-                        {a.scoring_table_url && <span className="text-xs text-emerald-600">已提交材料</span>}
+                        {a.scoring_table_url && <span className="text-xs text-emerald-600">已提交材料{Number(a.submission_count || 1) > 1 ? ` · 第 ${a.submission_count} 次提交` : ''}</span>}
                       </div>
                     </div>
                     {a.scoring_table_url && (
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <FilePreviewLink url={a.scoring_table_url} fileName={a.scoring_table_file_name} label="预览赋分表" className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-teal-700 hover:border-teal-300 hover:bg-teal-50" />
                         <a href={a.scoring_table_url} download={a.scoring_table_file_name || undefined} className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"><Download className="size-3" aria-hidden="true" />下载</a>
+                        {a.scoring_status !== '已赋分' && <button type="button" onClick={() => { setSubmittedActivityId(a.id); setSelectedActivityId(a.id); setShowResubmit(true); }} className="rounded-md border border-teal-200 px-2.5 py-1.5 text-xs text-teal-700 hover:bg-teal-50">重新提交</button>}
                       </div>
                     )}
                   </div>

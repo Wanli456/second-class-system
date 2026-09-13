@@ -31,6 +31,7 @@ interface WorkArrangement {
   ocr_names: string;
   created_at: string;
   updated_at: string | null;
+  submission_count?: number;
 }
 
 const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五'] as const;
@@ -411,7 +412,7 @@ export default function AttendanceWorkPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-slate-950">{item.name}</span>
                       <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${item.review_status === '已通过' ? 'bg-emerald-100 text-emerald-800' : item.review_status === '已驳回' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800'}`}>{item.review_status}</span>
-                      <span className="ml-auto text-xs text-slate-500">{item.created_by_name || '-'} 提交</span>
+                      <span className="ml-auto text-xs text-slate-500">{item.created_by_name || '-'} 提交{Number(item.submission_count || 1) > 1 ? ` · 第 ${item.submission_count} 次提交` : ''}</span>
                     </div>
                     {schedules.length ? (
                       <div className="mt-2 space-y-1 text-sm text-slate-600">
@@ -422,8 +423,8 @@ export default function AttendanceWorkPage() {
                     )}
                     <ImageUploadPreviews imageUrls={parseImageList(item.image_list).map((image) => image.url)} altPrefix="考勤表" />
                     {item.review_note && <p className="mt-2 text-xs text-slate-500">备注：{item.review_note}</p>}
-                    {canUpload && (user.role === 'admin' || user.role === 'leader' || item.created_by_user_id === user.id) && (
-                      <Button type="button" variant="outline" onClick={() => startEdit(item)} className="mt-3 bg-white">修改（临时换人、改日期）</Button>
+                    {canUpload && item.review_status !== '已通过' && (user.role === 'admin' || user.role === 'leader' || item.created_by_user_id === user.id) && (
+                      <Button type="button" variant="outline" onClick={() => startEdit(item)} className="mt-3 bg-white">重新提交</Button>
                     )}
                     {canReview && item.review_status === '待查对' && (
                       <div className="mt-3 flex gap-2">

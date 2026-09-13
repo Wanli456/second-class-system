@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS activities (
   scoring_status TEXT NOT NULL DEFAULT '待赋分',
   scoring_table_url TEXT,
   scoring_table_file_name TEXT,
+  submission_count INTEGER NOT NULL DEFAULT 1,
   idempotency_key TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -99,6 +100,7 @@ CREATE TABLE IF NOT EXISTS activity_id_counters (
 );
 
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS submission_count INTEGER NOT NULL DEFAULT 1;
 CREATE UNIQUE INDEX IF NOT EXISTS activities_idempotency_key_idx ON activities (idempotency_key);
 
 CREATE TABLE IF NOT EXISTS activity_submissions (
@@ -131,6 +133,7 @@ CREATE TABLE IF NOT EXISTS activity_submissions (
   scoring_material_submitter_id TEXT,
   scoring_material_submitter_name TEXT,
   scoring_material_submitter_student_id TEXT,
+  submission_count INTEGER NOT NULL DEFAULT 1,
   idempotency_key TEXT,
   review_status TEXT NOT NULL DEFAULT '待审核',
   review_note TEXT,
@@ -215,7 +218,10 @@ CREATE TABLE IF NOT EXISTS evening_study_schedules (
   classroom TEXT NOT NULL,
   checker_name TEXT,
   checker_phone TEXT,
+  created_by_user_id TEXT,
+  created_by_name TEXT,
   notes TEXT,
+  submission_count INTEGER NOT NULL DEFAULT 1,
   idempotency_key TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -232,6 +238,9 @@ CREATE TABLE IF NOT EXISTS evening_study_attendance (
   discipline_status TEXT NOT NULL DEFAULT '良好',
   notes TEXT,
   checker_name TEXT NOT NULL,
+  created_by_user_id TEXT,
+  created_by_name TEXT,
+  submission_count INTEGER NOT NULL DEFAULT 1,
   idempotency_key TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -277,8 +286,14 @@ ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS scope_names TEXT;
 ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS activity_submissions_idempotency_key_idx ON activity_submissions (idempotency_key);
 ALTER TABLE evening_study_schedules ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+ALTER TABLE evening_study_schedules ADD COLUMN IF NOT EXISTS created_by_user_id TEXT;
+ALTER TABLE evening_study_schedules ADD COLUMN IF NOT EXISTS created_by_name TEXT;
+ALTER TABLE evening_study_schedules ADD COLUMN IF NOT EXISTS submission_count INTEGER NOT NULL DEFAULT 1;
 CREATE UNIQUE INDEX IF NOT EXISTS evening_study_schedules_idempotency_key_idx ON evening_study_schedules (idempotency_key);
 ALTER TABLE evening_study_attendance ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+ALTER TABLE evening_study_attendance ADD COLUMN IF NOT EXISTS created_by_user_id TEXT;
+ALTER TABLE evening_study_attendance ADD COLUMN IF NOT EXISTS created_by_name TEXT;
+ALTER TABLE evening_study_attendance ADD COLUMN IF NOT EXISTS submission_count INTEGER NOT NULL DEFAULT 1;
 CREATE UNIQUE INDEX IF NOT EXISTS evening_study_attendance_idempotency_key_idx ON evening_study_attendance (idempotency_key);
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_name TEXT;
 ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_student_id TEXT;
@@ -320,6 +335,7 @@ CREATE TABLE IF NOT EXISTS leave_slips (
   reviewed_by_name TEXT,
   reviewed_at TIMESTAMP,
   idempotency_key TEXT,
+  submission_count INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -335,6 +351,7 @@ CREATE TABLE IF NOT EXISTS leave_slip_students (
 CREATE UNIQUE INDEX IF NOT EXISTS leave_slip_students_slip_student_idx ON leave_slip_students (slip_id, student_id);
 ALTER TABLE leave_groups ALTER COLUMN applicant_user_id DROP NOT NULL;
 ALTER TABLE leave_slips ALTER COLUMN applicant_user_id DROP NOT NULL;
+ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS submission_count INTEGER NOT NULL DEFAULT 1;
 
 CREATE TABLE IF NOT EXISTS original_leave_slips (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -359,6 +376,7 @@ CREATE TABLE IF NOT EXISTS original_leave_slips (
 ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS activity_name TEXT;
 ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS class_names TEXT;
 ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS student_names TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS submission_count INTEGER NOT NULL DEFAULT 1;
 
 CREATE TABLE IF NOT EXISTS attendance_work_arrangements (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -376,11 +394,13 @@ CREATE TABLE IF NOT EXISTS attendance_work_arrangements (
   reviewed_at TIMESTAMP,
   created_by_user_id TEXT,
   created_by_name TEXT,
+  submission_count INTEGER NOT NULL DEFAULT 1,
   idempotency_key TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS attendance_work_arrangements_idempotency_key_idx ON attendance_work_arrangements (idempotency_key);
+ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS submission_count INTEGER NOT NULL DEFAULT 1;
 CREATE TABLE IF NOT EXISTS audit_logs (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   actor_user_id TEXT, actor_name TEXT, action TEXT NOT NULL, resource_type TEXT NOT NULL,

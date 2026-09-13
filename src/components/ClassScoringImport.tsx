@@ -54,6 +54,7 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
   const [records, setRecords] = useState<ImportRecord[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadRecords = useCallback(async () => {
@@ -65,9 +66,10 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
     } catch { /* 列表失败不影响提交 */ }
   }, []);
 
-  useEffect(() => { if (mode === 'confirm') void loadRecords(); }, [loadRecords, mode]);
+  useEffect(() => { void loadRecords(); }, [loadRecords]);
 
   const reset = () => {
+    setEditingId(null);
     setFile(null); setRows([]); setIssues([]); setMessage(''); setError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -104,14 +106,19 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
       const res = await apiFetch('/api/scoring/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ className, fileName: file.name, fileUrl: uploaded.url || uploaded.data?.url || null, rows }),
+        body: JSON.stringify({ id: editingId || undefined, className, fileName: file.name, fileUrl: uploaded.url || uploaded.data?.url || null, rows }),
       });
       const data = await res.json();
       if (!data.success) { setError(data.error || '提交失败'); return; }
       setIssues(data.data.issues || []);
+      const attempt = Number(data.data.submissionCount || 1);
+      const attemptText = attempt > 1 ? `；第 ${attempt} 次提交` : '';
       setMessage(data.data.status === '待人工确认'
-        ? `自动审核通过：${data.data.validRows} 行，已进入人工确认队列；第 ${data.data.submissionCount} 次提交`
-        : `自动审核未通过：发现 ${(data.data.issues || []).length} 处问题，已自动驳回；第 ${data.data.submissionCount} 次提交`);
+        ? `自动审核通过：${data.data.validRows} 行，已进入人工确认队列${attemptText}`
+        : `自动审核未通过：发现 ${(data.data.issues || []).length} 处问题，已自动驳回${attemptText}`);
+      setEditingId(null);
+      setFile(null); setRows([]);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       await loadRecords();
     } catch {
       setError('网络错误，请重试');
@@ -148,11 +155,12 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex items-center gap-2">
             <FileSpreadsheet className="size-5 text-teal-700" />
-            <h3 className="text-base font-semibold text-slate-950">提交班级赋分表</h3>
+            <h3 className="text-base font-semibold text-slate-950">{editingId ? '重新提交班级赋分表' : '提交班级赋分表'}</h3>
           </div>
           <p className="mt-1.5 text-sm text-slate-500">
             按《二课分批量导入赋分模板（2026）》填写后上传。系统先自动审核学号、姓名、时间、分类和学分类型，通过后进入人工确认。
           </p>
+          {editingId && <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">正在覆盖原提交记录，提交次数会递增；已确认的记录不能覆盖。</p>}
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div>
@@ -211,10 +219,10 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
         </section>
       )}
 
-      {showConfirm && records.length > 0 && (
+      {(showConfirm || showSubmit) && records.length > 0 && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <h3 className="text-base font-semibold text-slate-950">班级赋分表待确认</h3>
-          <p className="mt-1.5 text-sm text-slate-500">自动审核通过的记录，需要人工确认后才算完成赋分。</p>
+          <h3 className="text-base font-semibold text-slate-950">{showConfirm ? '班级赋分表待确认' : '我的班级赋分表提交记录'}</h3>
+          <p className="mt-1.5 text-sm text-slate-500">{showConfirm ? '自动审核通过的记录，需要人工确认后才算完成赋分。' : '重新提交会覆盖同一条记录，第一次提交不显示次数。'}</p>
           <div className="mt-4 space-y-2">
             {records.map((record) => {
               const recordIssues = readIssues(record.issues);
@@ -225,7 +233,7 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
                     <button type="button" onClick={() => setExpandedId(expanded ? null : record.id)} className="min-w-0 flex-1 text-left">
                       <span className="block truncate font-medium text-slate-900">{record.file_name || '未命名'}  {record.class_name || '未填班级'}</span>
                       <span className="mt-1 block text-xs text-slate-500">
-                        提交人 {record.submitted_by_name || '-'}｜提交时间 {formatBusinessDateTime(record.submitted_at, '-')}｜第 {record.submission_count || 1} 次提交｜{record.valid_rows}/{record.total_rows} 行
+                        提交人 {record.submitted_by_name || '-'}｜提交时间 {formatBusinessDateTime(record.submitted_at, '-')} {Number(record.submission_count || 1) > 1 ? `｜第 ${record.submission_count} 次提交` : ''}｜{record.valid_rows}/{record.total_rows} 行
                         {record.confirmed_by_name ? `｜确认人 ${record.confirmed_by_name}` : ''}
                       </span>
                     </button>
@@ -240,6 +248,9 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
                           </a>
                         </>
                       ) : <span className="text-xs text-amber-600">原文件链接缺失，请重新提交</span>}
+                      {showSubmit && record.status !== '已确认' && (
+                        <Button type="button" variant="outline" onClick={() => { setEditingId(record.id); setClassName(record.class_name || ''); setFile(null); setRows([]); setIssues([]); setError(''); setMessage(''); fileInputRef.current && (fileInputRef.current.value = ''); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="h-8 border-teal-200 px-3 text-xs text-teal-700 hover:bg-teal-50">重新提交</Button>
+                      )}
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[record.status] || 'bg-slate-100 text-slate-600'}`}>{record.status}</span>
                     </div>
                   </div>

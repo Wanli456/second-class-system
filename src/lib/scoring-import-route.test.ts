@@ -52,6 +52,13 @@ async function main() {
     const savedRows = await query('SELECT * FROM scoring_import_rows WHERE import_id=$1', [importId]);
     assert.equal(savedRows.length, 1);
 
+    // 按原记录 ID 重新提交：仍是同一条记录，并递增次数
+    const resubmitted = await POST(req('POST', { id: importId, className: '计算机2101', fileName: 't-resubmit.xlsx', rows: [goodRow] }, tokenSubmitter));
+    const resubmittedBody = await resubmitted.json() as { data: { id: string; submissionCount: number } };
+    assert.equal(resubmitted.status, 200, JSON.stringify(resubmittedBody));
+    assert.equal(resubmittedBody.data.id, importId);
+    assert.equal(resubmittedBody.data.submissionCount, 2);
+
     // 非法数据  自动驳回，并给出明细
     const badRes = await POST(req('POST', {
       rows: [goodRow, { ...goodRow, rowNumber: 8, studentId: 'abc' }, { ...goodRow, rowNumber: 9, creditType: '德积分', categoryPrimary: '工匠精神', categorySecondary: '技能提升证书' }],
@@ -83,8 +90,8 @@ async function main() {
     );
     assert.equal(after?.status, '已确认');
     assert.equal(after?.confirmed_by_name, '赋分确认人');
-    // 已确认记录不能被同名重提交覆盖
-    assert.equal((await POST(req('POST', { className: '计算机2101', fileName: 't.xlsx', rows: [goodRow] }, tokenSubmitter))).status, 409);
+    // 已确认记录不能按原记录 ID 重提交覆盖
+    assert.equal((await POST(req('POST', { id: importId, className: '计算机2101', fileName: 't-resubmit.xlsx', rows: [goodRow] }, tokenSubmitter))).status, 409);
     // 重复确认  409
     assert.equal((await PUT(req('PUT', { id: importId }, tokenScorer))).status, 409);
   } finally {

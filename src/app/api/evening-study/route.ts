@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
     const idempotencyKey = scopeIdempotencyKey(auth.user!.id, requestKey);
     const body = await request.json();
     const { type, ...data } = body;
+    const submissionId = typeof body.submission_id === 'string' ? body.submission_id.trim() : '';
     if (type !== "attendance" && type !== "schedule") {
       return NextResponse.json({ success: false, error: "记录类型不正确" }, { status: 400 });
     }
@@ -95,11 +96,23 @@ export async function POST(request: NextRequest) {
       }
       const result = await withTransaction(async (client) => {
         await lockTransactionKey(client, idempotencyKey);
+        if (submissionId) {
+          const current = (await client.query<{ id: string; created_by_user_id: string | null }>('SELECT id,created_by_user_id FROM evening_study_attendance WHERE id=$1', [submissionId])).rows[0];
+          if (!current) throw Object.assign(new Error('原晚自习考勤记录不存在'), { status: 404 });
+          if (current.created_by_user_id && current.created_by_user_id !== auth.user!.id && auth.user!.role !== 'admin') throw Object.assign(new Error('只能由原提交人重新提交考勤记录'), { status: 403 });
+          const updated = (await client.query(
+            `UPDATE evening_study_attendance SET schedule_id=$1,date=$2,class_name=$3,total_count=$4,present_count=$5,absent_count=$6,discipline_status=$7,notes=$8,checker_name=$9,created_by_user_id=$10,created_by_name=$11,idempotency_key=$12,submission_count=COALESCE(submission_count,1)+1 WHERE id=$13 RETURNING *`,
+            [data.schedule_id, data.date, data.class_name, data.total_count, data.present_count, validation.absentCount, data.discipline_status || '良好', data.notes, data.checker_name, auth.user!.id, auth.user!.username, idempotencyKey, submissionId],
+          )).rows[0] || null;
+          if (!updated) throw new Error('考勤记录更新失败，请重试');
+          await writeAuditLog({ actor: auth.user, action: 'resubmit_evening_study_attendance', resourceType: 'evening_study_attendance', resourceId: submissionId, details: { submissionCount: updated.submission_count } }, client);
+          return updated;
+        }
         const repeated = await client.query('SELECT * FROM evening_study_attendance WHERE idempotency_key=$1', [idempotencyKey]);
         if (repeated.rows[0]) return null;
         const inserted = await client.query(
-        `INSERT INTO evening_study_attendance (schedule_id, date, class_name, total_count, present_count, absent_count, discipline_status, notes, checker_name, idempotency_key)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (idempotency_key) DO NOTHING
+        `INSERT INTO evening_study_attendance (schedule_id, date, class_name, total_count, present_count, absent_count, discipline_status, notes, checker_name, created_by_user_id, created_by_name, idempotency_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (idempotency_key) DO NOTHING
          RETURNING *`,
         [
           data.schedule_id,
@@ -111,6 +124,8 @@ export async function POST(request: NextRequest) {
           data.discipline_status || "良好",
           data.notes,
           data.checker_name,
+          auth.user!.id,
+          auth.user!.username,
           idempotencyKey,
         ]
         );
@@ -129,13 +144,25 @@ export async function POST(request: NextRequest) {
     if (validation) return NextResponse.json({ success: false, error: validation }, { status: 400 });
     const result = await withTransaction(async (client) => {
       await lockTransactionKey(client, idempotencyKey);
+      if (submissionId) {
+        const current = (await client.query<{ id: string; created_by_user_id: string | null }>('SELECT id,created_by_user_id FROM evening_study_schedules WHERE id=$1', [submissionId])).rows[0];
+        if (!current) throw Object.assign(new Error('原晚自习安排记录不存在'), { status: 404 });
+        if (current.created_by_user_id && current.created_by_user_id !== auth.user!.id && auth.user!.role !== 'admin') throw Object.assign(new Error('只能由原提交人重新提交晚自习安排'), { status: 403 });
+        const updated = (await client.query(
+          `UPDATE evening_study_schedules SET date=$1,weekday=$2,class_name=$3,classroom=$4,checker_name=$5,checker_phone=$6,notes=$7,created_by_user_id=$8,created_by_name=$9,idempotency_key=$10,submission_count=COALESCE(submission_count,1)+1,updated_at=NOW() WHERE id=$11 RETURNING *`,
+          [data.date, data.weekday, data.class_name, data.classroom, data.checker_name, data.checker_phone, data.notes, auth.user!.id, auth.user!.username, idempotencyKey, submissionId],
+        )).rows[0] || null;
+        if (!updated) throw new Error('晚自习安排更新失败，请重试');
+        await writeAuditLog({ actor: auth.user, action: 'resubmit_evening_study_schedule', resourceType: 'evening_study_schedule', resourceId: submissionId, details: { submissionCount: updated.submission_count } }, client);
+        return updated;
+      }
       const repeated = await client.query('SELECT * FROM evening_study_schedules WHERE idempotency_key=$1', [idempotencyKey]);
       if (repeated.rows[0]) return null;
       const inserted = await client.query(
-      `INSERT INTO evening_study_schedules (date, weekday, class_name, classroom, checker_name, checker_phone, notes, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (idempotency_key) DO NOTHING
+      `INSERT INTO evening_study_schedules (date, weekday, class_name, classroom, checker_name, checker_phone, notes, created_by_user_id, created_by_name, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (idempotency_key) DO NOTHING
        RETURNING *`,
-      [data.date, data.weekday, data.class_name, data.classroom, data.checker_name, data.checker_phone, data.notes, idempotencyKey]
+      [data.date, data.weekday, data.class_name, data.classroom, data.checker_name, data.checker_phone, data.notes, auth.user!.id, auth.user!.username, idempotencyKey]
       );
       if (inserted.rows[0]) await writeAuditLog({ actor: auth.user, action: 'create_evening_study_schedule', resourceType: 'evening_study_schedule', resourceId: inserted.rows[0].id }, client);
       return inserted.rows[0] || null;
@@ -148,7 +175,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
     console.error("创建晚自习记录失败:", error);
-    return NextResponse.json({ success: false, error: "创建失败" }, { status: 500 });
+    const status = error && typeof error === 'object' && 'status' in error && typeof error.status === 'number' ? error.status : 500;
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "创建失败" }, { status });
   }
 }
 
@@ -186,6 +214,7 @@ export async function PUT(request: NextRequest) {
 
     const current = await queryOne<Record<string, unknown>>('SELECT * FROM evening_study_schedules WHERE id=$1', [id.trim()]);
     if (!current) return NextResponse.json({ success: false, error: "晚自习记录不存在" }, { status: 404 });
+    if (current.created_by_user_id && current.created_by_user_id !== auth.user!.id && auth.user!.role !== 'admin') return NextResponse.json({ success: false, error: '只能修改自己提交的晚自习安排' }, { status: 403 });
     const merged = { ...current, ...data };
     const validation = validateEveningSchedule(merged);
     if (validation) return NextResponse.json({ success: false, error: validation }, { status: 400 });
@@ -201,6 +230,7 @@ export async function PUT(request: NextRequest) {
     }
 
     setClauses.push(`updated_at = NOW()`);
+    setClauses.push('submission_count = COALESCE(submission_count,1) + 1');
     params.push(id.trim());
 
     const result = await withTransaction(async (client) => {

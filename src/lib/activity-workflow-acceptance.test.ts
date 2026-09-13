@@ -51,7 +51,7 @@ async function run() {
   await expectStatus(await review(request({ id, review_status: '已驳回', review_note: '请补充材料' }, 'local-publisher')), 200);
   await expectStatus(await review(request({ id, review_status: '已通过' }, 'local-publisher')), 400);
   await expectStatus(await submit(request({ ...payload, submission_id: id, full_name: '验收活动-重提' }, 'local-leader', 'acceptance-resubmit')), 200);
-  assert.equal((await queryOne('SELECT review_status FROM activity_submissions WHERE id=$1', [id]))?.review_status, '待审核');
+  assert.deepEqual(await queryOne('SELECT review_status,submission_count FROM activity_submissions WHERE id=$1', [id]), { review_status: '待审核', submission_count: 2 });
   const reviewed = await Promise.all([review(request({ id, review_status: '已通过' }, 'local-publisher')), review(request({ id, review_status: '已通过' }, 'local-publisher'))]);
   await expectSingleWinner(reviewed);
   const approved = await (reviewed.find((response) => response.status === 200)!).json();
@@ -62,6 +62,7 @@ async function run() {
   console.log('PASS rejection/resubmit/concurrent approval:', reviewed.map((response) => response.status), 'one activity', activityId);
   await expectStatus(await score(request({ id: activityId }, 'local-scorer')), 400);
   await expectStatus(await update(request({ id: activityId, scoring_table_url: '/uploads/acceptance.xlsx' })), 200);
+  assert.equal((await queryOne('SELECT submission_count FROM activities WHERE id=$1', [activityId]))?.submission_count, 1);
   const scored = await Promise.all([score(request({ id: activityId }, 'local-scorer')), score(request({ id: activityId }, 'local-scorer'))]);
   await expectSingleWinner(scored);
   assert.equal((await queryOne('SELECT scoring_status FROM activities WHERE id=$1', [activityId]))?.scoring_status, '已赋分');

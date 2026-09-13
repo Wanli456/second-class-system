@@ -59,10 +59,14 @@ async function run(): Promise<void> {
   assert.equal((await reviewLeaveSlip(request('http://localhost/api/leave-slips/review', 'PUT', 'local-student', { id: approvedId, review_status: '已通过' }))).status, 403);
   assert.equal((await reviewLeaveSlip(request('http://localhost/api/leave-slips/review', 'PUT', 'local-leave-reviewer', { id: approvedId, review_status: '已通过', review_note: '材料符合' }))).status, 200);
   assert.equal((await queryOne<{ review_status: string }>('SELECT review_status FROM leave_slips WHERE id=$1', [approvedId]))?.review_status, '已通过');
+  assert.equal((await submitLeaveSlip(request('http://localhost/api/leave-slips', 'POST', 'local-admin', { ...payload(), submission_id: approvedId }, 'leave-acceptance-approved-resubmit'))).status, 400);
 
   const rejectedId = await submit('leave-acceptance-rejected');
   assert.equal((await reviewLeaveSlip(request('http://localhost/api/leave-slips/review', 'PUT', 'local-leave-reviewer', { id: rejectedId, review_status: '已驳回', review_note: '缺少材料' }))).status, 200);
   assert.equal((await queryOne<{ review_status: string }>('SELECT review_status FROM leave_slips WHERE id=$1', [rejectedId]))?.review_status, '已驳回');
+  const resubmitted = await submitLeaveSlip(request('http://localhost/api/leave-slips', 'POST', 'local-admin', { ...payload(), submission_id: rejectedId }, 'leave-acceptance-rejected-resubmit'));
+  assert.equal(resubmitted.status, 200);
+  assert.deepEqual(await queryOne('SELECT review_status,submission_count FROM leave_slips WHERE id=$1', [rejectedId]), { review_status: '待查对', submission_count: 2 });
 
   await query(`INSERT INTO users (id, username, password, student_id, role, can_review_leave, class_name) VALUES ($1,$2,$3,$4,$5,true,$6)`, ['leave-acceptance-reviewer-2', '第二查对员', 'test123', '9000000098', 'student', '计算机2101']);
   const concurrentId = await submit('leave-acceptance-concurrent');

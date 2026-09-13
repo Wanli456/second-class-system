@@ -44,6 +44,7 @@ export const activities = pgTable(
     scoring_status: varchar("scoring_status", { length: 20 }).notNull().default("待赋分"), // 待赋分/已赋分
     scoring_table_url: text("scoring_table_url"), // 活动赋分表
     scoring_table_file_name: text("scoring_table_file_name"),
+    submission_count: integer("submission_count").notNull().default(1),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -89,6 +90,7 @@ export const activity_submissions = pgTable(
     scoring_material_submitter_name: varchar("scoring_material_submitter_name", { length: 50 }),
     scoring_material_submitter_student_id: varchar("scoring_material_submitter_student_id", { length: 20 }),
     idempotency_key: text("idempotency_key"),
+    submission_count: integer("submission_count").notNull().default(1),
     review_status: varchar("review_status", { length: 20 }).notNull().default("待审核"), // 待审核/已通过/已驳回
     review_note: text("review_note"),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -187,8 +189,11 @@ export const evening_study_schedules = pgTable(
     classroom: varchar("classroom", { length: 50 }).notNull(), // 教室
     checker_name: varchar("checker_name", { length: 50 }), // 检查人员
     checker_phone: varchar("checker_phone", { length: 20 }), // 检查人员电话
+    created_by_user_id: varchar("created_by_user_id", { length: 36 }),
+    created_by_name: varchar("created_by_name", { length: 50 }),
     notes: text("notes"), // 备注
     idempotency_key: text("idempotency_key"),
+    submission_count: integer("submission_count").notNull().default(1),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -213,7 +218,10 @@ export const evening_study_attendance = pgTable(
     discipline_status: varchar("discipline_status", { length: 20 }).notNull().default("良好"), // 纪律状况：优秀/良好/一般/较差
     notes: text("notes"), // 备注
     checker_name: varchar("checker_name", { length: 50 }).notNull(), // 检查人员
+    created_by_user_id: varchar("created_by_user_id", { length: 36 }),
+    created_by_name: varchar("created_by_name", { length: 50 }),
     idempotency_key: text("idempotency_key"),
+    submission_count: integer("submission_count").notNull().default(1),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [

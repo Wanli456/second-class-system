@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Upload } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
@@ -14,6 +14,7 @@ import { ImageUploadPreviews } from '@/components/ImageUploadPreviews';
 type ParsedStudent = { student_id: string; student_name: string; class_name: string };
 type OcrStudentDraft = { student_id: string; student_name: string; class_name: string };
 type UploadedImage = { url: string; name: string };
+type SubmittedTemporaryLeave = { id: string; slip_type: string; leave_type: string; review_status: string; created_at: string; applicant_user_id?: string | null; submission_count?: number; image_list?: string; leave_image_url?: string | null; leave_image_name?: string | null; start_time?: string | null; end_time?: string | null };
 type OcrClassStudents = { class_name?: unknown; students?: unknown; student_ids?: unknown };
 type OcrPayload = {
   success?: boolean;
@@ -140,8 +141,39 @@ export default function TemporaryLeavePage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const submitKeyRef = useRef<string | null>(null);
-
+  const [submittedLeaves, setSubmittedLeaves] = useState<SubmittedTemporaryLeave[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const canStart = Boolean(user && (user.role === 'admin' || hasPermission(user, 'canStartGroupLeave')));
+
+  const loadSubmittedLeaves = async () => {
+    try {
+      const response = await apiFetch('/api/leave-slips?self=1');
+      const data = await response.json();
+      if (data.success) setSubmittedLeaves((data.data || []).filter((item: SubmittedTemporaryLeave) => item.applicant_user_id === user?.id && item.slip_type === '其他请假' && item.leave_type === '临时请假'));
+    } catch { setSubmittedLeaves([]); }
+  };
+
+  const startEdit = async (id: string) => {
+    try {
+      const response = await apiFetch(`/api/leave-slips?id=${encodeURIComponent(id)}`);
+      const data = await response.json();
+      const slip = data.success ? data.data?.[0] as SubmittedTemporaryLeave | undefined : undefined;
+      if (!slip) throw new Error(data.error || '临时请假记录不存在');
+      const rows = Array.isArray(data.students) ? data.students as ParsedStudent[] : [];
+      const images = (() => { try { const parsed = JSON.parse(slip.image_list || '[]'); return Array.isArray(parsed) ? parsed.map((item: { url?: unknown; name?: unknown }) => ({ url: String(item.url || ''), name: String(item.name || '') })).filter((item: { url: string }) => item.url) : []; } catch { return []; } })();
+      setEditingId(slip.id);
+      setStudentsText(rows.map((row) => `${row.student_id} ${row.student_name} ${row.class_name}`).join('\n'));
+      setStartTime(slip.start_time?.slice(0, 16) || '');
+      setEndTime(slip.end_time?.slice(0, 16) || '');
+      setUploadedImages(images.length ? images : (slip.leave_image_url ? [{ url: slip.leave_image_url, name: slip.leave_image_name || '临时请假图片' }] : []));
+      setImageFiles([]);
+      setPreviews((images.length ? images : (slip.leave_image_url ? [{ url: slip.leave_image_url, name: slip.leave_image_name || '临时请假图片' }] : [])).map((item: { url: string }) => item.url));
+      setSuccess(null);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (editError) { setError(editError instanceof Error ? editError.message : '读取临时请假记录失败'); }
+  };
+
+  useEffect(() => { if (initialized && user && canStart) void loadSubmittedLeaves(); }, [canStart, initialized, user]);
 
   if (!initialized) return <AuthLoadingScreen />;
   if (!user) {
@@ -171,6 +203,11 @@ export default function TemporaryLeavePage() {
       return;
     }
     setError(null);
+    if (editingId) {
+      setImageFiles(files);
+      setUploadedImages([]);
+      setPreviews([]);
+    }
     setRecognizing(true);
     let imagesUploaded = false;
     try {
@@ -186,8 +223,8 @@ export default function TemporaryLeavePage() {
         if (!upload.url) throw new Error('图片上传后未返回地址');
         uploaded.push({ url: String(upload.url), name: String(upload.file_name || file.name) });
       }
-      setImageFiles((previous) => [...previous, ...files]);
-      setUploadedImages((previous) => [...previous, ...uploaded]);
+      setImageFiles((previous) => editingId ? files : [...previous, ...files]);
+      setUploadedImages((previous) => editingId ? uploaded : [...previous, ...uploaded]);
       files.forEach((file) => { const reader = new FileReader(); reader.onload = () => setPreviews((previous) => [...previous, String(reader.result)]); reader.readAsDataURL(file); });
       imagesUploaded = true;
       // 复用前面已上传的文件，避免同一批图片重复写入服务器。
@@ -221,8 +258,8 @@ export default function TemporaryLeavePage() {
     if (endTime <= startTime) { setError('结束时间必须晚于开始时间'); return; }
     const students = parseStudentLines(studentsText);
     if (!students.length || students.some((student) => !student.class_name)) { setError('请至少填写一名学生，并补全学号、姓名、班级；三项顺序不限'); return; }
-    if (!imageFiles.length) { setError('请上传临时请假图片'); return; }
-    if (imageFiles.length !== uploadedImages.length) { setError('请等待图片上传完成后再提交'); return; }
+    if (!imageFiles.length && !uploadedImages.length) { setError('请上传临时请假图片'); return; }
+    if (imageFiles.length && imageFiles.length !== uploadedImages.length) { setError('请等待图片上传完成后再提交'); return; }
 
     setSubmitting(true);
     try {
@@ -233,6 +270,7 @@ export default function TemporaryLeavePage() {
         body: JSON.stringify({
           slip_type: '其他请假',
           leave_type: '临时请假',
+          submission_id: editingId,
           class_names: [...new Set(students.map((student) => student.class_name))],
           students,
           start_time: startTime,
@@ -245,12 +283,15 @@ export default function TemporaryLeavePage() {
       if (!data.success) throw new Error(data.error || '提交失败');
       const warningText = Array.isArray(data.warnings) && data.warnings.length ? `（${data.warnings.join('；')}）` : '';
       submitKeyRef.current = null;
-      setSuccess(`临时请假已提交，等待人工查对。${warningText}`);
+      const attempt = Number(data.data?.submission_count || 1);
+      setSuccess(`临时请假已提交，等待人工查对。${attempt > 1 ? `第 ${attempt} 次提交。` : ''}${warningText}`);
       setStudentsText('');
       setImageFiles([]);
       setUploadedImages([]);
       setPreviews([]);
       setOcrText('');
+      setEditingId(null);
+      await loadSubmittedLeaves();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : '提交失败');
     } finally {
@@ -305,10 +346,19 @@ export default function TemporaryLeavePage() {
 
           <div className="mt-5">
             <Button type="button" onClick={() => void submit()} disabled={submitting || recognizing} className="bg-slate-950 hover:bg-slate-800">
-              {submitting ? '提交中...' : recognizing ? '正在自动识别...' : '提交，等待查对'}
+              {submitting ? '提交中...' : recognizing ? '正在自动识别...' : editingId ? '重新提交，等待查对' : '提交，等待查对'}
             </Button>
           </div>
         </div>
+        {submittedLeaves.length > 0 && (
+          <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="font-semibold text-slate-950">我的临时请假记录</h3>
+            <p className="mt-1 text-xs text-slate-500">重新提交会覆盖原记录；已通过的记录不能覆盖。</p>
+            <div className="mt-3 space-y-2">
+              {submittedLeaves.map((leave) => <div key={leave.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5"><span className="text-sm font-medium text-slate-800">{leave.start_time?.slice(0, 16).replace('T', ' ') || '-'} 至 {leave.end_time?.slice(0, 16).replace('T', ' ') || '-'}</span><span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{leave.review_status}</span>{Number(leave.submission_count || 1) > 1 && <span className="text-xs text-amber-700">第 {leave.submission_count} 次提交</span>}<span className="ml-auto text-xs text-slate-400">{leave.created_at.slice(0, 16).replace('T', ' ')}</span>{leave.review_status !== '已通过' && <Button type="button" variant="outline" size="sm" onClick={() => void startEdit(leave.id)} className="border-teal-200 text-teal-700 hover:bg-teal-50">重新提交</Button>}</div>)}
+            </div>
+          </section>
+        )}
       </div>
 
       <PageErrorDialog open={Boolean(error)} message={error} onClose={() => setError(null)} />

@@ -125,6 +125,7 @@ if (localDb && shouldInitializeLocalDb) {
       scoring_status TEXT NOT NULL DEFAULT '待赋分',
       scoring_table_url TEXT,
       scoring_table_file_name TEXT,
+      submission_count INTEGER NOT NULL DEFAULT 1,
       idempotency_key TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -164,6 +165,7 @@ if (localDb && shouldInitializeLocalDb) {
       scoring_material_submitter_id TEXT,
       scoring_material_submitter_name TEXT,
        scoring_material_submitter_student_id TEXT,
+       submission_count INTEGER NOT NULL DEFAULT 1,
        idempotency_key TEXT,
        review_status TEXT NOT NULL DEFAULT '待审核',
       review_note TEXT,
@@ -237,7 +239,10 @@ if (localDb && shouldInitializeLocalDb) {
       classroom TEXT NOT NULL,
       checker_name TEXT,
       checker_phone TEXT,
+      created_by_user_id TEXT,
+      created_by_name TEXT,
        notes TEXT,
+       submission_count INTEGER NOT NULL DEFAULT 1,
        idempotency_key TEXT,
        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -254,6 +259,9 @@ if (localDb && shouldInitializeLocalDb) {
       discipline_status TEXT NOT NULL DEFAULT '良好',
       notes TEXT,
        checker_name TEXT NOT NULL,
+       created_by_user_id TEXT,
+       created_by_name TEXT,
+       submission_count INTEGER NOT NULL DEFAULT 1,
        idempotency_key TEXT,
        created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
@@ -453,6 +461,7 @@ async function migrateDatabaseSchema(): Promise<void> {
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_photo_url TEXT;
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_photo_file_name TEXT;
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_table_file_name TEXT;
+    ALTER TABLE activities ADD COLUMN IF NOT EXISTS submission_count INTEGER NOT NULL DEFAULT 1;
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS registration_start_time TIMESTAMP;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS registration_end_time TIMESTAMP;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
@@ -489,6 +498,7 @@ async function migrateDatabaseSchema(): Promise<void> {
      ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS registration_start_time TIMESTAMP;
      ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS registration_end_time TIMESTAMP;
      ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+    ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS submission_count INTEGER NOT NULL DEFAULT 1;
 
     -- 审核人追溯 + 审核任务领取（避免两个人同时处理同一条提交）
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS reviewed_by_id TEXT;
@@ -498,6 +508,13 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS review_claimed_by_name TEXT;
     ALTER TABLE activity_submissions ADD COLUMN IF NOT EXISTS review_claimed_at TIMESTAMP;
      CREATE UNIQUE INDEX IF NOT EXISTS activity_submissions_idempotency_key_idx ON activity_submissions (idempotency_key);
+
+    ALTER TABLE evening_study_schedules ADD COLUMN IF NOT EXISTS created_by_user_id TEXT;
+    ALTER TABLE evening_study_schedules ADD COLUMN IF NOT EXISTS created_by_name TEXT;
+    ALTER TABLE evening_study_schedules ADD COLUMN IF NOT EXISTS submission_count INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE evening_study_attendance ADD COLUMN IF NOT EXISTS created_by_user_id TEXT;
+    ALTER TABLE evening_study_attendance ADD COLUMN IF NOT EXISTS created_by_name TEXT;
+    ALTER TABLE evening_study_attendance ADD COLUMN IF NOT EXISTS submission_count INTEGER NOT NULL DEFAULT 1;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_user_id TEXT;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_name TEXT;
     ALTER TABLE leave_requests ADD COLUMN IF NOT EXISTS applicant_student_id TEXT;
@@ -643,6 +660,7 @@ async function migrateDatabaseSchema(): Promise<void> {
         official_seal BOOLEAN NOT NULL DEFAULT false,
         teacher_signature BOOLEAN NOT NULL DEFAULT false,
          is_late BOOLEAN NOT NULL DEFAULT false,
+         submission_count INTEGER NOT NULL DEFAULT 1,
          idempotency_key TEXT,
          review_status TEXT NOT NULL DEFAULT '待查对',
         review_note TEXT,
@@ -679,6 +697,7 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS review_claimed_by_name TEXT;
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS review_claimed_at TIMESTAMP;
     ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+    ALTER TABLE leave_slips ADD COLUMN IF NOT EXISTS submission_count INTEGER NOT NULL DEFAULT 1;
     CREATE UNIQUE INDEX IF NOT EXISTS leave_slips_idempotency_key_idx ON leave_slips (idempotency_key);
   `);
 
@@ -745,6 +764,7 @@ async function migrateDatabaseSchema(): Promise<void> {
         notes TEXT,
          created_by_user_id TEXT,
          created_by_name TEXT,
+         submission_count INTEGER NOT NULL DEFAULT 1,
          idempotency_key TEXT,
          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -760,6 +780,7 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS ocr_names TEXT NOT NULL DEFAULT '[]';
     ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS image_hashes TEXT NOT NULL DEFAULT '[]';
     ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+    ALTER TABLE original_leave_slips ADD COLUMN IF NOT EXISTS submission_count INTEGER NOT NULL DEFAULT 1;
     CREATE UNIQUE INDEX IF NOT EXISTS original_leave_slips_idempotency_key_idx ON original_leave_slips (idempotency_key);
   `);
 
@@ -781,6 +802,7 @@ async function migrateDatabaseSchema(): Promise<void> {
         reviewed_at TIMESTAMP,
         created_by_user_id TEXT,
         created_by_name TEXT,
+        submission_count INTEGER NOT NULL DEFAULT 1,
         idempotency_key TEXT,
         created_at TIMESTAMP NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -805,6 +827,7 @@ async function migrateDatabaseSchema(): Promise<void> {
     ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS created_by_name TEXT;
     ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
     ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+    ALTER TABLE attendance_work_arrangements ADD COLUMN IF NOT EXISTS submission_count INTEGER NOT NULL DEFAULT 1;
     CREATE UNIQUE INDEX IF NOT EXISTS attendance_work_arrangements_idempotency_key_idx ON attendance_work_arrangements (idempotency_key);
   `);
 

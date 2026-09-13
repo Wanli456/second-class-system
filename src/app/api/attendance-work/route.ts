@@ -241,6 +241,7 @@ export async function PUT(request: NextRequest) {
       [id],
     );
     if (!existing) return NextResponse.json({ success: false, error: '考勤工作安排不存在' }, { status: 404 });
+    if (existing.review_status === '已通过') return NextResponse.json({ success: false, error: '已通过的考勤工作安排不能重新提交' }, { status: 400 });
     if (user.role !== 'admin' && user.role !== 'leader' && existing.created_by_user_id && existing.created_by_user_id !== user.id) {
       return NextResponse.json({ success: false, error: '只能修改自己提交的安排' }, { status: 403 });
     }
@@ -296,6 +297,7 @@ export async function PUT(request: NextRequest) {
       const row = (await client.query(
         `UPDATE attendance_work_arrangements
          SET name=$1, start_date=$2, end_date=$3, student_names=$4, schedules=$5, image_list=$6, ocr_names=$7,
+             submission_count=COALESCE(submission_count,1)+1,
              review_status='待查对', review_note='临时修改，待重新查对', reviewed_by_user_id=NULL, reviewed_by_name=NULL, reviewed_at=NULL, updated_at=NOW()
          WHERE id=$8
          RETURNING id`,

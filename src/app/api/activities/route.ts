@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       if (status) { params.push(status); clauses.push(`scoring_status=$${params.length}`); }
       if (level) { params.push(level); clauses.push(`level=$${params.length}`); }
       const data = await query(
-      `SELECT id,full_name,start_time,end_time,registration_start_time,registration_end_time,level,category,category_primary,category_secondary,leader_name,leader_phone,leader_ids,leader_details,scoring_status,scoring_table_url,scoring_table_file_name,record_file_url,record_file_name,record_photo_url,record_photo_file_name,scope_names,scope_type,scope_name,activity_submitter_name,activity_submitter_student_id,scoring_material_submitter_name,scoring_material_submitter_student_id FROM activities WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC`,
+      `SELECT id,full_name,start_time,end_time,registration_start_time,registration_end_time,level,category,category_primary,category_secondary,leader_name,leader_phone,leader_ids,leader_details,scoring_status,scoring_table_url,scoring_table_file_name,record_file_url,record_file_name,record_photo_url,record_photo_file_name,scope_names,scope_type,scope_name,activity_submitter_name,activity_submitter_student_id,scoring_material_submitter_name,scoring_material_submitter_student_id,submission_count FROM activities WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC`,
         params,
       );
       const visible = auth.user!.role === 'admin'
@@ -168,6 +168,9 @@ export async function PUT(request: NextRequest) {
     }
     const params: unknown[] = [];
     const setClauses = safeKeys.map((key) => { params.push(updates[key]); return `${key}=$${params.length}`; });
+    const isScoringResubmission = isScoringMaterialSubmission
+      && Boolean(activity.scoring_table_url || activity.record_photo_url || activity.scoring_material_submitter_id);
+    if (isScoringResubmission) setClauses.push('submission_count=COALESCE(submission_count,1)+1');
     params.push(id);
     // 赋分材料提交需要用 WHERE scoring_status<>'已赋分' 做原子守卫：如果在读取校验和这次写入
     // 之间，该活动已被赋分完成，这里必须失败，不能在赋分之后还悄悄改动已提交的材料。

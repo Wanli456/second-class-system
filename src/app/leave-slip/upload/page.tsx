@@ -16,6 +16,7 @@ import { normalizeDateTimeInput } from '@/lib/datetime';
 
 interface StudentRow { student_id: string; student_name: string; class_name: string; }
 interface ActivityOption { id: string; full_name: string; }
+interface SubmittedSlip { id: string; slip_type: string; leave_type: string; review_status: string; created_at: string; applicant_user_id?: string | null; submission_count?: number; image_list?: string; leave_image_url?: string | null; leave_image_name?: string | null; start_time?: string | null; end_time?: string | null; activity_id?: string | null; activity_name?: string | null; counselor_signature?: boolean; official_seal?: boolean; teacher_signature?: boolean; }
 
 const SLIP_TYPES = [
   { value: '手写假条', description: '严格按模板填写，必须有辅导员签字', icon: FileCheck2 },
@@ -133,6 +134,9 @@ export default function LeaveSlipUploadPage() {
   const uploadCacheRef = useRef(new Map<string, { url: string; name: string }>());
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [submittedSlips, setSubmittedSlips] = useState<SubmittedSlip[]>([]);
+  const [editingSlipId, setEditingSlipId] = useState<string | null>(null);
+  const [existingImages, setExistingImages] = useState<Array<{ url: string; name: string }>>([]);
 
   const canAccess = hasPermission(user, 'canUploadLeave');
   const canChooseClass = Boolean(user && (user.role === 'admin' || user.role === 'leader'));
@@ -148,6 +152,16 @@ export default function LeaveSlipUploadPage() {
       if (data.success) setActivityOptions(data.data || []);
     }).catch(() => {});
   }, [leaveType, slipType]);
+
+  const loadSubmittedSlips = async () => {
+    try {
+      const response = await apiFetch('/api/leave-slips?self=1');
+      const data = await response.json();
+      if (data.success) setSubmittedSlips((data.data || []).filter((slip: SubmittedSlip) => slip.applicant_user_id === user?.id));
+    } catch { setSubmittedSlips([]); }
+  };
+
+  useEffect(() => { if (initialized && user && canAccess) void loadSubmittedSlips(); }, [canAccess, initialized, user]);
 
   const activityOptionsFiltered = useMemo(() => {
     return activityOptions.slice(0, 100);
@@ -166,7 +180,11 @@ export default function LeaveSlipUploadPage() {
       setError('单张假条图片不能超过 5MB');
       return;
     }
-    const allFiles = [...imageFiles, ...files];
+    const allFiles = editingSlipId ? files : [...imageFiles, ...files];
+    if (editingSlipId) {
+      setExistingImages([]);
+      setImagePreviews([]);
+    }
     setImageFiles(allFiles);
     files.forEach((file) => {
       const reader = new FileReader();
@@ -177,9 +195,38 @@ export default function LeaveSlipUploadPage() {
     void runOcrForFiles(allFiles);
   };
 
+  const startEditSlip = async (id: string) => {
+    try {
+      const response = await apiFetch(`/api/leave-slips?id=${encodeURIComponent(id)}`);
+      const data = await response.json();
+      const slip = data.success ? data.data?.[0] as SubmittedSlip | undefined : undefined;
+      if (!slip) throw new Error(data.error || '假条不存在');
+      setEditingSlipId(slip.id);
+      setSlipType(slip.slip_type as (typeof SLIP_TYPES)[number]['value']);
+      setLeaveType(slip.leave_type);
+      setStartTime(slip.start_time?.slice(0, 16) || '');
+      setEndTime(slip.end_time?.slice(0, 16) || '');
+      setActivityId(slip.activity_id || '');
+      setActivityName(slip.activity_name || '');
+      setCounselorSignature(Boolean(slip.counselor_signature));
+      setOfficialSeal(Boolean(slip.official_seal));
+      setTeacherSignature(Boolean(slip.teacher_signature));
+      const images = (() => { try { const parsed = JSON.parse(slip.image_list || '[]'); return Array.isArray(parsed) ? parsed.map((item: { url?: unknown; name?: unknown }) => ({ url: String(item.url || ''), name: String(item.name || '') })).filter((item: { url: string }) => item.url) : []; } catch { return []; } })();
+      const fallback = slip.leave_image_url ? [{ url: slip.leave_image_url, name: slip.leave_image_name || '假条图片' }] : [];
+      setExistingImages(images.length ? images : fallback);
+      setImageFiles([]);
+      setImagePreviews((images.length ? images : fallback).map((item: { url: string }) => item.url));
+      const rows = Array.isArray(data.students) ? data.students as StudentRow[] : [];
+      setStudents(rows.length ? rows : [{ student_id: '', student_name: '', class_name: user?.className || '' }]);
+      setSuccess(null);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (editError) { setError(editError instanceof Error ? editError.message : '读取假条失败'); }
+  };
+
   const removeImage = (index: number) => {
     setImageFiles((previous) => previous.filter((_, itemIndex) => itemIndex !== index));
     setImagePreviews((previous) => previous.filter((_, itemIndex) => itemIndex !== index));
+    if (editingSlipId && !imageFiles.length) setExistingImages((previous) => previous.filter((_, itemIndex) => itemIndex !== index));
     setOcrLines([]);
     setOcrError('');
     setOcrNotice('');
@@ -346,7 +393,7 @@ export default function LeaveSlipUploadPage() {
     const normalizedEndTime = normalizeDateTimeInput(endTime);
     if (!normalizedStartTime || !normalizedEndTime) { setError('请填写正确的请假开始和结束时间'); return; }
     if (normalizedEndTime <= normalizedStartTime) { setError('结束时间必须晚于开始时间'); return; }
-    if (!imageFiles.length) { setError('请上传假条图片（可多选截图）'); return; }
+    if (!imageFiles.length && !existingImages.length) { setError('请上传假条图片（可多选截图）'); return; }
     if (slipType === '校级（且不为数经举办）假条' && imageFiles.length < 2) {
       setError('校级（且不为数经举办）假条必须同时上传：假条截图 + 到梦空间“等待活动”手机截图，共至少 2 张');
       return;
@@ -359,7 +406,7 @@ export default function LeaveSlipUploadPage() {
 
     setSubmitting(true);
     try {
-      const uploaded = await uploadFilesToUrls(imageFiles);
+      const uploaded = imageFiles.length ? await uploadFilesToUrls(imageFiles) : existingImages;
 
       const idempotencyKey = submitKeyRef.current || (submitKeyRef.current = createIdempotencyKey());
       const response = await apiFetch('/api/leave-slips', {
@@ -380,9 +427,10 @@ export default function LeaveSlipUploadPage() {
           counselor_signature: counselorSignature,
           official_seal: officialSeal,
           teacher_signature: teacherSignature,
+          submission_id: editingSlipId,
         }),
       });
-      let data: { success?: boolean; error?: unknown };
+      let data: { success?: boolean; error?: unknown; data?: SubmittedSlip };
       try {
         data = await response.json() as { success?: boolean; error?: unknown };
       } catch {
@@ -392,7 +440,8 @@ export default function LeaveSlipUploadPage() {
         throw new Error(typeof data.error === 'string' && data.error ? data.error : `提交失败（HTTP ${response.status}）`);
       }
       submitKeyRef.current = null;
-      setSuccess('假条提交成功，当前状态：待查对');
+      const attempt = Number(data.data?.submission_count || 1);
+      setSuccess(`假条提交成功，当前状态：待查对${attempt > 1 ? `；第 ${attempt} 次提交` : ''}`);
       setImageFiles([]);
       setImagePreviews([]);
       setStartTime('');
@@ -401,6 +450,9 @@ export default function LeaveSlipUploadPage() {
       setCounselorSignature(false);
       setOfficialSeal(false);
       setTeacherSignature(false);
+      setEditingSlipId(null);
+      setExistingImages([]);
+      await loadSubmittedSlips();
     } catch (submitError) {
       const message = submitError instanceof Error && submitError.message ? submitError.message : '未知原因，请稍后重试';
       const isNetworkError = submitError instanceof TypeError && /network|fetch|load/i.test(message);
@@ -573,11 +625,29 @@ export default function LeaveSlipUploadPage() {
           </fieldset>
 
           <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center">
-            <Button type="button" onClick={handleSubmit} disabled={submitting} className="h-11 bg-slate-950 px-5 hover:bg-slate-800"><Send className="size-4" />{submitting ? '提交中...' : '提交假条'}</Button>
+            <Button type="button" onClick={handleSubmit} disabled={submitting} className="h-11 bg-slate-950 px-5 hover:bg-slate-800"><Send className="size-4" />{submitting ? '提交中...' : editingSlipId ? '重新提交假条' : '提交假条'}</Button>
             <Button type="button" variant="outline" asChild className="h-11 bg-white px-5"><Link href="/leave-slip/mine">查看已提交假条</Link></Button>
             <p className="text-xs text-slate-500 sm:ml-auto">上传后由考勤组长查对</p>
           </div>
         </div>
+
+        {submittedSlips.length > 0 && (
+          <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+            <h3 className="font-semibold text-slate-950">我的提交记录</h3>
+            <p className="mt-1 text-xs text-slate-500">重新提交会覆盖原记录；已通过的假条不能覆盖。</p>
+            <div className="mt-4 space-y-2">
+              {submittedSlips.map((slip) => (
+                <div key={slip.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5">
+                  <span className="text-sm font-medium text-slate-800">{slip.slip_type} · {slip.leave_type}</span>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{slip.review_status}</span>
+                  {Number(slip.submission_count || 1) > 1 && <span className="text-xs text-amber-700">第 {slip.submission_count} 次提交</span>}
+                  <span className="ml-auto text-xs text-slate-400">{slip.created_at?.slice(0, 16).replace('T', ' ')}</span>
+                  {slip.review_status !== '已通过' && <Button type="button" variant="outline" size="sm" onClick={() => void startEditSlip(slip.id)} className="border-teal-200 text-teal-700 hover:bg-teal-50">重新提交</Button>}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <Dialog open={Boolean(previewImage)} onOpenChange={(open) => { if (!open) closeImagePreview(); }}>
           <DialogContent

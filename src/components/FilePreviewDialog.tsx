@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Download, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Download, FileText, Image as ImageIcon, Loader2, Maximize2, Minimize2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { previewKind, type PreviewKind } from '@/lib/file-preview';
 import { apiFetch } from '@/lib/client-api';
@@ -20,6 +20,9 @@ type DocumentPreviewState =
   | { status: 'error'; message: string };
 
 const IDLE_DOCUMENT_STATE: DocumentPreviewState = { status: 'idle' };
+type ReadyDocumentPreviewState = Extract<DocumentPreviewState, { status: 'word-ready' | 'excel-ready' }>;
+const DOCUMENT_PREVIEW_CACHE = new Map<string, Promise<ReadyDocumentPreviewState>>();
+const MAX_DOCUMENT_PREVIEWS = 8;
 
 function formatCellValue(value: unknown): string {
   if (value instanceof Date) return formatBusinessDateTime(value);
@@ -152,6 +155,26 @@ async function parseWordDocument(buffer: ArrayBuffer): Promise<string> {
   return sanitizeWordHtml(result.value);
 }
 
+function loadDocumentPreview(kind: 'word' | 'excel', url: string): Promise<ReadyDocumentPreviewState> {
+  const key = `${kind}:${url}`;
+  const cached = DOCUMENT_PREVIEW_CACHE.get(key);
+  if (cached) return cached;
+
+  const task = (async (): Promise<ReadyDocumentPreviewState> => {
+    const buffer = await fetchPreviewBuffer(url);
+    return kind === 'word'
+      ? { status: 'word-ready', html: await parseWordDocument(buffer) }
+      : { status: 'excel-ready', sheets: await parseExcelWorkbook(buffer) };
+  })();
+  if (DOCUMENT_PREVIEW_CACHE.size >= MAX_DOCUMENT_PREVIEWS) {
+    const oldestKey = DOCUMENT_PREVIEW_CACHE.keys().next().value;
+    if (oldestKey) DOCUMENT_PREVIEW_CACHE.delete(oldestKey);
+  }
+  DOCUMENT_PREVIEW_CACHE.set(key, task);
+  task.catch(() => { if (DOCUMENT_PREVIEW_CACHE.get(key) === task) DOCUMENT_PREVIEW_CACHE.delete(key); });
+  return task;
+}
+
 function DocumentLoading() {
   return (
     <div className="flex min-h-[24rem] items-center justify-center gap-2 rounded border bg-white p-8 text-sm text-slate-500">
@@ -280,51 +303,53 @@ export function FilePreviewDialog({
   const kind: PreviewKind = url ? previewKind(fileName, url) : 'unsupported';
   const label = fileName || title || '文件预览';
   const [documentState, setDocumentState] = useState<DocumentPreviewState>(IDLE_DOCUMENT_STATE);
+  const [minimized, setMinimized] = useState(false);
 
   useEffect(() => {
     if (!open || !url || (kind !== 'word' && kind !== 'excel')) {
-      setDocumentState(IDLE_DOCUMENT_STATE);
       return;
     }
 
     let cancelled = false;
     setDocumentState({ status: 'loading' });
 
-    void (async () => {
-      try {
-        const buffer = await fetchPreviewBuffer(url);
-        if (kind === 'word') {
-          const html = await parseWordDocument(buffer);
-          if (!cancelled) setDocumentState({ status: 'word-ready', html });
-        } else {
-          const sheets = await parseExcelWorkbook(buffer);
-          if (!cancelled) setDocumentState({ status: 'excel-ready', sheets });
-        }
-      } catch (error) {
+    void loadDocumentPreview(kind, url)
+      .then((state) => { if (!cancelled) setDocumentState(state); })
+      .catch((error: unknown) => {
         if (cancelled) return;
         const message = error instanceof Error ? error.message : '文件解析失败';
         setDocumentState({ status: 'error', message });
-      }
-    })();
+      });
 
     return () => {
       cancelled = true;
     };
   }, [kind, open, url]);
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) setMinimized(false);
+    onOpenChange(nextOpen);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open && !minimized} onOpenChange={handleOpenChange}>
       <DialogContent className={`flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden p-0 ${kind === 'excel' ? 'sm:max-w-[calc(100vw-2rem)]' : 'sm:max-w-5xl'}`} style={kind === 'excel' ? { width: 'calc(100vw - 2rem)', maxWidth: 'calc(100vw - 2rem)' } : undefined}>
         <DialogHeader className="border-b px-5 py-4 pr-12 sm:flex-row sm:items-center sm:justify-between">
           <DialogTitle className="flex min-w-0 items-center gap-2 text-base">
             {kind === 'image' ? <ImageIcon className="size-4 shrink-0" /> : <FileText className="size-4 shrink-0" />}
             <span className="truncate">{label}</span>
           </DialogTitle>
-          {url && (
-            <a href={url} download={fileName || undefined} className="inline-flex shrink-0 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
-              <Download className="size-4" />下载文件
-            </a>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            {url && (
+              <a href={url} download={fileName || undefined} className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
+                <Download className="size-4" />下载文件
+              </a>
+            )}
+            <button type="button" onClick={() => setMinimized(true)} aria-label="缩小预览" title="缩小预览" className="inline-flex size-9 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">
+              <Minimize2 className="size-4" />
+            </button>
+          </div>
           <DialogDescription className="sr-only">{label}的网页内预览</DialogDescription>
         </DialogHeader>
         <div className={`min-h-0 flex-1 overflow-auto p-4 ${kind === 'word' ? 'bg-white' : 'bg-slate-100'}`}>
@@ -343,7 +368,13 @@ export function FilePreviewDialog({
           {kind === 'unsupported' && <DocumentError message="此文件格式暂不支持网页内预览。" />}
         </div>
       </DialogContent>
-    </Dialog>
+      </Dialog>
+      {open && minimized && (
+        <button type="button" onClick={() => setMinimized(false)} className="fixed right-4 bottom-4 z-[60] inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-lg hover:bg-slate-50" aria-label="恢复文件预览">
+          <Maximize2 className="size-4" />恢复预览
+        </button>
+      )}
+    </>
   );
 }
 
@@ -374,10 +405,31 @@ export function FilePreviewLink({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const kind = url ? previewKind(fileName, url) : 'unsupported';
+  const prefetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (prefetchTimer.current) clearTimeout(prefetchTimer.current);
+  }, []);
+
+  const prefetch = () => {
+    if (!url || (kind !== 'word' && kind !== 'excel') || prefetchTimer.current) return;
+    prefetchTimer.current = setTimeout(() => {
+      prefetchTimer.current = null;
+      void loadDocumentPreview(kind, url).catch(() => undefined);
+    }, 160);
+  };
+  const cancelPrefetch = () => {
+    if (prefetchTimer.current) {
+      clearTimeout(prefetchTimer.current);
+      prefetchTimer.current = null;
+    }
+  };
+
   if (!url) return null;
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={`inline-flex max-w-full items-center gap-1 text-left hover:underline ${className}`} title={`预览${fileName || label}`}>
+      <button type="button" onClick={() => setOpen(true)} onMouseEnter={prefetch} onFocus={prefetch} onMouseLeave={cancelPrefetch} onBlur={cancelPrefetch} className={`inline-flex max-w-full items-center gap-1 text-left hover:underline ${className}`} title={`预览${fileName || label}`}>
         <FileText className="size-3 shrink-0" />
         <span className="truncate">{fileName || label}</span>
       </button>

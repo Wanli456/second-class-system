@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    const requestedId = typeof body.id === 'string' ? body.id.trim() : '';
     const className = String(body.className || '').trim();
     const fileName = String(body.fileName || '').trim() || null;
     const fileUrl = String(body.fileUrl || '').trim() || null;
@@ -51,10 +52,16 @@ export async function POST(request: NextRequest) {
     const status = validation.ok ? IMPORT_STATUS.pending : IMPORT_STATUS.rejected;
 
     const created = await withTransaction(async (client) => {
-      const existing = (await client.query<{ id: string; status: string; submission_count: number }>(
-        `SELECT id, status, submission_count FROM scoring_imports WHERE submitted_by_id=$1 AND file_name=$2 AND COALESCE(class_name,'')=COALESCE($3,'') ORDER BY submitted_at DESC, created_at DESC LIMIT 1`,
-        [auth.user!.id, fileName, className || null],
+      const existing = (await client.query<{ id: string; status: string; submission_count: number; submitted_by_id: string | null }>(
+        requestedId
+          ? 'SELECT id, status, submission_count, submitted_by_id FROM scoring_imports WHERE id=$1'
+          : `SELECT id, status, submission_count, submitted_by_id FROM scoring_imports WHERE submitted_by_id=$1 AND file_name=$2 AND COALESCE(class_name,'')=COALESCE($3,'') ORDER BY submitted_at DESC, created_at DESC LIMIT 1`,
+        requestedId ? [requestedId] : [auth.user!.id, fileName, className || null],
       )).rows[0];
+      if (requestedId && !existing) throw Object.assign(new Error('原班级赋分表提交记录不存在'), { status: 404 });
+      if (requestedId && existing?.submitted_by_id !== auth.user!.id && auth.user!.role !== 'admin') {
+        throw Object.assign(new Error('只能由原提交人重新提交该班级赋分表'), { status: 403 });
+      }
       if (existing?.status === IMPORT_STATUS.confirmed) {
         const error = new Error('该赋分表已确认，不能覆盖已确认记录；请使用新的文件名提交');
         (error as Error & { status?: number }).status = 409;
@@ -67,7 +74,7 @@ export async function POST(request: NextRequest) {
       )).rows[0].id;
       const submissionCount = existing ? Number(existing.submission_count || 1) + 1 : 1;
       if (existing) {
-        await client.query(`UPDATE scoring_imports SET file_url=$1,status=$2,total_rows=$3,valid_rows=$4,issues=$5::jsonb,submitted_by_name=$6,submitted_at=NOW(),submission_count=$7,confirmed_by_id=NULL,confirmed_by_name=NULL,confirmed_at=NULL WHERE id=$8`, [fileUrl, status, rows.length, validation.ok ? rows.length : 0, JSON.stringify(issues), auth.user!.username, submissionCount, importId]);
+        await client.query(`UPDATE scoring_imports SET class_name=$1,file_name=$2,file_url=$3,status=$4,total_rows=$5,valid_rows=$6,issues=$7::jsonb,submitted_by_name=$8,submitted_at=NOW(),submission_count=$9,confirmed_by_id=NULL,confirmed_by_name=NULL,confirmed_at=NULL WHERE id=$10`, [className || null, fileName, fileUrl, status, rows.length, validation.ok ? rows.length : 0, JSON.stringify(issues), auth.user!.username, submissionCount, importId]);
         await client.query('DELETE FROM scoring_import_rows WHERE import_id=$1', [importId]);
       }
       for (const row of rows) {

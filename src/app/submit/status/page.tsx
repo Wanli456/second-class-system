@@ -38,6 +38,7 @@ interface Submission {
   record_file_url?: string;
   record_file_name?: string;
   created_at: string;
+  submission_count?: number;
   source?: 'submission' | 'activity';
 }
 
@@ -186,7 +187,7 @@ export default function SubmitStatusPage() {
                         </div>
                          <p className="mt-1 text-xs text-gray-500">活动时间：{formatBusinessDateTime(s.start_time)} ~ {formatBusinessDateTime(s.end_time)}</p>
                          <p className="mt-0.5 text-xs text-sky-700">活动报名时间：{s.registration_start_time && s.registration_end_time ? `${formatBusinessDateTime(s.registration_start_time)} ~ ${formatBusinessDateTime(s.registration_end_time)}` : '未填写（历史记录）'}</p>
-                        <p className="mt-0.5 text-xs text-gray-500"><ActivityLeaderDetails record={s} /></p>
+                        <p className="mt-0.5 text-xs text-gray-500"><ActivityLeaderDetails record={s} />{Number(s.submission_count || 1) > 1 && <span className="ml-2 text-amber-700">第 {s.submission_count} 次提交</span>}</p>
                         <p className="mt-0.5 text-xs text-gray-500">{formatActivityScopes(s)}</p>
                       </div>
                       <span className={`shrink-0 rounded border px-2 py-0.5 text-xs ${STATUS_COLORS[s.review_status]}`}>

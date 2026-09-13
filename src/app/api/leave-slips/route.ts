@@ -126,6 +126,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    const submissionId = String(body.submission_id || '').trim();
     const slipType = String(body.slip_type || '');
     const normalizedSlipType = slipType;
     const defaultLeaveType = (slipType === '其他请假' ? '社团' : slipType === '二课活动请假' || slipType === '校级（且不为数经举办）假条' ? '活动公假' : '事假');
@@ -223,6 +224,13 @@ export async function POST(request: NextRequest) {
     const ocrNames = parseStringArray(body.ocr_names);
     const imageHashes = await computeImageHashes(imageList.map((item) => item.url));
 
+    if (submissionId) {
+      const current = await queryOne<{ id: string; applicant_user_id: string | null; review_status: string }>('SELECT id,applicant_user_id,review_status FROM leave_slips WHERE id=$1', [submissionId]);
+      if (!current) return NextResponse.json({ success: false, error: '原假条提交记录不存在' }, { status: 404 });
+      if (current.applicant_user_id !== user.id && user.role !== 'admin') return NextResponse.json({ success: false, error: '只能由原提交人重新提交假条' }, { status: 403 });
+      if (current.review_status === '已通过') return NextResponse.json({ success: false, error: '已通过的假条不能重新提交' }, { status: 400 });
+    }
+
     const counselorSignature = body.counselor_signature === true;
     const officialSeal = body.official_seal === true;
     const teacherSignature = body.teacher_signature === true;
@@ -246,6 +254,19 @@ export async function POST(request: NextRequest) {
     const initialReviewStatus = '待查对';
 
     const result = await withTransaction(async (client) => {
+      if (submissionId) {
+        const updated = (await client.query(
+          `UPDATE leave_slips SET slip_type=$1,leave_type=$2,class_names=$3,start_time=$4,end_time=$5,activity_id=$6,activity_name=$7,applicant_user_id=$8,applicant_name=$9,applicant_student_id=$10,leave_image_url=$11,leave_image_name=$12,image_list=$13,ocr_names=$14,image_hashes=$15,duplicate_of_slip_id=NULL,duplicate_score=NULL,duplicate_warning=NULL,original_image_similarity=NULL,original_image_difference_warning=NULL,counselor_signature=$16,official_seal=$17,teacher_signature=$18,is_late=$19,idempotency_key=$20,submission_count=COALESCE(submission_count,1)+1,original_slip_id=NULL,review_status=$21,review_note=NULL,reviewed_by_user_id=NULL,reviewed_by_name=NULL,reviewed_at=NULL,updated_at=NOW() WHERE id=$22 AND review_status<>'已通过' RETURNING *`,
+          [slipType, leaveType, JSON.stringify(classNames), startTime, endTime, activityId, activityName, user.id, user.username, user.student_id, imageList[0].url, imageList[0].name, JSON.stringify(imageList), JSON.stringify(ocrNames), JSON.stringify(imageHashes), counselorSignature, officialSeal, teacherSignature, isLate, idempotencyKey, initialReviewStatus, submissionId],
+        )).rows[0] as { id: string; submission_count?: number } | undefined;
+        if (!updated) throw new Error('假条状态已被其他操作更新，请刷新后重试');
+        await client.query('DELETE FROM leave_slip_students WHERE slip_id=$1', [submissionId]);
+        for (const student of students) {
+          await client.query('INSERT INTO leave_slip_students (slip_id,student_id,student_name,class_name) VALUES ($1,$2,$3,$4)', [submissionId, student.student_id, student.student_name, student.class_name]);
+        }
+        await writeAuditLog({ actor: user, action: 'resubmit_leave_slip', resourceType: 'leave_slip', resourceId: submissionId, details: { reviewStatus: initialReviewStatus, participantCount: students.length, submissionCount: updated.submission_count } }, client);
+        return { slip: updated, created: false };
+      }
       const slip = (await client.query(
         `INSERT INTO leave_slips (slip_type, leave_type, class_names, start_time, end_time, activity_id, activity_name, applicant_user_id, applicant_name, applicant_student_id, leave_image_url, leave_image_name, image_list, ocr_names, image_hashes, counselor_signature, official_seal, teacher_signature, is_late, idempotency_key, review_status)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,'待查对') ON CONFLICT (idempotency_key) DO NOTHING RETURNING *`,
@@ -465,6 +486,7 @@ export async function PUT(request: NextRequest) {
       [id],
     );
     if (!current) return NextResponse.json({ success: false, error: '假条不存在或已删除' }, { status: 404 });
+    if (current.review_status === '已通过') return NextResponse.json({ success: false, error: '已通过的假条不能重新提交或修改' }, { status: 400 });
     const validLeaveType = current.slip_type === '其他请假'
       ? OTHER_LEAVE_TYPES.includes(leaveType as (typeof OTHER_LEAVE_TYPES)[number])
       : LEAVE_TYPES.includes(leaveType as (typeof LEAVE_TYPES)[number]);

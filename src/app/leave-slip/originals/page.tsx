@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, CheckCircle2, FileCheck2, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileCheck2, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
 import { apiFetch, createIdempotencyKey } from '@/lib/client-api';
@@ -32,6 +32,7 @@ interface OriginalSlip {
   image_list: string | null;
   notes: string | null;
   created_at: string;
+  submission_count?: number;
 }
 
 function parseImageList(value: string | null): Array<{ url: string; name?: string }> {
@@ -101,6 +102,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<OriginalSlip | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const submitKeyRef = useRef<string | null>(null);
@@ -147,7 +149,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
     }
   };
 
-  useEffect(() => { if (initialized && user && canAccess && !isSubmitMode) void load(); }, [initialized, user, canAccess, isSubmitMode]);
+  useEffect(() => { if (initialized && user && canAccess) void load(); }, [initialized, user, canAccess]);
 
   useEffect(() => {
     if (!initialized || !user || !canAccess || !isSubmitMode) return;
@@ -240,6 +242,21 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
     void runOcrForFiles(files);
   };
 
+  const startEdit = (original: OriginalSlip) => {
+    setEditingId(original.id);
+    setActivityId(original.activity_id || '');
+    setActivityName(original.activity_name || '');
+    setStudentNamesText(parseJsonArray(original.student_names).join('\n'));
+    setStartTime(original.start_time ? original.start_time.slice(0, 16) : '');
+    setEndTime(original.end_time ? original.end_time.slice(0, 16) : '');
+    setNotes(original.notes || '');
+    setImageFiles([]);
+    setOcrLines([]);
+    setOcrError('');
+    setSubmitSuccess('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleSubmit = async () => {
     if (!activityId || !activityName.trim()) { alert('原假条一次只能绑定一个活动，请先选择系统活动'); return; }
     if (!studentNamesText.trim()) { alert('请至少填写一名学生的学号、姓名和班级'); return; }
@@ -260,6 +277,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
         body: JSON.stringify({
+          submission_id: editingId,
           activity_id: activityId.trim() || null,
           activity_name: activityName.trim() || null,
           class_names: classNames,
@@ -284,8 +302,10 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
       setNotes('');
       setImageFiles([]);
       setOcrLines([]);
-      if (isSubmitMode) setSubmitSuccess('提交成功，原假条已归档，可在“维护原假条”中查看。');
-      else await load();
+      setEditingId(null);
+      const attempt = Number(data.data?.submission_count || 1);
+      setSubmitSuccess(`提交成功，原假条已归档，可在“维护原假条”中查看。${attempt > 1 ? ` 第 ${attempt} 次提交` : ''}`);
+      await load();
     } catch (error) {
       alert(error instanceof Error ? error.message : '保存失败');
     } finally {
@@ -344,7 +364,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
               <div className="grid gap-3 sm:grid-cols-2">
                 <Button type="button" variant="outline" onClick={() => void runOcrForFiles(imageFiles)} disabled={ocrLoading || !imageFiles.length} className="h-11 bg-white">自动识别</Button>
                 <Button type="button" variant="outline" onClick={clearAutomaticRecognition} disabled={ocrLoading} className="h-11 bg-white">清除自动识别数据</Button>
-                <Button type="button" onClick={handleSubmit} disabled={saving || ocrLoading} className="h-11 bg-teal-700 hover:bg-teal-800"><Plus className="size-4" />{ocrLoading ? '自动识别中...' : saving ? '提交中...' : '提交原假条'}</Button>
+              <Button type="button" onClick={handleSubmit} disabled={saving || ocrLoading} className="h-11 bg-teal-700 hover:bg-teal-800"><Plus className="size-4" />{ocrLoading ? '自动识别中...' : saving ? '提交中...' : editingId ? '重新提交原假条' : '提交原假条'}</Button>
               </div>
               {ocrError && <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{ocrError}</p>}
               {submitSuccess && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"><p className="flex items-center gap-2"><CheckCircle2 className="size-4 shrink-0" />{submitSuccess}</p><Button type="button" variant="outline" size="sm" className="border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100" onClick={() => setSubmitSuccess('')}>重新提交</Button></div>}
@@ -359,7 +379,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
             </div>
           </aside>}
 
-          {!isSubmitMode && <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
               <label className="relative min-w-0 flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
@@ -378,7 +398,7 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         {original.activity_name && <h3 className="font-semibold text-slate-950">{original.activity_name}</h3>}
-                        {original.activity_id && <p className="mt-1 text-xs tabular-nums text-slate-500">ID：{original.activity_id}</p>}
+                        {original.activity_id && <p className="mt-1 text-xs tabular-nums text-slate-500">ID：{original.activity_id}{Number(original.submission_count || 1) > 1 ? ` · 第 ${original.submission_count} 次提交` : ''}</p>}
                         {classNames.length > 0 && <p className="mt-2 text-sm text-slate-700">涉及班级：{classNames.join('、')}</p>}
                         {studentNames.length > 0 && <p className="mt-1 text-sm text-slate-700">涉及学生：{studentNames.join('、')}</p>}
                         {original.notes && <p className="mt-1 text-sm text-slate-500">{original.notes}</p>}
@@ -392,13 +412,16 @@ export default function LeaveSlipOriginalsPage({ mode = 'maintain' }: { mode?: '
                           </div>
                         ) : <p className="mt-3 text-sm text-amber-700">此归档记录未附原假条图片，暂时无法核对原件。</p>}
                       </div>
-                      <Button type="button" variant="destructive" size="sm" onClick={() => setDeleteTarget(original)} aria-label="删除原假条"><Trash2 className="size-3.5" />删除</Button>
+                      <div className="flex items-center gap-2">
+                        {isSubmitMode && <Button type="button" variant="outline" size="sm" onClick={() => startEdit(original)} className="border-teal-200 text-teal-700 hover:bg-teal-50"><Pencil className="size-3.5" />重新提交</Button>}
+                        {!isSubmitMode && <Button type="button" variant="destructive" size="sm" onClick={() => setDeleteTarget(original)} aria-label="删除原假条"><Trash2 className="size-3.5" />删除</Button>}
+                      </div>
                     </div>
                   </article>
                 );
               })}
             </div>
-          </section>}
+          </section>
         </div>
       </div>
 

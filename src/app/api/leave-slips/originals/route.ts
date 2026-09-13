@@ -35,8 +35,12 @@ function parseImages(value: unknown): ImageInput[] {
 export async function GET(request: NextRequest) {
   try {
     let auth = await requirePermission(request, 'manageOriginalLeave');
+    const canManage = !auth.response;
     if (auth.response) auth = await requirePermission(request, 'reviewLeave');
+    const canReview = !auth.response;
+    if (auth.response) auth = await requirePermission(request, 'submitOriginalLeave');
     if (auth.response) return auth.response;
+    const user = auth.user!;
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id')?.trim();
@@ -64,6 +68,10 @@ export async function GET(request: NextRequest) {
       params.push(`%${className}%`);
       where.push(`class_names ILIKE $${paramIndex++}`);
     }
+    if (!canManage && !canReview) {
+      params.push(user.id);
+      where.push(`created_by_user_id=$${paramIndex++}`);
+    }
 
     const data = withWallTimes(await query(
       `SELECT * FROM original_leave_slips ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY created_at DESC LIMIT 200`,
@@ -86,6 +94,7 @@ export async function POST(request: NextRequest) {
     if (!idempotencyKey) return NextResponse.json({ success: false, error: '缺少或无效的幂等请求标识' }, { status: 400 });
 
     const body = await request.json();
+    const submissionId = String(body.submission_id || '').trim();
     const repeated = await queryOne<Record<string, unknown>>('SELECT * FROM original_leave_slips WHERE idempotency_key=$1', [idempotencyKey]);
     if (repeated) {
       if (repeated.created_by_user_id !== user.id && user.role !== 'admin') return NextResponse.json({ success: false, error: '重复请求标识已被其他用户使用' }, { status: 409 });
@@ -114,6 +123,18 @@ export async function POST(request: NextRequest) {
     const ocrNames = parseArray(body.ocr_names);
     const imageHashes = await computeImageHashes(imageList.map((item) => item.url));
     const result = await withTransaction(async (client) => {
+      if (submissionId) {
+        const current = (await client.query<{ id: string; created_by_user_id: string | null }>('SELECT id,created_by_user_id FROM original_leave_slips WHERE id=$1', [submissionId])).rows[0];
+        if (!current) throw Object.assign(new Error('原假条提交记录不存在'), { status: 404 });
+        if (current.created_by_user_id !== user.id && user.role !== 'admin') throw Object.assign(new Error('只能由原提交人重新提交原假条'), { status: 403 });
+        const updated = (await client.query(
+          `UPDATE original_leave_slips SET activity_id=$1,activity_name=$2,class_names=$3,student_names=$4,start_time=$5,end_time=$6,image_url=COALESCE($7,image_url),image_name=COALESCE($8,image_name),image_list=CASE WHEN $9::text='[]' THEN image_list ELSE $9::text END,ocr_names=$10,image_hashes=CASE WHEN $11::text='[]' THEN image_hashes ELSE $11::text END,notes=$12,submission_count=COALESCE(submission_count,1)+1,idempotency_key=$13,updated_at=NOW() WHERE id=$14 RETURNING *`,
+          [activity.id, activity.full_name, JSON.stringify(classNames), JSON.stringify(studentNames), startTime, endTime, imageList[0]?.url || null, imageList[0]?.name || null, JSON.stringify(imageList), JSON.stringify(ocrNames), JSON.stringify(imageHashes), body.notes ? String(body.notes) : null, idempotencyKey, submissionId],
+        )).rows[0] as Record<string, unknown> | undefined;
+        if (!updated) throw new Error('原假条更新失败，请重试');
+        await writeAuditLog({ actor: user, action: 'resubmit_original_leave_slip', resourceType: 'original_leave_slip', resourceId: submissionId, details: { submissionCount: updated.submission_count } }, client);
+        return { data: updated, created: false };
+      }
       const data = (await client.query(
         `INSERT INTO original_leave_slips (activity_id, activity_name, class_names, student_names, start_time, end_time, image_url, image_name, image_list, ocr_names, image_hashes, notes, created_by_user_id, created_by_name, idempotency_key)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ON CONFLICT (idempotency_key) DO NOTHING
@@ -134,7 +155,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: withWallTime(result.data) });
   } catch (error) {
     console.error('创建原假条失败:', error);
-    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '创建原假条失败' }, { status: 500 });
+    const status = error && typeof error === 'object' && 'status' in error && typeof error.status === 'number' ? error.status : 500;
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : '创建原假条失败' }, { status });
   }
 }
 
