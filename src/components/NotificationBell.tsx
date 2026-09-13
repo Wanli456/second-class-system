@@ -48,7 +48,7 @@ export function NotificationBell({ userId }: { userId: string | null }) {
 
     const fetchNotifications = async () => {
       try {
-        const res = await apiFetch(`/api/notifications?userId=${userId}`, { signal: controller.signal });
+        const res = await apiFetch(`/api/notifications?userId=${userId}&_=${Date.now()}`, { signal: controller.signal, cache: 'no-store' });
         const data = await res.json();
         if (active && data.success) {
           setNotifications(data.data);
@@ -59,13 +59,19 @@ export function NotificationBell({ userId }: { userId: string | null }) {
       }
     };
 
-    fetchNotifications();
-    // 每 30 秒刷新一次
-    const interval = setInterval(fetchNotifications, 30000);
+    void fetchNotifications();
+    const interval = setInterval(fetchNotifications, 5000);
+    const refreshOnVisible = () => {
+      if (document.visibilityState === 'visible') void fetchNotifications();
+    };
+    window.addEventListener('focus', refreshOnVisible);
+    document.addEventListener('visibilitychange', refreshOnVisible);
     return () => {
       active = false;
       controller.abort();
       clearInterval(interval);
+      window.removeEventListener('focus', refreshOnVisible);
+      document.removeEventListener('visibilitychange', refreshOnVisible);
     };
   }, [userId]);
 

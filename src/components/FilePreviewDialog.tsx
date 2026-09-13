@@ -345,7 +345,7 @@ export function FilePreviewDialog({
             {kind === 'image' ? <ImageIcon className="size-4 shrink-0" /> : <FileText className="size-4 shrink-0" />}
             <span className="truncate">{label}</span>
           </DialogTitle>
-          <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">
+          <div className="mr-10 flex w-[calc(100%-2.5rem)] min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">
             {url && (
               <a href={url} download={fileName || undefined} className="inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 sm:flex-none">
                 <Download className="size-4" />下载文件

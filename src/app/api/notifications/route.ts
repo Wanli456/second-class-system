@@ -3,6 +3,19 @@ import { query, queryOne, withTransaction } from "@/storage/database/supabase-cl
 import { requireUser } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit-log";
 
+async function cleanupReadNotifications(userId: string): Promise<void> {
+  await query(
+    `DELETE FROM notifications
+     WHERE user_id = $1 AND is_read = 'true'
+       AND id NOT IN (
+         SELECT id FROM notifications
+         WHERE user_id = $1 AND is_read = 'true'
+         ORDER BY created_at DESC LIMIT 5
+       )`,
+    [userId],
+  );
+}
+
 // GET /api/notifications - 获取用户通知列表
 // PUT /api/notifications - 标记通知为已读
 // DELETE /api/notifications - 删除通知
@@ -53,6 +66,7 @@ export async function PUT(request: NextRequest) {
         const updated = await client.query(`UPDATE notifications SET is_read = 'true' WHERE user_id = $1 AND is_read = 'false' RETURNING id`, [userId]);
         if (updated.rows.length) await writeAuditLog({ actor: auth.user, action: 'mark_notification_read', resourceType: 'notification', details: { count: updated.rows.length } }, client);
       });
+      await cleanupReadNotifications(auth.user!.id);
       return NextResponse.json({ success: true, message: "已全部标记为已读" });
     }
 
@@ -62,6 +76,7 @@ export async function PUT(request: NextRequest) {
         const updated = await client.query(`UPDATE notifications SET is_read = 'true' WHERE id = $1 AND user_id = $2 AND is_read = 'false' RETURNING id`, [notificationId, auth.user!.id]);
         if (updated.rows[0]) await writeAuditLog({ actor: auth.user, action: 'mark_notification_read', resourceType: 'notification', resourceId: notificationId }, client);
       });
+      await cleanupReadNotifications(auth.user!.id);
       return NextResponse.json({ success: true, message: "已标记为已读" });
     }
 
