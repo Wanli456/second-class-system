@@ -45,10 +45,20 @@ export async function POST(request: NextRequest) {
     if (!rawRows.length) return NextResponse.json({ success: false, error: '表格里没有数据行' }, { status: 400 });
     if (rawRows.length > 2000) return NextResponse.json({ success: false, error: '单次最多导入 2000 行' }, { status: 400 });
 
+    // A record must not grant access to an unrelated user's uploaded file.
+    if (fileUrl) {
+      const asset = await queryOne<{ uploaded_by_user_id: string | null }>(
+        'SELECT uploaded_by_user_id FROM upload_assets WHERE url=$1', [fileUrl],
+      );
+      if (!asset || asset.uploaded_by_user_id !== auth.user!.id) {
+        return NextResponse.json({ success: false, error: '只能提交自己上传的源文件，请重新上传' }, { status: 403 });
+      }
+    }
+
     // 服务端重新校验，不信任客户端传来的结论
     const rows = rawRows.map(toRow).filter((row): row is ScoringImportRow => Boolean(row));
     const validation = validateScoringRows(rows);
-    const issues = validation.issues.slice(0, 200);
+    const issues = validation.issues;
     const status = validation.ok ? IMPORT_STATUS.pending : IMPORT_STATUS.rejected;
 
     const created = await withTransaction(async (client) => {

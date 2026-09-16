@@ -1,5 +1,5 @@
 import type { AuthUser } from '@/lib/auth';
-import { computeDepartmentAutoPerms, parsePermissionOverrides, type PermissionKey } from '@/lib/department-permissions';
+import { PERMISSION_COLUMNS, computeDepartmentAutoPerms, parsePermissionOverrides, type PermissionKey } from '@/lib/department-permissions';
 import type { DatabaseClient } from '@/storage/database/supabase-client';
 import { getBusinessDate } from './business-time';
 import { normalizeDateTimeInput } from './datetime';
@@ -149,23 +149,7 @@ type RawPermissionUser = Pick<AuthUser,
   | 'can_import_scoring'
 >;
 
-const RAW_PERMISSION_FIELD: Record<PermissionKey, keyof RawPermissionUser> = {
-  canPublish: 'can_publish',
-  canScore: 'can_score',
-  canSubmitActivity: 'can_submit_activity',
-  canViewSubmissionStatus: 'can_view_submission_status',
-  canSubmitScoring: 'can_submit_scoring',
-  canRegisterOtherCollege: 'can_register_other_college',
-  canReviewLeave: 'can_review_leave',
-  canViewEveningStudy: 'can_view_evening_study',
-  canStartGroupLeave: 'can_start_group_leave',
-  canManageAttendanceWork: 'can_manage_attendance_work',
-  canUploadLeave: 'can_upload_leave',
-  canQueryLeave: 'can_query_leave',
-  canManageOriginalLeave: 'can_manage_original_leave',
-  canSubmitOriginalLeave: 'can_submit_original_leave',
-  canImportScoring: 'can_import_scoring',
-};
+
 
 function hasEffectivePermission(user: Partial<RawPermissionUser>, key: PermissionKey): boolean {
   if (user.role === 'admin') return true;
@@ -173,7 +157,7 @@ function hasEffectivePermission(user: Partial<RawPermissionUser>, key: Permissio
   if (typeof overrides[key] === 'boolean') return overrides[key]!;
   const auto = computeDepartmentAutoPerms(user.role, user.department);
   if (auto[key]) return true;
-  return Boolean(user[RAW_PERMISSION_FIELD[key]]);
+  return Boolean(user[PERMISSION_COLUMNS[key]]);
 }
 
 export function canOpenAdminTab(

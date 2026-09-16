@@ -6,20 +6,20 @@ import { useState, useEffect, useCallback, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  GraduationCap, Lock, LogOut, Table, FileCheck, UserCheck, Award, Users,
-  Plus, Pencil, Trash2, Eye, Check, X, Upload, FileText, Image as ImageIcon, Loader2,
+  Lock, Table, FileCheck, Award, Users,
+  Plus, Pencil, Trash2, Check, X, Upload, Loader2,
   ChevronDown, ChevronUp, Search, AlertCircle, Download, Building2, BookOpen,
   KeyRound, ShieldCheck, UserRound, ChevronLeft, ChevronRight, FileSpreadsheet,
 } from 'lucide-react';
 import {
   Activity, ActivitySubmission,
-  CATEGORIES, CATEGORY_DETAILS, LEVELS, REVIEW_STATUSES, LEAVE_TYPES,
+  CATEGORIES, CATEGORY_DETAILS, LEVELS,
   type Category,
   STATUS_COLORS,
 } from '@/lib/types';
 import DashboardLayout from '@/components/DashboardLayout';
 import { AuthLoadingScreen } from '@/components/AuthLoadingScreen';
-import { apiFetch, logoutCurrentUser, refreshCurrentUser } from '@/lib/client-api';
+import { apiFetch, logoutCurrentUser } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { canOpenAdminTab, formatActivityScopes } from '@/lib/business-rules';
 import { formatBusinessDateTime } from '@/lib/datetime';
@@ -41,7 +41,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 type ReviewStatus = '待审核' | '已通过' | '已驳回';
-type ScoringStatus = '待赋分' | '已赋分';
+
 type AdminRole = 'admin' | 'leader' | 'class_leader' | 'student';
 type AdminTab = 'activities' | 'review' | 'scoring' | 'users' | 'governance';
 type UserPermission = 'canPublish' | 'canScore' | 'canSubmitActivity' | 'canViewSubmissionStatus' | 'canSubmitScoring' | 'canRegisterOtherCollege' | 'canReviewLeave' | 'canViewEveningStudy' | 'canStartGroupLeave' | 'canManageAttendanceWork' | 'canUploadLeave' | 'canQueryLeave' | 'canManageOriginalLeave' | 'canSubmitOriginalLeave' | 'canImportScoring';
@@ -180,7 +180,7 @@ function AdminPage() {
   const [authResolved, setAuthResolved] = useState(false);
   const [role, setRole] = useState<AdminRole | null>(roleParam);
   const [loginError, setLoginError] = useState('');
-  const [showLoginModal, setShowLoginModal] = useState(false);
+
 
   const [activities, setActivities] = useState<Activity[]>([]);
   const [submissions, setSubmissions] = useState<ActivitySubmission[]>([]);
@@ -211,14 +211,14 @@ function AdminPage() {
   const [reviewLocks, setReviewLocks] = useState<Record<string, string>>({});
   const [expandedScoring, setExpandedScoring] = useState<string | null>(null);
   const [scoringLocks, setScoringLocks] = useState<Record<string, string>>({});
-  const [scoringFile, setScoringFile] = useState<File | null>(null);
+
   const [scoringInProgress, setScoringInProgress] = useState(false);
 
   // 权限计算必须与后端 auth.ts 中的 calculateUserPermissions 逻辑完全一致
   const isAdmin = user?.role === 'admin';
   const canPublish = hasPermission(user, 'canPublish');
   const canScore = hasPermission(user, 'canScore');
-  const canImportScoring = hasPermission(user, 'canImportScoring');
+
   const [scoringView, setScoringView] = useState<'list' | 'confirm' | null>(null);
 
   useEffect(() => {
@@ -233,7 +233,7 @@ function AdminPage() {
 
     if (!globalUser) {
       setAuthResolved(true);
-      setShowLoginModal(true);
+
       return;
     }
 
@@ -274,7 +274,7 @@ function AdminPage() {
       setRole(userData.role as AdminRole);
     } else if (roleParam) {
       setLoginError('当前账号没有该管理功能权限');
-      setShowLoginModal(true);
+
     }
     setAuthResolved(true);
   }, [globalUser, userLoading, initialized, roleParam]);
@@ -421,44 +421,19 @@ function AdminPage() {
     }
   }, [activeTab, authenticated, canPublish, canScore, fetchActivities, fetchScoring, fetchSubmissions, fetchUsers, isAdmin, role]);
 
-  const handleLoginSuccess = (userData: UserData) => {
-    setUser(userData);
-    localStorage.setItem('user', JSON.stringify(userData));
-    const requestedTab = normalizeTab(tabParam);
-    const hasWorkspaceAccess = canAccessAdminWorkspace(userData, requestedTab);
 
-    if (hasWorkspaceAccess && (!roleParam || roleParam === 'admin' || roleParam === userData.role)) {
-      setAuthenticated(true);
-      setRole(userData.role as AdminRole);
-      setLoginError('');
-      setShowLoginModal(false);
-    } else if (roleParam) {
-      setLoginError('当前账号没有该管理功能权限');
-    }
-  };
 
   const handleLogout = async () => {
     await logoutCurrentUser();
     setUser(null);
     setAuthenticated(false);
     setRole(null);
-    setShowLoginModal(true);
+
   };
 
-  const handleGoHome = () => {
-    router.push('/');
-  };
 
-  const uploadFile = async (file: File): Promise<string> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('bucket', 'app-files');
-    formData.append('purpose', 'admin');
-    const res = await apiFetch('/api/upload', { method: 'POST', body: formData });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || '上传失败');
-    return data.url;
-  };
+
+
 
   const handleToggleScoring = async (id: string, isExpanded: boolean) => {
     if (isExpanded) {
@@ -614,7 +589,7 @@ function AdminPage() {
     }
   };
 
-  const handleDeleteUser = async (userId: string, userName: string) => {
+  const handleDeleteUser = async (userId: string) => {
     try {
       const res = await apiFetch(`/api/auth?id=${userId}`, { method: 'DELETE' });
       const data = await res.json();
@@ -1555,7 +1530,7 @@ function AdminPage() {
                                     <option value="student">学生</option>
                                   </select>
                                   <button
-                                    onClick={() => handleDeleteUser(u.id, u.name)}
+                                    onClick={() => handleDeleteUser(u.id)}
                                     className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
                                   >
                                     删除
@@ -1692,7 +1667,7 @@ function AdminPage() {
                                     <option value="student">学生</option>
                                   </select>
                                   <button
-                                    onClick={() => handleDeleteUser(u.id, u.name)}
+                                    onClick={() => handleDeleteUser(u.id)}
                                     className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
                                   >
                                     删除
@@ -1829,7 +1804,7 @@ function AdminPage() {
                                     <option value="student">学生</option>
                                   </select>
                                   <button
-                                    onClick={() => handleDeleteUser(u.id, u.name)}
+                                    onClick={() => handleDeleteUser(u.id)}
                                     className="text-xs text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-50"
                                   >
                                     删除
@@ -1999,12 +1974,7 @@ function UserManagement({
     { key: 'canSubmitActivity', label: '活动提交权限' },
     { key: 'canViewSubmissionStatus', label: '提交状态权限' },
   ];
-  const roleTextStyles: Record<string, string> = {
-    admin: 'text-red-600',
-    leader: 'text-emerald-600',
-    class_leader: 'text-sky-600',
-    student: 'text-gray-600',
-  };
+
   const roleTextColors: Record<string, string> = {
     admin: '#dc2626',
     leader: '#059669',

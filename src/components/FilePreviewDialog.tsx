@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Download, FileText, Image as ImageIcon, Loader2, Maximize2, Minimize2, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -66,7 +66,7 @@ export function MinimizedPreviewDock() {
   if (previews.length === 0) return null;
 
   return createPortal(
-    <div className="fixed bottom-3 right-3 z-[100] w-[min(22rem,calc(100vw-1.5rem))] sm:bottom-4 sm:right-4">
+    <div data-preview-dock className="fixed bottom-3 right-3 z-[100] w-[min(22rem,calc(100vw-1.5rem))] sm:bottom-4 sm:right-4">
       {expanded && <div className="mb-2 max-h-[min(24rem,calc(100dvh-7rem))] overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
         {previews.map((preview) => <div key={preview.id} className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-slate-50">
           <FileText className="size-4 shrink-0 text-slate-500" />
@@ -280,17 +280,23 @@ function columnLabel(index: number) {
 const EXCEL_ROWS_PER_PAGE = 100;
 const EXCEL_COLUMNS_PER_GROUP = 50;
 
-function ExcelPreview({ sheets }: { sheets: ExcelPreviewSheet[] }) {
-  const [activeSheetIndex, setActiveSheetIndex] = useState(0);
-  const [page, setPage] = useState(0);
-  const [columnGroup, setColumnGroup] = useState(0);
+type ExcelView = { activeSheetIndex: number; page: number; columnGroup: number };
+const INITIAL_EXCEL_VIEW: ExcelView = { activeSheetIndex: 0, page: 0, columnGroup: 0 };
+type ScrollPosition = { top: number; left: number };
+
+function ExcelPreview({ sheets, viewState, onViewChange, scrollPositionRef }: {
+  sheets: ExcelPreviewSheet[];
+  viewState: ExcelView;
+  onViewChange: (value: ExcelView) => void;
+  scrollPositionRef: { current: ScrollPosition };
+}) {
+  const { activeSheetIndex, page, columnGroup } = viewState;
+  const restoreScroll = useCallback((node: HTMLDivElement | null) => {
+    if (node) { node.scrollTop = scrollPositionRef.current.top; node.scrollLeft = scrollPositionRef.current.left; }
+  }, [scrollPositionRef]);
   const activeSheet = sheets[Math.min(activeSheetIndex, Math.max(sheets.length - 1, 0))];
 
-  useEffect(() => {
-    setActiveSheetIndex(0);
-    setPage(0);
-    setColumnGroup(0);
-  }, [sheets]);
+
 
   const view = useMemo(() => {
     if (!activeSheet) return null;
@@ -314,16 +320,16 @@ function ExcelPreview({ sheets }: { sheets: ExcelPreviewSheet[] }) {
   return (
     <div className="min-h-[24rem] rounded border bg-white p-3 shadow-sm">
       {sheets.length > 1 && <div className="mb-3 flex max-w-full gap-1 overflow-x-auto border-b pb-2" role="tablist" aria-label="工作表">
-        {sheets.map((sheet, index) => <button key={`${sheet.name}-${index}`} type="button" role="tab" aria-selected={index === activeSheetIndex} onClick={() => { setActiveSheetIndex(index); setPage(0); setColumnGroup(0); }} className={`shrink-0 rounded px-3 py-1.5 text-sm ${index === activeSheetIndex ? 'bg-[#1e3a5f] text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{sheet.name}</button>)}
+        {sheets.map((sheet, index) => <button key={`${sheet.name}-${index}`} type="button" role="tab" aria-selected={index === activeSheetIndex} onClick={() => { onViewChange({ activeSheetIndex: index, page: 0, columnGroup: 0 }); }} className={`shrink-0 rounded px-3 py-1.5 text-sm ${index === activeSheetIndex ? 'bg-[#1e3a5f] text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{sheet.name}</button>)}
       </div>}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
         <span>共 {activeSheet.rowCount} 行、{activeSheet.columnCount} 列</span>
-        <div className="flex items-center gap-2">
-          {view.groupCount > 1 && <><button type="button" disabled={view.safeGroup === 0} onClick={() => setColumnGroup((current) => Math.max(0, current - 1))} className="rounded border px-2 py-1 disabled:opacity-40">上一列组</button><span>列组 {view.safeGroup + 1}/{view.groupCount}</span><button type="button" disabled={view.safeGroup + 1 === view.groupCount} onClick={() => setColumnGroup((current) => Math.min(view.groupCount - 1, current + 1))} className="rounded border px-2 py-1 disabled:opacity-40">下一列组</button></>}
-          {view.pageCount > 1 && <><button type="button" disabled={view.safePage === 0} onClick={() => setPage((current) => Math.max(0, current - 1))} className="rounded border px-2 py-1 disabled:opacity-40">上一页</button><span>第 {view.safePage + 1}/{view.pageCount} 页</span><button type="button" disabled={view.safePage + 1 === view.pageCount} onClick={() => setPage((current) => Math.min(view.pageCount - 1, current + 1))} className="rounded border px-2 py-1 disabled:opacity-40">下一页</button></>}
+        <div className="flex flex-wrap items-center gap-2">
+          {view.groupCount > 1 && <><button type="button" disabled={view.safeGroup === 0} onClick={() => onViewChange({ ...viewState, columnGroup: Math.max(0, columnGroup - 1) })} className="rounded border px-2 py-1 disabled:opacity-40">上一列组</button><span>列组 {view.safeGroup + 1}/{view.groupCount}</span><button type="button" disabled={view.safeGroup + 1 === view.groupCount} onClick={() => onViewChange({ ...viewState, columnGroup: Math.min(view.groupCount - 1, columnGroup + 1) })} className="rounded border px-2 py-1 disabled:opacity-40">下一列组</button></>}
+          {view.pageCount > 1 && <><button type="button" disabled={view.safePage === 0} onClick={() => onViewChange({ ...viewState, page: Math.max(0, page - 1) })} className="rounded border px-2 py-1 disabled:opacity-40">上一页</button><span>第 {view.safePage + 1}/{view.pageCount} 页</span><button type="button" disabled={view.safePage + 1 === view.pageCount} onClick={() => onViewChange({ ...viewState, page: Math.min(view.pageCount - 1, page + 1) })} className="rounded border px-2 py-1 disabled:opacity-40">下一页</button></>}
         </div>
       </div>
-      <div className="max-h-[calc(100dvh-16rem)] overflow-auto rounded border">
+      <div ref={restoreScroll} onScroll={event => { scrollPositionRef.current = { top: event.currentTarget.scrollTop, left: event.currentTarget.scrollLeft }; }} className="max-h-[calc(100dvh-16rem)] overflow-auto rounded border">
         <table className="w-full min-w-max border-collapse select-text text-left text-sm">
           <thead><tr><th className="border-b border-r border-slate-200 bg-slate-100 px-3 py-2 text-center text-xs font-medium text-slate-500">#</th>{view.columns.map((column) => <th key={column} className="border-b border-r border-slate-200 bg-slate-100 px-3 py-2 text-center text-xs font-medium text-slate-500">{columnLabel(column)}</th>)}</tr><tr><th className="border-b border-r border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs font-medium text-slate-400">{activeSheet.startRow + 1}</th>{view.columns.map((column) => <th key={column} className="whitespace-pre-wrap border-b border-r border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-semibold text-slate-700">{cell(activeSheet.startRow, column)}</th>)}</tr></thead>
           <tbody>{view.rows.map((row) => <tr key={row} className={(row - activeSheet.startRow) % 2 === 0 ? 'bg-white' : 'bg-slate-50'}><th className="border-b border-r border-slate-200 bg-white px-3 py-2 text-right text-xs tabular-nums text-slate-400">{row + 1}</th>{view.columns.map((column) => <td key={column} className="whitespace-pre-wrap border-b border-r border-slate-200 px-3 py-2 align-top last:border-r-0">{cell(row, column)}</td>)}</tr>)}</tbody>
@@ -354,6 +360,18 @@ export function FilePreviewDialog({
   const label = fileName || title || '文件预览';
   const [documentState, setDocumentState] = useState<DocumentPreviewState>(IDLE_DOCUMENT_STATE);
   const [minimized, setMinimized] = useState(false);
+  const [excelView, setExcelView] = useState<ExcelView>(INITIAL_EXCEL_VIEW);
+  const tableScroll = useRef<ScrollPosition>({ top: 0, left: 0 });
+  const documentScroll = useRef<ScrollPosition>({ top: 0, left: 0 });
+  const restoreDocumentScroll = useCallback((node: HTMLDivElement | null) => {
+    if (node) { node.scrollTop = documentScroll.current.top; node.scrollLeft = documentScroll.current.left; }
+  }, []);
+
+  useEffect(() => {
+    setExcelView(INITIAL_EXCEL_VIEW);
+    tableScroll.current = { top: 0, left: 0 };
+    documentScroll.current = { top: 0, left: 0 };
+  }, [url, open]);
 
   useEffect(() => {
     if (!open) {
@@ -426,7 +444,7 @@ export function FilePreviewDialog({
           </div>
           <DialogDescription className="sr-only">{label}的网页内预览</DialogDescription>
         </DialogHeader>
-        <div className={`min-h-0 flex-1 overflow-auto p-4 ${kind === 'word' ? 'bg-white' : 'bg-slate-100'}`}>
+        <div ref={restoreDocumentScroll} onScroll={event => { documentScroll.current = { top: event.currentTarget.scrollTop, left: event.currentTarget.scrollLeft }; }} className={`min-h-0 flex-1 overflow-auto p-4 ${kind === 'word' ? 'bg-white' : 'bg-slate-100'}`}>
           {kind === 'image' && url && (
             <div className="flex min-h-[50dvh] items-center justify-center">
               <img src={url} alt={label} className="max-h-[calc(100dvh-10rem)] max-w-full select-text object-contain" />
@@ -436,7 +454,7 @@ export function FilePreviewDialog({
           {kind === 'word' && documentState.status === 'loading' && <DocumentLoading />}
           {kind === 'word' && documentState.status === 'word-ready' && <WordPreview html={documentState.html} />}
           {kind === 'excel' && documentState.status === 'loading' && <DocumentLoading />}
-          {kind === 'excel' && documentState.status === 'excel-ready' && <ExcelPreview sheets={documentState.sheets} />}
+          {kind === 'excel' && documentState.status === 'excel-ready' && <ExcelPreview sheets={documentState.sheets} viewState={excelView} onViewChange={setExcelView} scrollPositionRef={tableScroll} />}
           {(kind === 'word' || kind === 'excel') && documentState.status === 'error' && <DocumentError message={documentState.message} />}
           {kind === 'legacy-word' && <DocumentError message="旧版 Word（.doc）文件暂不支持网页内预览，请下载后使用 Word 打开。" />}
           {kind === 'unsupported' && <DocumentError message="此文件格式暂不支持网页内预览。" />}

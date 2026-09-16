@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ensureDatabaseSchema, query, withTransaction } from '@/storage/database/supabase-client';
 import { publicUser, requirePermission } from '@/lib/auth';
 import type { AuthUser } from '@/lib/auth';
-import { isDepartmentAutoPermission, parsePermissionOverrides, type PermissionKey } from '@/lib/department-permissions';
+import { PERMISSION_COLUMNS, isDepartmentAutoPermission, parsePermissionOverrides, type PermissionKey } from '@/lib/department-permissions';
 import { writeAuditLog } from '@/lib/audit-log';
 
 /** 与 GET /api/auth 返回给管理端的字段保持一致。 */
@@ -16,23 +16,7 @@ const PUBLIC_USER_FIELDS = `id, username, student_id, role, can_publish, can_sco
 const BATCH_PERMISSION_USER_LIMIT = 200;
 
 /** 批量设置时允许修改的权限与数据库列的对应关系。 */
-const PERMISSION_COLUMNS: Record<string, string> = {
-  canPublish: 'can_publish',
-  canScore: 'can_score',
-  canSubmitActivity: 'can_submit_activity',
-  canViewSubmissionStatus: 'can_view_submission_status',
-  canSubmitScoring: 'can_submit_scoring',
-  canRegisterOtherCollege: 'can_register_other_college',
-  canReviewLeave: 'can_review_leave',
-  canViewEveningStudy: 'can_view_evening_study',
-  canStartGroupLeave: 'can_start_group_leave',
-  canManageAttendanceWork: 'can_manage_attendance_work',
-  canUploadLeave: 'can_upload_leave',
-  canQueryLeave: 'can_query_leave',
-  canManageOriginalLeave: 'can_manage_original_leave',
-  canSubmitOriginalLeave: 'can_submit_original_leave',
-  canImportScoring: 'can_import_scoring',
-};
+
 
 function badRequest(error: string) {
   return NextResponse.json({ success: false, error }, { status: 400 });
@@ -75,7 +59,7 @@ export async function PUT(request: NextRequest) {
 
     const requested = Object.entries(payload.permissions as Record<string, unknown>);
     if (!requested.length) return badRequest('请选择要批量设置的权限');
-    if (requested.some(([key]) => !PERMISSION_COLUMNS[key])) return badRequest('包含不支持批量设置的权限');
+    if (requested.some(([key]) => !Object.hasOwn(PERMISSION_COLUMNS, key))) return badRequest('包含不支持批量设置的权限');
     if (requested.some(([, value]) => typeof value !== 'boolean')) return badRequest('权限取值必须是布尔值');
 
     const placeholders = userIds.map((_, index) => '$' + (index + 1)).join(',');
@@ -93,7 +77,7 @@ export async function PUT(request: NextRequest) {
         if (isDepartmentAutoPermission(identity, key as PermissionKey)) {
           overrides[key as PermissionKey] = value as boolean;
         } else {
-          columns.push({ column: PERMISSION_COLUMNS[key], value: value as boolean });
+          columns.push({ column: PERMISSION_COLUMNS[key as PermissionKey], value: value as boolean });
         }
       }
       return { id: target.id, columns, overrides };

@@ -8,6 +8,7 @@ import { useUser } from '@/contexts/UserContext';
 import { hasPermission } from '@/lib/department-permissions';
 import { extractScoringRows, type ScoringImportIssue, type ScoringImportRow } from '@/lib/scoring-import';
 import { FilePreviewLink } from '@/components/FilePreviewDialog';
+import { ScoringIssues } from '@/components/ScoringIssues';
 import { formatBusinessDateTime } from '@/lib/datetime';
 
 type ImportRecord = {
@@ -208,11 +209,7 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
               <p className="flex items-center gap-2 text-sm font-medium text-rose-800">
                 <AlertCircle className="size-4" />自动审核发现 {issues.length} 处问题（已自动驳回）
               </p>
-              <ul className="mt-2 max-h-72 space-y-1 overflow-y-auto text-xs text-rose-700">
-                {issues.map((issue, index) => (
-                  <li key={`${issue.rowNumber}-${issue.column}-${index}`}>第 {issue.rowNumber} 行  {issue.column}：{issue.message}</li>
-                ))}
-              </ul>
+              <ScoringIssues issues={issues} />
             </div>
           )}
 
@@ -257,11 +254,7 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
                   {expanded && (
                     <div className="border-t border-slate-100 bg-slate-50/60 p-3">
                       {recordIssues.length > 0 && (
-                        <ul className="mb-3 space-y-1 text-xs text-rose-700">
-                          {recordIssues.slice(0, 20).map((issue, index) => (
-                            <li key={`${issue.rowNumber}-${issue.column}-${index}`}>第 {issue.rowNumber} 行  {issue.column}：{issue.message}</li>
-                          ))}
-                        </ul>
+                        <ScoringIssues issues={recordIssues} />
                       )}
                       {showConfirm && record.status === '待人工确认' && (
                         <div className="mt-3 flex flex-wrap items-center gap-3">

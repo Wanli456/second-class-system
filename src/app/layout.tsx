@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { HideNButton } from '@/components/HideNButton';
+
 import { UserProvider } from '@/contexts/UserContext';
 import { RouteLoadingIndicator } from '@/components/RouteLoadingIndicator';
 import { MinimizedPreviewDock } from '@/components/FilePreviewDialog';
@@ -22,7 +22,7 @@ export default function RootLayout({
           <RouteLoadingIndicator />
           {children}
           <MinimizedPreviewDock />
-          <HideNButton />
+
         </UserProvider>
       </body>
     </html>

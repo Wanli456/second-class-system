@@ -13,6 +13,7 @@ import { FilePreviewLink } from '@/components/FilePreviewDialog';
 import { ImageUploadPreviews } from '@/components/ImageUploadPreviews';
 import { CategoryBadge } from '@/components/CategoryBadge';
 import { ClassScoringImport } from '@/components/ClassScoringImport';
+import { ScoringIssues } from '@/components/ScoringIssues';
 import { extractScoringRows, validateScoringRows, type ScoringImportIssue } from '@/lib/scoring-import';
 import { formatBusinessDateTime } from '@/lib/datetime';
 
@@ -211,15 +212,7 @@ export default function SubmitScoringPage() {
     }
   };
 
-  const downloadScoringIssues = () => {
-    const text = scoringIssues.map((issue, index) => `${index + 1}. 第 ${issue.rowNumber} 行 ${issue.column}：${issue.message}`).join('\r\n');
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${scoringFile?.name || '活动赋分表'}-错误信息.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+
 
   const selectedActivity = activities.find(a => a.id === selectedActivityId);
 
@@ -450,7 +443,7 @@ export default function SubmitScoringPage() {
                   )}
                   {scoringFormatError && <p className="mt-2 text-left text-xs text-rose-600">{scoringFormatError}</p>}
                   {scoringIssues.length > 0 && <>
-                    {scoringIssues.length <= 20 ? <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto text-left text-xs text-rose-600">{scoringIssues.map((issue, index) => <li key={`${issue.rowNumber}-${issue.column}-${index}`}>第 {issue.rowNumber} 行 {issue.column}：{issue.message}</li>)}</ul> : <div className="mt-2 text-left text-xs text-rose-700"><p>错误信息超过 20 条，请下载 TXT 文件查看全部错误。</p><button type="button" onClick={downloadScoringIssues} className="mt-1 font-medium underline underline-offset-2 hover:text-rose-900">下载全部 {scoringIssues.length} 条错误信息（TXT）</button></div>}
+                    <ScoringIssues issues={scoringIssues} />
                   </>}
                 </div>
               </div>

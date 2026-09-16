@@ -39,6 +39,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           AND ($2 = activity_submitter_id OR leader_ids LIKE '%"' || $2 || '"%' OR $3)
         UNION ALL SELECT 1 FROM leave_slips WHERE $1 IN (leave_image_url, image_list) AND ($2=applicant_user_id OR $6 OR $7)
         UNION ALL SELECT 1 FROM original_leave_slips WHERE $1 IN (image_url, image_list) AND ($2=created_by_user_id OR $8)
+        UNION ALL SELECT 1 FROM scoring_imports WHERE file_url=$1 AND (submitted_by_id=$2 OR $4)
       ) AS allowed`,
       [url, user.id, permissions.canPublish, permissions.canScore, permissions.canPublish, permissions.canReviewLeave, permissions.canQueryLeave, permissions.canManageOriginalLeave],
     );

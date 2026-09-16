@@ -15,7 +15,7 @@ import {
   validatePassword,
 } from '@/lib/auth';
 import type { AuthUser } from '@/lib/auth';
-import { parsePermissionOverrides, type PermissionKey } from '@/lib/department-permissions';
+import { PERMISSION_COLUMNS, parsePermissionOverrides, type PermissionKey } from '@/lib/department-permissions';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { getAdminAccountRuleError, isLastAdminMutation } from '@/lib/admin-account-rules';
 import { writeAuditLog } from '@/lib/audit-log';
@@ -151,11 +151,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
     const fields: Record<string, string> = {
-      role: 'role', canPublish: 'can_publish', canScore: 'can_score', canSubmitActivity: 'can_submit_activity',
-      canViewSubmissionStatus: 'can_view_submission_status', canSubmitScoring: 'can_submit_scoring', canRegisterOtherCollege: 'can_register_other_college',
-      canReviewLeave: 'can_review_leave', canViewEveningStudy: 'can_view_evening_study', canStartGroupLeave: 'can_start_group_leave', canManageAttendanceWork: 'can_manage_attendance_work',
-      canUploadLeave: 'can_upload_leave', canQueryLeave: 'can_query_leave',
-      canManageOriginalLeave: 'can_manage_original_leave', canSubmitOriginalLeave: 'can_submit_original_leave', canImportScoring: 'can_import_scoring',
+      role: 'role', ...PERMISSION_COLUMNS,
       department: 'department', className: 'class_name', contactPhone: 'contact_phone',
     };
     const updates: string[] = [];

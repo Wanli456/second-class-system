@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth';
-import { PermissionKey } from '@/lib/department-permissions';
+import { PERMISSION_COLUMNS, type PermissionKey } from '@/lib/department-permissions';
 import {
   canAssignManagedRole,
   canManageTargetUser,
@@ -12,23 +12,7 @@ import { query, queryOne, withTransaction } from '@/storage/database/supabase-cl
 import { writeAuditLog } from '@/lib/audit-log';
 import { buildBatchPermissionPlan } from '@/lib/department-user-batch';
 
-const PERMISSION_COLUMNS: Record<PermissionKey, string> = {
-  canPublish: 'can_publish',
-  canScore: 'can_score',
-  canSubmitActivity: 'can_submit_activity',
-  canViewSubmissionStatus: 'can_view_submission_status',
-  canSubmitScoring: 'can_submit_scoring',
-  canRegisterOtherCollege: 'can_register_other_college',
-  canReviewLeave: 'can_review_leave',
-  canViewEveningStudy: 'can_view_evening_study',
-  canStartGroupLeave: 'can_start_group_leave',
-  canManageAttendanceWork: 'can_manage_attendance_work',
-  canUploadLeave: 'can_upload_leave',
-  canQueryLeave: 'can_query_leave',
-  canManageOriginalLeave: 'can_manage_original_leave',
-  canSubmitOriginalLeave: 'can_submit_original_leave',
-  canImportScoring: 'can_import_scoring',
-};
+
 
 const USER_SELECT = [
   'SELECT id, username, student_id, role, department, class_name, contact_phone,',

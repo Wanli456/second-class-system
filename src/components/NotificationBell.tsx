@@ -37,6 +37,7 @@ export function NotificationBell({ userId }: { userId: string | null }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
+  const [readError, setReadError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -76,12 +77,15 @@ export function NotificationBell({ userId }: { userId: string | null }) {
   }, [userId]);
 
   const markAsRead = async (notificationId: string) => {
+    setReadError(null);
     try {
-      await apiFetch('/api/notifications', {
+      const response = await apiFetch('/api/notifications', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notificationId }),
       });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || '标记已读失败，请重试');
       setNotifications(current => current.map(n =>
         n.id === notificationId ? { ...n, is_read: 'true' } : n
       ));
@@ -89,28 +93,33 @@ export function NotificationBell({ userId }: { userId: string | null }) {
         const notification = notifications.find(item => item.id === notificationId);
         return notification?.is_read === 'false' ? Math.max(0, current - 1) : current;
       });
+      return true;
     } catch (error) {
-      console.error('标记已读失败:', error);
+      setReadError(error instanceof Error ? error.message : '标记已读失败，请重试');
+      return false;
     }
   };
 
   const markAllAsRead = async () => {
+    setReadError(null);
     try {
-      await apiFetch('/api/notifications', {
+      const response = await apiFetch('/api/notifications', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, markAllRead: true }),
       });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || '标记已读失败，请重试');
       setNotifications(notifications.map(n => ({ ...n, is_read: 'true' })));
       setUnreadCount(0);
     } catch (error) {
-      console.error('全部标记已读失败:', error);
+      setReadError(error instanceof Error ? error.message : '全部标记已读失败，请重试');
     }
   };
 
   const openNotification = async (notification: Notification) => {
     const href = getNotificationHref(notification);
-    if (notification.is_read === 'false') await markAsRead(notification.id);
+    if (notification.is_read === 'false' && !await markAsRead(notification.id)) return;
     setIsOpen(false);
     if (href) router.push(href);
   };
@@ -180,6 +189,7 @@ export function NotificationBell({ userId }: { userId: string | null }) {
 
       {isOpen && (
         <div className="absolute right-0 z-50 mt-2 flex max-h-[min(32rem,calc(100dvh-7rem))] w-[min(20rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+          {readError && <p role="alert" className="shrink-0 break-words bg-rose-50 p-3 text-sm text-rose-700">{readError}</p>}
           <div className="flex shrink-0 items-center justify-between border-b border-gray-200 p-3">
             <h3 className="font-semibold text-gray-900">通知</h3>
             <div className="flex items-center gap-3">

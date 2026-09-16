@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { GET, POST, PUT } from '@/app/api/scoring/import/route';
 import { createSessionToken } from '@/lib/auth';
+import { validateScoringRows } from '@/lib/scoring-import';
 import { ensureDatabaseSchema, query, queryOne } from '@/storage/database/supabase-client';
 
 function req(method: string, body: unknown, token: string, url = '/api/scoring/import'): NextRequest {
@@ -67,6 +68,14 @@ async function main() {
     assert.equal(badBody.data.status, '自动驳回');
     assert.ok(badBody.data.issues.length >= 2, JSON.stringify(badBody.data.issues));
     assert.ok(badBody.data.issues.every((issue) => issue.rowNumber > 0 && issue.column));
+
+    const manyBadRows = Array.from({ length: 100 }, (_, i) => ({ ...goodRow, rowNumber: i + 7, studentId: 'abc', studentName: '', startTime: 'bad', endTime: 'bad', content: '', level: '?', creditValue: 'bad' }));
+    const expectedIssues = validateScoringRows(manyBadRows).issues;
+    assert.ok(expectedIssues.length > 200);
+    const manyErrors = await (await POST(req('POST', { fileName: 'many-errors.xlsx', rows: manyBadRows }, tokenSubmitter))).json();
+    assert.deepEqual(manyErrors.data.issues, expectedIssues);
+    const storedErrors = await queryOne<{ issues: unknown }>('SELECT issues FROM scoring_imports WHERE id=$1', [manyErrors.data.id]);
+    assert.deepEqual(storedErrors?.issues, expectedIssues);
 
     // 提交人只能看自己的
     const mine = await (await GET(req('GET', undefined, tokenSubmitter))).json() as { data: Array<{ id: string }> };

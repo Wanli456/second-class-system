@@ -28,6 +28,24 @@ export type PermissionKey =
   | 'canSubmitOriginalLeave'
   | 'canImportScoring';
 
+export const PERMISSION_COLUMNS = {
+  canPublish: 'can_publish',
+  canScore: 'can_score',
+  canSubmitActivity: 'can_submit_activity',
+  canViewSubmissionStatus: 'can_view_submission_status',
+  canSubmitScoring: 'can_submit_scoring',
+  canRegisterOtherCollege: 'can_register_other_college',
+  canReviewLeave: 'can_review_leave',
+  canViewEveningStudy: 'can_view_evening_study',
+  canStartGroupLeave: 'can_start_group_leave',
+  canManageAttendanceWork: 'can_manage_attendance_work',
+  canUploadLeave: 'can_upload_leave',
+  canQueryLeave: 'can_query_leave',
+  canManageOriginalLeave: 'can_manage_original_leave',
+  canSubmitOriginalLeave: 'can_submit_original_leave',
+  canImportScoring: 'can_import_scoring',
+} as const satisfies Record<PermissionKey, string>;
+
 export const DEPARTMENT_AUTO_PERMISSIONS: Record<string, Partial<Record<PermissionKey, boolean>>> = {
   // 注意：部门名称必须与用户管理/前端文案一致，否则自动权限不会命中。
   学习竞技部: {
