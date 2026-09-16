@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
-import { requirePermission } from '@/lib/auth';
+import { calculateUserPermissions, requirePermission, requireUser } from '@/lib/auth';
 import { detectFileKindFromBytes, getUploadFileKind, UPLOAD_FILE_FORMAT_HINT } from '@/lib/upload-file-validation';
 import { publicUploadError } from '@/lib/upload-error';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -25,8 +25,14 @@ export async function POST(request: NextRequest) {
     } as const;
     const permission = permissionByPurpose[purpose as keyof typeof permissionByPurpose];
     if (!permission) return NextResponse.json({ success: false, error: '缺少或无效的上传用途' }, { status: 400 });
-    const auth = await requirePermission(request, permission);
+    const auth = purpose === 'scoring' ? await requireUser(request) : await requirePermission(request, permission);
     if (auth.response) return auth.response;
+    if (purpose === 'scoring') {
+      const permissions = calculateUserPermissions(auth.user!);
+      if (!permissions.canSubmitScoring && !permissions.canImportScoring) {
+        return NextResponse.json({ success: false, error: '暂无赋分材料或班级赋分表提交权限' }, { status: 403 });
+      }
+    }
     const uploadLimit = checkRateLimit(`upload:${auth.user!.id}`, 20, 10 * 60 * 1000);
     if (!uploadLimit.allowed) {
       return NextResponse.json({ success: false, error: '上传过于频繁，请稍后再试' }, { status: 429, headers: { 'Retry-After': String(uploadLimit.retryAfterSeconds) } });

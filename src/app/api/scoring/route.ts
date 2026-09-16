@@ -110,6 +110,7 @@ export async function PUT(request: NextRequest) {
     if (!activity.scoring_table_url) return NextResponse.json({ success: false, error: '请等待活动赋分表提交' }, { status: 400 });
     if (!hasRequiredScoringMaterials({
       level: String(activity.level || ''),
+      scope_type: activity.scope_type,
       scoring_table_url: activity.scoring_table_url,
       record_photo_url: activity.record_photo_url,
     })) return NextResponse.json({ success: false, error: '校级活动需要上传备案表照片' }, { status: 400 });

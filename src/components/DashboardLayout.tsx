@@ -41,6 +41,7 @@ interface User {
   canSubmitActivity?: boolean;
   canViewSubmissionStatus?: boolean;
   canSubmitScoring?: boolean;
+  canImportScoring?: boolean | null;
   canRegisterOtherCollege?: boolean;
   canReviewLeave?: boolean;
   canViewEveningStudy?: boolean;
@@ -137,7 +138,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: '班级考勤统计', href: '/class-attendance', icon: Users, group: '工作台', public: true },
   { label: '活动提交', href: '/submit', icon: Send, group: '活动管理', requiredPermission: 'canSubmitActivity' },
   { label: '提交状态', href: '/submit/status', icon: FileCheck, group: '活动管理', requiredPermission: 'canViewSubmissionStatus' },
-  { label: '赋分材料', href: '/submit/scoring', icon: Award, group: '活动管理', requiredPermission: 'canSubmitScoring' },
+  { label: '赋分材料', href: '/submit/scoring', icon: Award, group: '活动管理', requiredAnyPermissions: ['canSubmitScoring', 'canImportScoring'] },
   { label: '其他学院登记', href: '/other-college-registration', icon: Award, group: '活动管理', requiredPermission: 'canRegisterOtherCollege' },
   { label: '我的假条', href: '/leave-slip/mine', icon: FileCheck, group: '假条管理' },
   { label: '假条上传', href: '/leave-slip/upload', icon: FileCheck, group: '假条管理', requiredPermission: 'canUploadLeave' },
@@ -149,7 +150,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: '晚自习查询', href: '/evening-study', icon: Moon, group: '考勤与查询', requiredPermission: 'canViewEveningStudy' },
   { label: '活动总表', href: '/admin?role=admin&tab=activities', icon: ClipboardList, group: '系统管理', requiredRole: 'admin' },
   { label: '活动审核', href: '/admin?role=admin&tab=review', icon: FileCheck, group: '系统管理', requiredPermission: 'canPublish' },
-  { label: '活动赋分', href: '/admin?role=admin&tab=scoring', icon: Award, group: '系统管理', requiredAnyPermissions: ['canScore', 'canImportScoring'] },
+  { label: '活动赋分', href: '/admin?role=admin&tab=scoring', icon: Award, group: '系统管理', requiredPermission: 'canScore' },
   { label: '用户管理', href: '/admin?role=admin&tab=users', icon: Users, group: '系统管理', requiredRole: 'admin' },
   { label: '数据治理', href: '/admin?role=admin&tab=governance', icon: ShieldCheck, group: '系统管理', requiredRole: 'admin' },
   { label: '学习竞技部用户管理', href: '/department-users/learning-competition', icon: Users, group: '系统管理', requiredDepartment: '学习竞技部' },

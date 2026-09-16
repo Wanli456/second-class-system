@@ -37,6 +37,7 @@ interface User {
   canSubmitActivity?: boolean;
   canViewSubmissionStatus?: boolean;
   canSubmitScoring?: boolean;
+  canImportScoring?: boolean;
   canRegisterOtherCollege?: boolean;
   canReviewLeave?: boolean;
   canViewEveningStudy?: boolean;
@@ -265,7 +266,7 @@ export default function Home() {
       { href: '/admin?role=admin&tab=users', label: '用户管理', detail: '权限管理、角色分配', icon: Users, tone: 'bg-rose-50 text-rose-700', show: isAdmin },
       { href: '/submit', label: '活动提交', detail: '提交活动基本信息、查看审核状态', icon: Send, tone: 'bg-emerald-50 text-emerald-700', show: hasPermission(user, 'canSubmitActivity') },
       { href: '/submit/status', label: '提交状态', detail: '查询活动提交进度和结果', icon: FileCheck, tone: 'bg-slate-100 text-slate-700', show: hasPermission(user, 'canViewSubmissionStatus') },
-      { href: '/submit/scoring', label: '赋分材料', detail: '上传活动赋分表、备案表照片', icon: Award, tone: 'bg-amber-50 text-amber-700', show: hasPermission(user, 'canSubmitScoring') },
+      { href: '/submit/scoring', label: '赋分材料', detail: '提交活动赋分材料或班级赋分表', icon: Award, tone: 'bg-amber-50 text-amber-700', show: hasPermission(user, 'canSubmitScoring') || hasPermission(user, 'canImportScoring') },
       { href: '/other-college-registration', label: '其他学院登记', detail: '登记其他学院校级活动的赋分材料', icon: Award, tone: 'bg-amber-50 text-amber-700', show: hasPermission(user, 'canRegisterOtherCollege') },
     ].filter((entry) => entry.show);
 
@@ -315,7 +316,7 @@ export default function Home() {
       ...(hasPermission(user, 'canViewEveningStudy') ? ['/evening-study'] : []),
       ...(hasPermission(user, 'canSubmitActivity') ? ['/submit'] : []),
       ...(hasPermission(user, 'canViewSubmissionStatus') ? ['/submit/status'] : []),
-      ...(hasPermission(user, 'canSubmitScoring') ? ['/submit/scoring'] : []),
+      ...((hasPermission(user, 'canSubmitScoring') || hasPermission(user, 'canImportScoring')) ? ['/submit/scoring'] : []),
       ...(hasPermission(user, 'canRegisterOtherCollege') ? ['/other-college-registration'] : []),
       ...(hasPermission(user, 'canPublish') ? ['/admin?role=admin&tab=review'] : []),
       ...(hasPermission(user, 'canScore') ? ['/admin?role=admin&tab=scoring'] : []),

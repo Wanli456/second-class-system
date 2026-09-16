@@ -46,7 +46,7 @@ const PERMISSION_LABELS: Record<PermissionKey, string> = {
 
 const PERMISSION_HINTS: Record<PermissionKey, string> = {
   canPublish: '允许查看并审核活动提交材料。',
-  canScore: '允许进入活动赋分并确认赋分结果。',
+  canScore: '允许进入活动赋分，包含活动赋分和班级赋分表确认。',
   canSubmitActivity: '允许提交本学院的活动申请与相关材料。',
   canViewSubmissionStatus: '允许查询已提交活动的审核进度和结果。',
   canSubmitScoring: '允许为活动提交赋分表等赋分材料。',

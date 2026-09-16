@@ -263,7 +263,7 @@ export function ClassScoringImport({ mode }: { mode: 'submit' | 'confirm' }) {
                           ))}
                         </ul>
                       )}
-                      {record.status === '待人工确认' && (
+                      {showConfirm && record.status === '待人工确认' && (
                         <div className="mt-3 flex flex-wrap items-center gap-3">
                           <Button type="button" onClick={() => void confirm(record.id)} disabled={confirmingId === record.id}
                             className="h-9 bg-emerald-700 px-4 text-white hover:bg-emerald-800">

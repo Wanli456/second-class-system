@@ -70,8 +70,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const recordPhotoUrl = requiredText(body.recordPhotoUrl);
   const recordPhotoFileName = requiredText(body.recordPhotoFileName);
 
-  if (!fullName || !organizer || !category || !startTime || !endTime || !leaderName || !contactPhone || !scoringTableUrl || !scoringTableFileName || !recordPhotoUrl || !recordPhotoFileName) {
-    return NextResponse.json({ success: false, error: '请完整填写活动、负责人信息并上传赋分表、备案表照片' }, { status: 400 });
+  if (!fullName || !organizer || !category || !startTime || !endTime || !scoringTableUrl || !scoringTableFileName) {
+    return NextResponse.json({ success: false, error: '请完整填写活动信息并上传赋分表' }, { status: 400 });
+  }
+  if (recordPhotoUrl && !recordPhotoFileName) {
+    return NextResponse.json({ success: false, error: '备案表照片文件名缺失' }, { status: 400 });
   }
   if (!isOtherCollege(organizer)) {
     return NextResponse.json({ success: false, error: '主办学院只能选择指定的四个学院' }, { status: 400 });
@@ -91,8 +94,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (current.scoring_material_submitter_id !== auth.user!.id && auth.user!.role !== 'admin') throw Object.assign(new Error('只能由原提交人重新提交登记'), { status: 403 });
       if (current.scoring_status === '已赋分') throw Object.assign(new Error('已赋分的登记不能重新提交'), { status: 400 });
       const updated = (await client.query(
-        `UPDATE activities SET full_name=$1,start_time=$2,end_time=$3,category=$4,scope_name=$5,scope_names=$6,scoring_material_submitter_id=$7,scoring_material_submitter_name=$8,scoring_material_submitter_student_id=$9,scoring_table_url=$10,scoring_table_file_name=$11,record_photo_url=$12,record_photo_file_name=$13,scoring_status='待赋分',submission_count=COALESCE(submission_count,1)+1,idempotency_key=$14,updated_at=NOW() WHERE id=$15 AND scoring_status<>'已赋分' RETURNING *`,
-        [fullName, normalizedStartTime, normalizedEndTime, category, organizer, JSON.stringify([{ type: 'other_college', name: organizer }]), auth.user!.id, auth.user!.username, auth.user!.student_id, scoringTableUrl, scoringTableFileName, recordPhotoUrl, recordPhotoFileName, idempotencyKey, submissionId],
+        `UPDATE activities SET full_name=$1,start_time=$2,end_time=$3,category=$4,leader_name=$5,leader_phone=$6,scope_name=$7,scope_names=$8,scoring_material_submitter_id=$9,scoring_material_submitter_name=$10,scoring_material_submitter_student_id=$11,scoring_table_url=$12,scoring_table_file_name=$13,record_photo_url=$14,record_photo_file_name=$15,scoring_status='待赋分',submission_count=COALESCE(submission_count,1)+1,idempotency_key=$16,updated_at=NOW() WHERE id=$17 AND scoring_status<>'已赋分' RETURNING *`,
+        [fullName, normalizedStartTime, normalizedEndTime, category, leaderName || '', contactPhone || '', organizer, JSON.stringify([{ type: 'other_college', name: organizer }]), auth.user!.id, auth.user!.username, auth.user!.student_id, scoringTableUrl, scoringTableFileName, recordPhotoUrl, recordPhotoFileName, idempotencyKey, submissionId],
       )).rows[0] as Record<string, unknown> | undefined;
       if (!updated) throw Object.assign(new Error('登记状态已变化，请刷新后重试'), { status: 409 });
       await writeAuditLog({ actor: auth.user, action: 'resubmit_other_college_registration', resourceType: 'activity', resourceId: submissionId, details: { submissionCount: updated.submission_count } }, client);
@@ -105,7 +108,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       "VALUES ($1,$2,$3,$4,$5,'校级',NULL,NULL,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'正常活动','待赋分',$18) ON CONFLICT (idempotency_key) DO NOTHING RETURNING *",
       [
         createOtherCollegeActivityId(), fullName, normalizedStartTime, normalizedEndTime, category, recordPhotoUrl, recordPhotoFileName,
-        leaderName, contactPhone, 'other_college', organizer, JSON.stringify([{ type: 'other_college', name: organizer }]),
+        leaderName || '', contactPhone || '', 'other_college', organizer, JSON.stringify([{ type: 'other_college', name: organizer }]),
         auth.user!.id, auth.user!.username, auth.user!.student_id, scoringTableUrl, scoringTableFileName, idempotencyKey,
       ],
     )).rows[0] as Record<string, unknown> | undefined;

@@ -92,10 +92,10 @@ async function run(): Promise<void> {
   );
 
   const otherPayload = {
-    fullName: `核心审计外院活动-${suffix}`, organizer: '智能制造学院', category: '智',
-    startTime: '2099-09-21 10:00:00', endTime: '2099-09-21 12:00:00', leaderName: '不应审计姓名', contactPhone: '13800000000',
+    fullName: `核心审计外院活动-${suffix}`, organizer: '校社团', category: '智',
+    startTime: '2099-09-21 10:00:00', endTime: '2099-09-21 12:00:00', leaderName: '', contactPhone: '',
     scoringTableUrl: '/uploads/core-audit-score.xlsx', scoringTableFileName: 'core-audit-score.xlsx',
-    recordPhotoUrl: '/uploads/core-audit-record.png', recordPhotoFileName: 'core-audit-record.png',
+    recordPhotoUrl: null, recordPhotoFileName: null,
   };
   const deniedOther = await auditCount('create_other_college_registration');
   await expectStatus(await registerOtherCollege(request('/api/other-college-registrations', 'POST', otherPayload, 'local-student', `denied-other-${suffix}`)), 403);

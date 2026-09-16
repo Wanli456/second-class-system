@@ -502,7 +502,7 @@ function AdminPage() {
     }
 
     // 校级活动需要备案表
-    if (level === '校级' && !activity.record_photo_url) {
+    if (level === '校级' && activity.scope_type !== 'other_college' && !activity.record_photo_url) {
       alert('校级活动需要备案表照片才能赋分，请等待负责人上传');
       return;
     }
@@ -830,7 +830,7 @@ function AdminPage() {
 
   const renderScoringCard = (a: ScoringActivity) => {
     const isExpanded = expandedScoring === a.id;
-    const canConfirm = Boolean(a.scoring_table_url) && (a.level !== '校级' || Boolean(a.record_photo_url));
+    const canConfirm = Boolean(a.scoring_table_url) && (a.scope_type === 'other_college' || a.level !== '校级' || Boolean(a.record_photo_url));
 
     return (
       <article key={a.id} className={cn(
@@ -881,7 +881,7 @@ function AdminPage() {
             <div className="mt-4 flex flex-wrap gap-3 border-t border-slate-200 pt-4 text-sm">
               {a.scope_type === 'other_college' && <div className="flex flex-wrap items-center gap-2"><Badge className="bg-sky-100 text-sky-800 hover:bg-sky-100">其他学院登记</Badge><span className="text-sm text-slate-600">主办学院：{a.scope_name || '未填写'}</span></div>}
               <div className="flex items-center gap-2"><span className="text-slate-500">赋分表：</span>{a.scoring_table_url ? <div className="flex items-center gap-2"><FilePreviewLink url={a.scoring_table_url} fileName={a.scoring_table_file_name} label="查看赋分表" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /><a href={a.scoring_table_url} download className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"><Download className="size-3" aria-hidden="true" />下载</a></div> : <span className="text-xs text-red-600">负责人尚未上传赋分表</span>}</div>
-              {a.level === '校级' && <div className="flex items-center gap-2"><span className="text-slate-500">备案表照片：</span>{a.record_photo_url ? <div className="flex items-center gap-2"><FilePreviewLink url={a.record_photo_url} fileName={a.record_photo_file_name} label="查看备案表照片" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /><a href={a.record_photo_url} download className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"><Download className="size-3" aria-hidden="true" />下载</a></div> : <span className="text-xs text-red-600">未上传备案表照片（无法赋分）</span>}</div>}
+              {a.level === '校级' && <div className="flex items-center gap-2"><span className="text-slate-500">备案表照片：</span>{a.record_photo_url ? <div className="flex items-center gap-2"><FilePreviewLink url={a.record_photo_url} fileName={a.record_photo_file_name} label="查看备案表照片" className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 hover:border-teal-300 hover:bg-teal-50" /><a href={a.record_photo_url} download className="flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"><Download className="size-3" aria-hidden="true" />下载</a></div> : <span className={a.scope_type === 'other_college' ? 'text-xs text-slate-500' : 'text-xs text-red-600'}>{a.scope_type === 'other_college' ? '未上传（可选）' : '未上传备案表照片（无法赋分）'}</span>}</div>}
             </div>
             {scoringLocks[a.id] && <p className="mt-3 rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-800">{scoringLocks[a.id]}</p>}
             {a.scoring_status === '待赋分' && <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4"><Button type="button" onClick={() => handleScoring(a.id, a.level)} disabled={scoringInProgress || !canConfirm || Boolean(scoringLocks[a.id])} className="bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">{scoringInProgress ? '处理中...' : '确认赋分'}</Button>{!canConfirm && <span className="text-xs text-amber-700">请等待负责人上传完整材料</span>}</div>}
