@@ -3,6 +3,7 @@ import './globals.css';
 import { HideNButton } from '@/components/HideNButton';
 import { UserProvider } from '@/contexts/UserContext';
 import { RouteLoadingIndicator } from '@/components/RouteLoadingIndicator';
+import { MinimizedPreviewDock } from '@/components/FilePreviewDialog';
 
 export const metadata: Metadata = {
   title: '二课活动管理系统',
@@ -20,6 +21,7 @@ export default function RootLayout({
         <UserProvider>
           <RouteLoadingIndicator />
           {children}
+          <MinimizedPreviewDock />
           <HideNButton />
         </UserProvider>
       </body>

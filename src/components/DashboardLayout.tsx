@@ -232,8 +232,9 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
   const visibleItems = React.useMemo(() => NAV_ITEMS.filter(canAccessItem), [canAccessItem]);
 
   React.useEffect(() => {
-    const applyPermissionHints = () => {
-      document.querySelectorAll<HTMLElement>('label, button, th, [role="checkbox"]').forEach((element) => {
+    const applyPermissionHints = (root: ParentNode = document) => {
+      root.querySelectorAll<HTMLElement>('label, button, th, [role="checkbox"]').forEach((element) => {
+        if (element.closest('[data-file-preview]')) return;
         const label = [element.textContent, element.getAttribute('aria-label')]
           .filter(Boolean)
           .join(' ')
@@ -246,7 +247,17 @@ export function DashboardLayout({ children, user: providedUser, onLogout, title,
     };
 
     applyPermissionHints();
-    const observer = new MutationObserver(applyPermissionHints);
+    const observer = new MutationObserver((records) => {
+      records.forEach((record) => record.addedNodes.forEach((node) => {
+        if (!(node instanceof HTMLElement) || node.closest('[data-file-preview]')) return;
+        applyPermissionHints(node);
+        if (node.matches('label, button, th, [role="checkbox"]')) {
+          const label = [node.textContent, node.getAttribute('aria-label')].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+          const hint = PERMISSION_HINTS.find(([permission]) => label.includes(permission))?.[1];
+          if (hint) node.title = hint;
+        }
+      }));
+    });
     observer.observe(document.body, { childList: true, subtree: true });
 
     return () => observer.disconnect();
