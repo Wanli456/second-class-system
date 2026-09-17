@@ -108,6 +108,7 @@ if (localDb && shouldInitializeLocalDb) {
       record_file_name TEXT,
       record_photo_url TEXT,
       record_photo_file_name TEXT,
+      record_photo_list TEXT NOT NULL DEFAULT '[]',
       leader_name TEXT NOT NULL,
       leader_phone TEXT NOT NULL,
       scope_type TEXT DEFAULT 'department',
@@ -461,6 +462,7 @@ async function migrateDatabaseSchema(): Promise<void> {
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_file_name TEXT;
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_photo_url TEXT;
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_photo_file_name TEXT;
+     ALTER TABLE activities ADD COLUMN IF NOT EXISTS record_photo_list TEXT NOT NULL DEFAULT '[]';
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS scoring_table_file_name TEXT;
     ALTER TABLE activities ADD COLUMN IF NOT EXISTS submission_count INTEGER NOT NULL DEFAULT 1;
      ALTER TABLE activities ADD COLUMN IF NOT EXISTS registration_start_time TIMESTAMP;

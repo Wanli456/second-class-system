@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       if (status) { params.push(status); clauses.push(`scoring_status=$${params.length}`); }
       if (level) { params.push(level); clauses.push(`level=$${params.length}`); }
       const data = await query(
-      `SELECT id,full_name,start_time,end_time,registration_start_time,registration_end_time,level,category,category_primary,category_secondary,leader_name,leader_phone,leader_ids,leader_details,scoring_status,scoring_table_url,scoring_table_file_name,record_file_url,record_file_name,record_photo_url,record_photo_file_name,scope_names,scope_type,scope_name,activity_submitter_name,activity_submitter_student_id,scoring_material_submitter_name,scoring_material_submitter_student_id,submission_count FROM activities WHERE ${clauses.join(' AND ')} ORDER BY created_at DESC`,
+      'SELECT id,full_name,start_time,end_time,registration_start_time,registration_end_time,level,category,category_primary,category_secondary,leader_name,leader_phone,leader_ids,leader_details,scoring_status,scoring_table_url,scoring_table_file_name,record_file_url,record_file_name,record_photo_url,record_photo_file_name,record_photo_list,scope_names,scope_type,scope_name,activity_submitter_name,activity_submitter_student_id,scoring_material_submitter_name,scoring_material_submitter_student_id,submission_count FROM activities WHERE ' + clauses.join(' AND ') + ' ORDER BY created_at DESC',
         params,
       );
       const visible = auth.user!.role === 'admin'

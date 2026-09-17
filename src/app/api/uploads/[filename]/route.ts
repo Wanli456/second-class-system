@@ -60,7 +60,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           permissions.canViewEveningStudy,
         ],
       );
-      if (!lists.some((row) => imageListContains(row.image_list, url))) {
+      const recordPhotoLists = await query<{ record_photo_list: string | null }>(
+        "SELECT record_photo_list FROM activities WHERE ($1 IN (activity_submitter_id, scoring_material_submitter_id) OR leader_ids LIKE '%\"' || $1 || '\"%' OR $2)",
+        [user.id, permissions.canScore],
+      );
+      if (!lists.some((row) => imageListContains(row.image_list, url))
+        && !recordPhotoLists.some((row) => imageListContains(row.record_photo_list, url))) {
         return NextResponse.json({ success: false, error: '无权访问该文件' }, { status: 403 });
       }
     }

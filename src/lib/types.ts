@@ -16,6 +16,7 @@ export interface Activity {
   record_file_name?: string | null;
   record_photo_url?: string | null;
   record_photo_file_name?: string | null;
+  record_photo_list?: string | null;
   leader_name: string;
   leader_phone: string;
   leader_details?: string | null;
