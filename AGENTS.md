@@ -116,3 +116,8 @@ src/
 
 - 表格放在 `overflow-x-auto` 容器内时必须加 `min-w-*`（列数多可用 `min-w-[720px]`），禁止只写 `w-full`：窄屏下没有最小宽度的表格会被挤到单元格文字逐字竖排换行，行高被撑到数百像素，视觉上像"卡片下方大片空白"。
 - 已知反例就是本项目曾出现的问题：不要新增无 `min-w` 的 `overflow-x-auto > table` 组合；含长文本列的表格可改用卡片布局（参考 /admin 班级名册的 sm:hidden 卡片方案）。
+
+## 生产部署运行手册
+
+- 任何生产部署、回滚或应用回滚备份清理前，必须先读 [docs/PRODUCTION-DEPLOYMENT-RUNBOOK.md](docs/PRODUCTION-DEPLOYMENT-RUNBOOK.md)。
+- 手册中的发布包边界、构建命令、回滚门禁、线上验收和精确路径确认是强制要求；不得为了省时直接替换 `.next`、`dist` 或删除备份目录。

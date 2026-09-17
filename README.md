@@ -7,6 +7,7 @@
 
 - 必须配置 `AUTH_SESSION_SECRET`，生产环境不得使用开发环境固定密钥。
 - 当前应用进程由 `dist/server.js` 提供；生产构建需要同时执行 `next build` 和 `tsup src/server.ts`。
+- 部署、回滚和回滚备份清理必须遵循 [生产部署运行手册](docs/PRODUCTION-DEPLOYMENT-RUNBOOK.md)。
 - 正式接入域名后再配置 HTTPS、反向代理和安全 Cookie。
 - 建议由 systemd/PM2 托管进程，并配置自动重启、日志轮转和磁盘告警。
 - `/api/health` 可用于应用与数据库存活检查。
