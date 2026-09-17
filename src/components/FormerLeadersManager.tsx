@@ -26,9 +26,21 @@ interface PendingLink {
 
 type RosterResponse = { success?: boolean; data?: { rows?: RosterRow[]; pending?: PendingLink[] }; error?: string };
 
+async function readRosterResponse(response: Response): Promise<RosterResponse & { warning?: string }> {
+  const raw = await response.text();
+  try {
+    const result = JSON.parse(raw) as RosterResponse & { warning?: string };
+    if (!response.ok || result.success === false) throw new Error(result.error || `请求失败（HTTP ${response.status}）`);
+    return result;
+  } catch (err) {
+    if (err instanceof SyntaxError) throw new Error(response.ok ? '名册接口返回格式无效，请稍后重试' : `读取名册失败（HTTP ${response.status}）`);
+    throw err;
+  }
+}
+
 async function callApi(url: string, method: string, body?: unknown) {
   const response = await apiFetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
-  return (await response.json()) as RosterResponse & { warning?: string };
+  return readRosterResponse(response);
 }
 
 const inputClass = 'mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100';
@@ -94,8 +106,7 @@ export default function FormerLeadersManager() {
 
   const refresh = useCallback(async () => {
     try {
-      const data = (await (await apiFetch('/api/former-leaders')).json()) as RosterResponse;
-      if (data.success === false) throw new Error(data.error || '读取名册失败');
+      const data = await callApi('/api/former-leaders', 'GET');
       setRows(data.data?.rows || []);
       setPending(data.data?.pending || []);
       setError('');

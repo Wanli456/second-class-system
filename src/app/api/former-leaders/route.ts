@@ -50,27 +50,32 @@ async function findDuplicate(department: string, studentId: string, excludeId?: 
 export async function GET(request: NextRequest) {
   const auth = await requirePermission(request, 'admin');
   if (auth.response) return auth.response;
-  const rows = await query<RosterRow>('SELECT * FROM former_activity_leaders ORDER BY department, created_at DESC');
-  const linkedIds = [...new Set(rows.map((row) => row.linked_user_id).filter(Boolean))] as string[];
-  const placeholders = linkedIds.map((_, index) => `$${index + 1}`).join(',');
-  const linkedUsers = linkedIds.length
-    ? await query<{ id: string; username: string; student_id: string }>(`SELECT id, username, student_id FROM users WHERE id IN (${placeholders})`, linkedIds)
-    : [];
-  const byId = new Map(linkedUsers.map((user) => [user.id, user]));
-  // 按学号提示待确认关联：名册有学号、尚未确认关联、但已有同学号的注册账号。
-  const studentIds = [...new Set(rows.map((row) => row.student_id).filter((value): value is string => Boolean(value) && !rows.some((row) => row.linked_user_id && row.student_id === value)))];
-  const pendingPlaceholders = studentIds.map((_, index) => `$${index + 1}`).join(',');
-  const matchedUsers = studentIds.length
-    ? await query<{ id: string; username: string; student_id: string }>(`SELECT id, username, student_id FROM users WHERE student_id IN (${pendingPlaceholders})`, studentIds)
-    : [];
-  const userByStudentId = new Map(matchedUsers.map((user) => [user.student_id, user]));
-  const pending = rows
-    .filter((row) => !row.linked_user_id && row.student_id && userByStudentId.has(row.student_id))
-    .map((row) => {
-      const user = userByStudentId.get(row.student_id!)!;
-      return { id: row.id, name: row.name, rosterStudentId: row.student_id, userId: user.id, username: user.username, userStudentId: user.student_id };
-    });
-  return NextResponse.json({ success: true, data: { rows: rows.map((row) => serializeRow(row, row.linked_user_id ? byId.get(row.linked_user_id) : null)), pending } });
+  try {
+    const rows = await query<RosterRow>('SELECT * FROM former_activity_leaders ORDER BY department, created_at DESC');
+    const linkedIds = [...new Set(rows.map((row) => row.linked_user_id).filter(Boolean))] as string[];
+    const placeholders = linkedIds.map((_, index) => `$${index + 1}`).join(',');
+    const linkedUsers = linkedIds.length
+      ? await query<{ id: string; username: string; student_id: string }>(`SELECT id, username, student_id FROM users WHERE id IN (${placeholders})`, linkedIds)
+      : [];
+    const byId = new Map(linkedUsers.map((user) => [user.id, user]));
+    // 按学号提示待确认关联：名册有学号、尚未确认关联、但已有同学号的注册账号。
+    const studentIds = [...new Set(rows.map((row) => row.student_id).filter((value): value is string => Boolean(value) && !rows.some((row) => row.linked_user_id && row.student_id === value)))];
+    const pendingPlaceholders = studentIds.map((_, index) => `$${index + 1}`).join(',');
+    const matchedUsers = studentIds.length
+      ? await query<{ id: string; username: string; student_id: string }>(`SELECT id, username, student_id FROM users WHERE student_id IN (${pendingPlaceholders})`, studentIds)
+      : [];
+    const userByStudentId = new Map(matchedUsers.map((user) => [user.student_id, user]));
+    const pending = rows
+      .filter((row) => !row.linked_user_id && row.student_id && userByStudentId.has(row.student_id))
+      .map((row) => {
+        const user = userByStudentId.get(row.student_id!)!;
+        return { id: row.id, name: row.name, rosterStudentId: row.student_id, userId: user.id, username: user.username, userStudentId: user.student_id };
+      });
+    return NextResponse.json({ success: true, data: { rows: rows.map((row) => serializeRow(row, row.linked_user_id ? byId.get(row.linked_user_id) : null)), pending } });
+  } catch (err) {
+    console.error('读取往届负责人名册失败:', err);
+    return NextResponse.json({ success: false, error: '读取往届负责人名册失败，请稍后重试' }, { status: 500 });
+  }
 }
 
 type CreateOutcome =

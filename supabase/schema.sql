@@ -450,3 +450,9 @@ CREATE INDEX IF NOT EXISTS former_activity_leaders_department_idx
   ON former_activity_leaders (department);
 CREATE UNIQUE INDEX IF NOT EXISTS former_activity_leaders_linked_user_idx
   ON former_activity_leaders (linked_user_id) WHERE linked_user_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_admin') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE former_activity_leaders TO app_admin;
+  END IF;
+END $$;

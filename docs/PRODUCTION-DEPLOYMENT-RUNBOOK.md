@@ -72,8 +72,9 @@ PowerShell 向 SSH 管道传脚本会带入 CRLF；可能在发布主体成功�
 - 未登录 `/api/auth?me=true` 与受保护上传路径为 `401`；
 - `dist/server.js`、发布清单、RapidOCR 的 `cv2` 与 `rapidocr_onnxruntime` 导入正常；
 - 数据库备份和 Rainyun 对象存储备份 timer 仍为 `active`。
+- 本次新增表要以实际运行数据库角色验证 `SELECT`；表 owner 为 `postgres` 不代表应用角色自动具备权限。
 
-已知迁移问题：生产端遇到 `relation "former_activity_leaders" already exists` 时，新增表路径必须幂等，例如 `CREATE TABLE IF NOT EXISTS`；不能只依赖本地内存数据库分支。
+已知迁移问题：生产端遇到 `relation "former_activity_leaders" already exists` 时，新增表路径必须幂等，例如 `CREATE TABLE IF NOT EXISTS`；若表由 `postgres` 创建，还必须向应用角色授予最小表权限。不能只依赖本地内存数据库分支。
 
 ## 7. 只保留一份应用回滚备份
 
