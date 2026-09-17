@@ -431,3 +431,22 @@ CREATE TABLE IF NOT EXISTS file_cleanup_jobs (
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+-- 往届活动负责人名册：与真实账号分开维护，关联仅保存映射，不产生任何权限。
+CREATE TABLE IF NOT EXISTS former_activity_leaders (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  name TEXT NOT NULL,
+  department TEXT NOT NULL,
+  student_id TEXT,
+  contact_phone TEXT,
+  active BOOLEAN NOT NULL DEFAULT true,
+  linked_user_id TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS former_activity_leaders_dept_student_idx
+  ON former_activity_leaders (department, student_id) WHERE student_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS former_activity_leaders_department_idx
+  ON former_activity_leaders (department);
+CREATE UNIQUE INDEX IF NOT EXISTS former_activity_leaders_linked_user_idx
+  ON former_activity_leaders (linked_user_id) WHERE linked_user_id IS NOT NULL;

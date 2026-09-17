@@ -11,12 +11,14 @@ import { apiFetch, createIdempotencyKey } from '@/lib/client-api';
 import { useUser } from '@/contexts/UserContext';
 import { ImageUploadPreviews } from '@/components/ImageUploadPreviews';
 import { hasPermission } from '@/lib/department-permissions';
-import { canSelectActivityLeader } from '@/lib/activity-leader-rules';
+import { getActivityLeaderDetails } from '@/lib/activity-leader-details';
 import { normalizeDateTimeInput } from '@/lib/datetime';
 
 interface DirectoryUser { id: string; username: string; student_id: string; role?: string | null; can_submit_activity?: boolean | null; can_submit_scoring?: boolean | null; department?: string | null; class_name?: string | null; }
 interface ActivityScope { type: 'department' | 'class'; name: string; label: string; }
-interface Submission { activity_image_url?: string | null; id: string; full_name: string; start_time: string; end_time: string; registration_start_time?: string | null; registration_end_time?: string | null; category: string; category_primary?: string | null; category_secondary?: string | null; level: string; scope_names?: string | null; scope_type?: 'department' | 'class'; scope_name?: string | null; leader_ids?: string | null; plan_file_url: string | null; plan_file_name?: string | null; record_file_url: string | null; record_file_name?: string | null; review_status: string; }
+interface LeaderCandidate { key: string; type: 'user' | 'former'; id: string; name: string; studentId: string; contactPhone: string | null; linkStatus?: 'unregistered' | 'pending' | 'linked'; }
+const FORMER_STATUS_LABELS: Record<string, string> = { unregistered: '未注册', pending: '待关联', linked: '已注册' };
+interface Submission { activity_image_url?: string | null; id: string; full_name: string; start_time: string; end_time: string; registration_start_time?: string | null; registration_end_time?: string | null; category: string; category_primary?: string | null; category_secondary?: string | null; level: string; scope_names?: string | null; scope_type?: 'department' | 'class'; scope_name?: string | null; leader_ids?: string | null; leader_details?: string | null; plan_file_url: string | null; plan_file_name?: string | null; record_file_url: string | null; record_file_name?: string | null; review_status: string; }
 
 function localDateTime(value: string) {
   const wallTime = normalizeDateTimeInput(value);
@@ -44,7 +46,11 @@ export default function SubmitPage() {
   const [form, setForm] = useState({ full_name: '', registration_start_time: '', registration_end_time: '', start_time: '', end_time: '', category: '', category_primary: '', category_secondary: '', level: '' });
   const [hostScope, setHostScope] = useState<ActivityScope | null>(null);
   const [cohostScopes, setCohostScopes] = useState<ActivityScope[]>([]);
-  const [leaderIds, setLeaderIds] = useState<string[]>([]);
+  const [leaderKeys, setLeaderKeys] = useState<string[]>([]);
+  const [candidateUsers, setCandidateUsers] = useState<LeaderCandidate[]>([]);
+  const [formerCandidates, setFormerCandidates] = useState<LeaderCandidate[]>([]);
+  // 重提时从原快照恢复的往届负责人即使后来停用也要保留，候选刷新不剔除这些选项。
+  const lockedKeysRef = useRef<Set<string>>(new Set());
   const [planFile, setPlanFile] = useState<File | null>(null);
   const [recordFile, setRecordFile] = useState<File | null>(null);
   const [activityImage, setActivityImage] = useState<File | null>(null);
@@ -78,9 +84,7 @@ export default function SubmitPage() {
   const cohostCandidates = useMemo(() => hostScope
     ? scopes.filter((scope) => scope.type === hostScope.type && scope.name !== hostScope.name)
     : [], [hostScope, scopes]);
-  const leaders = useMemo(() => {
-    return directory.filter((item) => canSelectActivityLeader(item, selectedScopes));
-  }, [directory, selectedScopes]);
+  const leaderOptions = useMemo(() => [...candidateUsers, ...formerCandidates], [candidateUsers, formerCandidates]);
 
   useEffect(() => {
     if (!user) return;
@@ -88,7 +92,7 @@ export default function SubmitPage() {
       ? { type: 'department', name: user.department, label: `部门：${user.department}` }
       : user.className ? { type: 'class', name: user.className, label: `班级：${user.className}` } : null);
     setCohostScopes([]);
-    setLeaderIds([user.id]);
+    setLeaderKeys([`user:${user.id}`]);
     Promise.all([
       fetchJson<DirectoryUser[]>('/api/auth?directory=true'),
       fetchJson<string[]>('/api/departments'),
@@ -115,21 +119,53 @@ export default function SubmitPage() {
         if (Array.isArray(parsed)) restoredScopes = parsed.flatMap((item) => item && typeof item === 'object' && ((item as { type?: unknown }).type === 'department' || (item as { type?: unknown }).type === 'class') && typeof (item as { name?: unknown }).name === 'string' ? [{ type: (item as { type: 'department' | 'class' }).type, name: (item as { name: string }).name, label: `${(item as { type: string }).type === 'department' ? '部门' : '班级'}：${(item as { name: string }).name}` }] : []);
       } catch { restoredScopes = []; }
       if (!restoredScopes.length && submission.scope_name) restoredScopes = [{ type: submission.scope_type || 'department', name: submission.scope_name, label: `${submission.scope_type === 'class' ? '班级' : '部门'}：${submission.scope_name}` }];
-      setHostScope(restoredScopes[0] || null); setCohostScopes(restoredScopes.slice(1)); setLeaderIds(parseIds(submission.leader_ids));
+      setHostScope(restoredScopes[0] || null); setCohostScopes(restoredScopes.slice(1));
+      // 从负责人快照完整恢复选择：真实账号按用户 ID，往届按名册 ID，并锁定不受候选刷新影响。
+      const detailList = getActivityLeaderDetails({ leader_details: submission.leader_details, leader_ids: submission.leader_ids });
+      const restoredKeys = detailList.map((item) => item.source === 'former' && item.rosterId ? `former:${item.rosterId}` : item.id ? `user:${item.id}` : '').filter(Boolean);
+      lockedKeysRef.current = new Set(restoredKeys);
+      setLeaderKeys(restoredKeys.length ? restoredKeys : parseIds(submission.leader_ids).map((id) => `user:${id}`).filter(Boolean));
       setExistingImageUrl(submission.activity_image_url || null);
       setExistingPlanUrl(submission.plan_file_url); setExistingPlanName(submission.plan_file_name || null); setExistingRecordUrl(submission.record_file_url); setExistingRecordName(submission.record_file_name || null);
     }).catch(() => alert('读取原活动提交记录失败'));
   }, [router]);
 
+  const scopeKey = selectedScopes.map((scope) => `${scope.type}:${scope.name}`).join('|');
+  const [loadedScopeKey, setLoadedScopeKey] = useState('');
   useEffect(() => {
-    if (leaders.length && !leaderIds.some((id) => leaders.some((leader) => leader.id === id))) setLeaderIds([leaders[0].id]);
-  }, [leaderIds, leaders]);
+    if (!user || !scopeKey) return;
+    let cancelled = false;
+    fetchJson<{ users?: LeaderCandidate[]; former?: LeaderCandidate[] }>(`/api/activities/leader-candidates?scope_names=${encodeURIComponent(JSON.stringify(scopeKey.split('|').map((key) => { const [type, name] = key.split(':'); return { type, name }; })))}`)
+      .then((data) => {
+        if (cancelled || !data.success) return;
+        setCandidateUsers(data.data?.users || []);
+        setFormerCandidates(data.data?.former || []);
+        setLoadedScopeKey(scopeKey);
+      })
+      .catch((error: unknown) => { if (!cancelled) alert(error instanceof Error ? error.message : '读取负责人候选失败，请稍后重试'); });
+    return () => { cancelled = true; };
+  }, [scopeKey, user]);
+
+  const labelsRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    const all = [...candidateUsers, ...formerCandidates];
+    all.forEach((item) => { labelsRef.current[item.key] = item.name; });
+    if (scopeKey !== loadedScopeKey) return;
+    const valid = new Set(all.map((item) => item.key));
+    const kept = leaderKeys.filter((key) => lockedKeysRef.current.has(key) || valid.has(key));
+    if (kept.length !== leaderKeys.length) {
+      const removed = leaderKeys.filter((key) => !lockedKeysRef.current.has(key) && !valid.has(key));
+      if (removed.length) alert(`以下负责人已不属于当前主办、联办部门（或名册已停用），已自动移除：${removed.map((key) => labelsRef.current[key] || key).join('、')}`);
+      setLeaderKeys(kept);
+    }
+    if (!kept.length && !lockedKeysRef.current.size && all.length) setLeaderKeys([all[0].key]);
+  }, [candidateUsers, formerCandidates, leaderKeys, loadedScopeKey, scopeKey]);
 
   const handleHostScopeChange = (value: string) => {
     const nextHost = hostScopes.find((scope) => `${scope.type}:${scope.name}` === value) || null;
     setHostScope(nextHost);
     setCohostScopes([]);
-    setLeaderIds(user ? [user.id] : []);
+    // 不静默替换负责人：超出新范围的选项由候选刷新统一剔除并提示。
   };
 
   const uploadFile = async (file: File): Promise<{ url: string; fileName: string }> => {
@@ -139,7 +175,7 @@ export default function SubmitPage() {
   };
 
   const handleSubmit = async () => {
-    if (!form.full_name || !form.registration_start_time || !form.registration_end_time || !form.start_time || !form.end_time || !form.category || !form.category_primary || !form.category_secondary || !form.level || !hostScope || !leaderIds.length) { alert('请填写活动名称、活动报名时间、活动举办时间、完整二课分类、主办单位并选择负责人'); return; }
+    if (!form.full_name || !form.registration_start_time || !form.registration_end_time || !form.start_time || !form.end_time || !form.category || !form.category_primary || !form.category_secondary || !form.level || !hostScope || !leaderKeys.length) { alert('请填写活动名称、活动报名时间、活动举办时间、完整二课分类、主办单位并选择负责人'); return; }
     if (!planFile && !existingPlanUrl) { alert('请上传活动策划书'); return; }
     if (!recordFile && !existingRecordUrl) { alert('请上传活动备案表'); return; }
     if (!activityImage && !existingImageUrl) { alert('请上传活动图片'); return; }
@@ -150,9 +186,9 @@ export default function SubmitPage() {
       const recordUpload = recordFile ? await uploadFile(recordFile) : null;
       const imageUpload = activityImage ? await uploadFile(activityImage) : null;
       const firstScope = hostScope;
-      const response = await apiFetch('/api/activities/submit', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ ...form, activity_image_url: imageUpload?.url || existingImageUrl, scope_type: firstScope.type, scope_name: firstScope.name, scope_names: selectedScopes.map(({ type, name }) => ({ type, name })), leader_ids: leaderIds, ...(submissionId ? { submission_id: submissionId } : {}), plan_file_url: planUpload?.url || existingPlanUrl, plan_file_name: planUpload?.fileName || existingPlanName, record_file_url: recordUpload?.url || existingRecordUrl, record_file_name: recordUpload?.fileName || existingRecordName }) });
+      const response = await apiFetch('/api/activities/submit', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ ...form, activity_image_url: imageUpload?.url || existingImageUrl, scope_type: firstScope.type, scope_name: firstScope.name, scope_names: selectedScopes.map(({ type, name }) => ({ type, name })), leader_ids: leaderKeys.filter((key) => key.startsWith('user:')).map((key) => key.slice(5)), former_leader_ids: leaderKeys.filter((key) => key.startsWith('former:')).map((key) => key.slice(7)), ...(submissionId ? { submission_id: submissionId } : {}), plan_file_url: planUpload?.url || existingPlanUrl, plan_file_name: planUpload?.fileName || existingPlanName, record_file_url: recordUpload?.url || existingRecordUrl, record_file_name: recordUpload?.fileName || existingRecordName }) });
       const data = await response.json(); if (!data.success) throw new Error(data.error || '提交失败');
-      submitKeyRef.current = null; setSuccess(true); setSubmissionId(null); setForm({ full_name: '', registration_start_time: '', registration_end_time: '', start_time: '', end_time: '', category: '', category_primary: '', category_secondary: '', level: '' }); setCohostScopes([]); setLeaderIds(user ? [user.id] : []); setPlanFile(null); setRecordFile(null); setActivityImage(null); setExistingImageUrl(null); setExistingPlanUrl(null); setExistingPlanName(null); setExistingRecordUrl(null); setExistingRecordName(null);
+      submitKeyRef.current = null; setSuccess(true); setSubmissionId(null); setForm({ full_name: '', registration_start_time: '', registration_end_time: '', start_time: '', end_time: '', category: '', category_primary: '', category_secondary: '', level: '' }); setCohostScopes([]); setLeaderKeys(user ? [`user:${user.id}`] : []); lockedKeysRef.current = new Set(); setPlanFile(null); setRecordFile(null); setActivityImage(null); setExistingImageUrl(null); setExistingPlanUrl(null); setExistingPlanName(null); setExistingRecordUrl(null); setExistingRecordName(null);
       if (new URLSearchParams(window.location.search).has('submissionId')) router.replace('/submit');
     } catch (error) { alert(error instanceof Error ? error.message : '提交失败'); } finally { setSubmitting(false); }
   };
@@ -171,7 +207,7 @@ export default function SubmitPage() {
         <section className={sectionClass}><h3 className="text-sm font-semibold text-slate-900">基本信息</h3><label className="mt-4 block text-sm font-medium text-slate-700">活动全称 *<input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} className={inputClass} placeholder="请输入活动全称" /></label></section>
         <section className={sectionClass}><h3 className="text-sm font-semibold text-slate-900">时间安排</h3><div className="mt-4 grid gap-4 lg:grid-cols-2"><label className="text-sm font-medium text-slate-700">活动报名开始时间 *<input type="datetime-local" value={form.registration_start_time} onChange={(e) => setForm({ ...form, registration_start_time: e.target.value })} className={inputClass} /></label><label className="text-sm font-medium text-slate-700">活动报名结束时间 *<input type="datetime-local" value={form.registration_end_time} onChange={(e) => setForm({ ...form, registration_end_time: e.target.value })} className={inputClass} /></label><label className="text-sm font-medium text-slate-700">活动开始时间 *<input type="datetime-local" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} className={inputClass} /></label><label className="text-sm font-medium text-slate-700">活动结束时间 *<input type="datetime-local" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} className={inputClass} /></label></div></section>
         <section className={sectionClass}><h3 className="text-sm font-semibold text-slate-900">分类与级别</h3><div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><label className="text-sm font-medium text-slate-700">德智体美劳 *<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value, category_primary: '', category_secondary: '' })} className={inputClass}><option value="">请选择分类</option>{CATEGORIES.map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-sm font-medium text-slate-700">一级分类 *<select value={form.category_primary} onChange={(e) => setForm({ ...form, category_primary: e.target.value, category_secondary: '' })} className={inputClass} disabled={!form.category}><option value="">请选择一级分类</option>{(CATEGORY_DETAILS[form.category as Category] ? Object.keys(CATEGORY_DETAILS[form.category as Category]) : []).map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-sm font-medium text-slate-700">二级分类 *<select value={form.category_secondary} onChange={(e) => setForm({ ...form, category_secondary: e.target.value })} className={inputClass} disabled={!form.category_primary}><option value="">请选择二级分类</option>{(form.category && form.category_primary ? CATEGORY_DETAILS[form.category as Category]?.[form.category_primary] || [] : []).map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-sm font-medium text-slate-700">活动级别 *<select value={form.level} onChange={(e) => setForm({ ...form, level: e.target.value })} className={inputClass}><option value="">请选择级别</option>{LEVELS.map((item) => <option key={item}>{item}</option>)}</select></label></div></section>
-        <section className={sectionClass}><div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-slate-900">主办与负责人</h3><span className="text-xs text-slate-500">主办单位必须是自己的部门或班级</span></div><div className="mt-4 grid gap-4 lg:grid-cols-3"><label className="text-sm font-medium text-slate-700">主办单位 *<select value={hostScope ? `${hostScope.type}:${hostScope.name}` : ''} onChange={(e) => handleHostScopeChange(e.target.value)} className={inputClass}><option value="">请选择自己的部门或班级</option>{hostScopes.map((scope) => <option key={`${scope.type}:${scope.name}`} value={`${scope.type}:${scope.name}`}>{scope.label}</option>)}</select></label><label className="text-sm font-medium text-slate-700">联办单位（可选，可多选）<select aria-describedby="cohost-scope-hint" multiple value={cohostScopes.map((scope) => `${scope.type}:${scope.name}`)} onChange={(e) => { const values = Array.from(e.target.selectedOptions, (option) => option.value); setCohostScopes(values.map((value) => cohostCandidates.find((scope) => `${scope.type}:${scope.name}` === value)).filter((scope): scope is ActivityScope => Boolean(scope))); }} className={`${inputClass} min-h-32`} disabled={!hostScope}>{cohostCandidates.map((scope) => <option key={`${scope.type}:${scope.name}`} value={`${scope.type}:${scope.name}`}>{scope.label}</option>)}</select><span id="cohost-scope-hint" className="mt-1 block text-xs font-normal text-slate-500">可不选；只能选择与主办单位同类型的部门或班级。</span></label><label className="text-sm font-medium text-slate-700">活动负责人（可多选） *<select multiple value={leaderIds} onChange={(e) => setLeaderIds(Array.from(e.target.selectedOptions, (option) => option.value))} className={`${inputClass} min-h-32`}>{leaders.map((leader) => <option key={leader.id} value={leader.id}>{leader.username}（{leader.student_id}）</option>)}</select></label></div></section>
+        <section className={sectionClass}><div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-slate-900">主办与负责人</h3><span className="text-xs text-slate-500">主办单位必须是自己的部门或班级</span></div><div className="mt-4 grid gap-4 lg:grid-cols-3"><label className="text-sm font-medium text-slate-700">主办单位 *<select value={hostScope ? `${hostScope.type}:${hostScope.name}` : ''} onChange={(e) => handleHostScopeChange(e.target.value)} className={inputClass}><option value="">请选择自己的部门或班级</option>{hostScopes.map((scope) => <option key={`${scope.type}:${scope.name}`} value={`${scope.type}:${scope.name}`}>{scope.label}</option>)}</select></label><label className="text-sm font-medium text-slate-700">联办单位（可选，可多选）<select aria-describedby="cohost-scope-hint" multiple value={cohostScopes.map((scope) => `${scope.type}:${scope.name}`)} onChange={(e) => { const values = Array.from(e.target.selectedOptions, (option) => option.value); setCohostScopes(values.map((value) => cohostCandidates.find((scope) => `${scope.type}:${scope.name}` === value)).filter((scope): scope is ActivityScope => Boolean(scope))); }} className={`${inputClass} min-h-32`} disabled={!hostScope}>{cohostCandidates.map((scope) => <option key={`${scope.type}:${scope.name}`} value={`${scope.type}:${scope.name}`}>{scope.label}</option>)}</select><span id="cohost-scope-hint" className="mt-1 block text-xs font-normal text-slate-500">可不选；只能选择与主办单位同类型的部门或班级。</span></label><label className="text-sm font-medium text-slate-700">活动负责人（可多选） *<select aria-describedby="leader-hint" multiple value={leaderKeys} onChange={(e) => setLeaderKeys(Array.from(e.target.selectedOptions, (option) => option.value))} className={`${inputClass} min-h-32`}>{leaderOptions.map((leader) => <option key={leader.key} value={leader.key}>{leader.type === 'former' ? `${leader.name}（往届 · ${FORMER_STATUS_LABELS[leader.linkStatus || 'unregistered']}${leader.studentId !== '未填写' ? ` · ${leader.studentId}` : ''}）` : `${leader.name}（${leader.studentId}）`}</option>)}</select><span id="leader-hint" className="mt-1 block text-xs font-normal text-slate-500">可选本部门现任负责人，也可选择主办、联办部门中启用的往届负责人（标注“往届”）。</span></label></div></section>
         <section className={sectionClass}><h3 className="text-sm font-semibold text-slate-900">提交材料</h3><div className="mt-4 grid gap-4 sm:grid-cols-2"><FilePicker label="活动图片 *" imageOnly file={activityImage} existingUrl={existingImageUrl} existingName={null} onChange={setActivityImage} /><FilePicker label="活动策划书 *" file={planFile} existingUrl={existingPlanUrl} existingName={existingPlanName} onChange={setPlanFile} /><FilePicker label="活动备案表 *" file={recordFile} existingUrl={existingRecordUrl} existingName={existingRecordName} onChange={setRecordFile} /></div></section>
       </div>
       <div className="mt-6 flex flex-wrap gap-3 border-t border-slate-100 pt-5"><button onClick={handleSubmit} disabled={submitting} className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"><Send className="h-4 w-4" />{submitting ? '提交中...' : submissionId ? '重新提交活动' : '提交活动'}</button>{hasPermission(user, 'canViewSubmissionStatus') && <Link href="/submit/status" className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"><Eye className="h-4 w-4" />查看提交状态</Link>}</div>

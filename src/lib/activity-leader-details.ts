@@ -3,6 +3,8 @@ export type ActivityLeaderDetail = {
   name: string;
   studentId: string;
   contactPhone: string | null;
+  source?: 'user' | 'former';
+  rosterId?: string;
 };
 
 type LeaderRecord = {
@@ -50,11 +52,14 @@ function normalizeDetail(value: unknown): ActivityLeaderDetail | null {
   const name = text(record.name ?? record.username);
   const studentId = text(record.studentId ?? record.student_id);
   if (!id && !name && !studentId) return null;
+  // 旧数据没有来源字段，一律视为真实账号；往届记录必须带稳定名册 ID。
+  const source = record.source === 'former' && text(record.rosterId) ? 'former' as const : 'user' as const;
   return {
     id,
     name: name || '未命名负责人',
     studentId: studentId || '未填写',
     contactPhone: text(record.contactPhone ?? record.contact_phone) || null,
+    ...(source === 'former' ? { source, rosterId: text(record.rosterId) } : {}),
   };
 }
 
@@ -64,6 +69,7 @@ export function serializeActivityLeaderDetails(details: ActivityLeaderDetail[]):
     name: detail.name,
     studentId: detail.studentId,
     contactPhone: detail.contactPhone || null,
+    ...(detail.source === 'former' && detail.rosterId ? { source: detail.source, rosterId: detail.rosterId } : {}),
   })));
 }
 

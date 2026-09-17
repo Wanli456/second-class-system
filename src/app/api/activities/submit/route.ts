@@ -6,7 +6,7 @@ import { canSelectActivityLeader } from '@/lib/activity-leader-rules';
 import { getActivityScopes, hasAnyScopePermission, normalizeIds, normalizeScopes, serializeIds, serializeScopes, validateActivityTimes, validateHostingScope } from '@/lib/business-rules';
 import { mergeActivityStatusRecords, type ActivityStatusRecord } from '@/lib/activity-status';
 import { isValidCategoryPath } from '@/lib/types';
-import { serializeActivityLeaderDetails } from '@/lib/activity-leader-details';
+import { serializeActivityLeaderDetails, getActivityLeaderDetails, type ActivityLeaderDetail } from '@/lib/activity-leader-details';
 import { hydrateActivityLeaderDetails } from '@/lib/hydrate-activity-leaders';
 import { readIdempotencyKey } from '@/lib/idempotency';
 import { writeAuditLog } from '@/lib/audit-log';
@@ -19,10 +19,75 @@ function scopeFromUser(user: { department?: string | null; class_name?: string |
   return user.department ? { scopeType: 'department' as const, scopeName: user.department } : { scopeType: 'class' as const, scopeName: user.class_name || null };
 }
 
-async function resolveLeaders(ids: string[], fallbackName: string, fallbackPhone: string, scopes: ReturnType<typeof normalizeScopes>, currentUser: { id: string }) {
-  const leaderIds = ids.length ? ids : [currentUser.id];
-  const placeholders = leaderIds.map((_, index) => `$${index + 1}`).join(',');
-  const users = await query<{
+type FormerRosterRow = {
+  id: string;
+  name: string;
+  department: string;
+  student_id: string | null;
+  contact_phone: string | null;
+  active: boolean;
+  linked_user_id: string | null;
+};
+
+// 往届名册负责人：重提时可沿用原快照（即使名册已停用）；新选择必须来自启用且在范围内的名册。
+// leader_ids 永远只含真实、符合资格的用户 ID；名册 ID 与仅关联的普通账号不得混入。
+async function resolveFormerLeaders(formerIds: string[], scopes: ReturnType<typeof normalizeScopes>, originalDetails: ActivityLeaderDetail[], leaderUserIds: string[]) {
+  const unique = [...new Set(formerIds)];
+  if (unique.length !== formerIds.length) throw new ActivityLeaderValidationError('往届负责人选择重复，请刷新后重新选择');
+  if (!unique.length) return { details: [] as ActivityLeaderDetail[] };
+  const originalByRosterId = new Map(originalDetails.filter((item) => item.source === 'former' && item.rosterId).map((item) => [item.rosterId as string, item]));
+  const departmentNames = new Set(scopes.filter((scope) => scope.type === 'department').map((scope) => scope.name));
+  const selectedUserIds = new Set(leaderUserIds);
+
+  const details: ActivityLeaderDetail[] = [];
+  const reused = unique.filter((id) => originalByRosterId.has(id));
+  const fresh = unique.filter((id) => !originalByRosterId.has(id));
+  details.push(...reused.map((id) => originalByRosterId.get(id)!));
+  if (fresh.length) {
+    const placeholders = fresh.map((_, index) => `$${index + 1}`).join(',');
+    const rows = await query<FormerRosterRow>(`SELECT id, name, department, student_id, contact_phone, active, linked_user_id FROM former_activity_leaders WHERE id IN (${placeholders})`, fresh);
+    if (rows.length !== fresh.length) throw new ActivityLeaderValidationError('部分往届负责人名册记录不存在或已被删除');
+    for (const row of rows) {
+      if (!row.active) throw new ActivityLeaderValidationError(`往届负责人「${row.name}」已停用，不能用于新任务`);
+      if (!departmentNames.has(row.department)) throw new ActivityLeaderValidationError('往届负责人只能从主办、联办部门的名册中选择');
+      if (row.linked_user_id && selectedUserIds.has(row.linked_user_id)) {
+        throw new ActivityLeaderValidationError(`「${row.name}」已按注册账号选择，请勿重复选择`);
+      }
+      details.push({
+        id: row.id,
+        name: row.name,
+        studentId: row.student_id || '未填写',
+        contactPhone: row.contact_phone || null,
+        source: 'former',
+        rosterId: row.id,
+      });
+    }
+  }
+  // 已确认关联的名册记录若其账号同时被按真实账号选中，视为重复选择（无论是否沿用原快照）。
+  const allRosterIds = [...new Set(details.map((item) => item.rosterId).filter((value): value is string => Boolean(value)))];
+  if (allRosterIds.length) {
+    const placeholders = allRosterIds.map((_, index) => `$${index + 1}`).join(',');
+    const linkedRows = await query<{ id: string; linked_user_id: string | null }>(`SELECT id, linked_user_id FROM former_activity_leaders WHERE id IN (${placeholders})`, allRosterIds);
+    const linkedById = new Map(linkedRows.map((row) => [row.id, row.linked_user_id]));
+    for (const item of details) {
+      const linked = item.rosterId ? linkedById.get(item.rosterId) : null;
+      if (linked && selectedUserIds.has(linked)) throw new ActivityLeaderValidationError(`「${item.name}」已按注册账号选择，请勿重复选择`);
+    }
+  }
+  return { details };
+}
+
+async function resolveLeaders(
+  ids: string[],
+  formerIds: string[],
+  fallbackName: string,
+  fallbackPhone: string,
+  scopes: ReturnType<typeof normalizeScopes>,
+  currentUser: { id: string },
+  originalDetails: ActivityLeaderDetail[] = [],
+) {
+  const leaderIds = ids.length ? ids : formerIds.length ? [] : [currentUser.id];
+  let users: Array<{
     id: string;
     username: string;
     student_id: string;
@@ -33,15 +98,35 @@ async function resolveLeaders(ids: string[], fallbackName: string, fallbackPhone
     can_submit_scoring: boolean;
     permission_overrides: string | null;
     contact_phone: string | null;
-  }>(`SELECT id, username, student_id, department, class_name, role, can_submit_activity, can_submit_scoring, permission_overrides, contact_phone FROM users WHERE id IN (${placeholders})`, leaderIds);
-  if (users.length !== leaderIds.length || users.some((leader) => !canSelectActivityLeader(leader, scopes))) {
-    throw new ActivityLeaderValidationError(scopes[0]?.type === 'department'
-      ? '部门活动负责人必须是所属部门的部门负责人或管理员'
-      : '班级活动负责人必须来自主办班级或联办班级，并拥有活动提交或赋分材料权限');
+  }> = [];
+  if (leaderIds.length) {
+    const placeholders = leaderIds.map((_, index) => `$${index + 1}`).join(',');
+    users = await query<{
+      id: string;
+      username: string;
+      student_id: string;
+      department: string | null;
+      class_name: string | null;
+      role: string;
+      can_submit_activity: boolean;
+      can_submit_scoring: boolean;
+      permission_overrides: string | null;
+      contact_phone: string | null;
+    }>(`SELECT id, username, student_id, department, class_name, role, can_submit_activity, can_submit_scoring, permission_overrides, contact_phone FROM users WHERE id IN (${placeholders})`, leaderIds);
+    if (users.length !== leaderIds.length || users.some((leader) => !canSelectActivityLeader(leader, scopes))) {
+      throw new ActivityLeaderValidationError(scopes[0]?.type === 'department'
+        ? '部门活动负责人必须是所属部门的部门负责人或管理员'
+        : '班级活动负责人必须来自主办班级或联办班级，并拥有活动提交或赋分材料权限');
+    }
   }
-  const first = users[0];
-  const details = users.map((leader) => ({ id: leader.id, name: leader.username, studentId: leader.student_id, contactPhone: leader.contact_phone || null }));
-  return { ids: users.map((leader) => leader.id), details, name: users.map((leader) => leader.username).join('、') || fallbackName, phone: first.contact_phone || first.student_id || fallbackPhone };
+  const former = await resolveFormerLeaders(formerIds, scopes, originalDetails, leaderIds);
+  const details: ActivityLeaderDetail[] = [
+    ...users.map((leader) => ({ id: leader.id, name: leader.username, studentId: leader.student_id, contactPhone: leader.contact_phone || null })),
+    ...former.details,
+  ];
+  const name = details.map((item) => item.name).join('、') || fallbackName;
+  const phone = users[0]?.contact_phone || users[0]?.student_id || former.details[0]?.contactPhone || fallbackPhone;
+  return { ids: users.map((leader) => leader.id), details, name, phone };
 }
 
 export async function GET(request: NextRequest) {
@@ -117,14 +202,15 @@ export async function POST(request: NextRequest) {
     if (!timeValidation.valid) return NextResponse.json({ success: false, error: timeValidation.error }, { status: 400 });
 
     if (submission_id) {
-      const existing = await queryOne('SELECT id, review_status, activity_submitter_id, scope_names, scope_type, scope_name FROM activity_submissions WHERE id=$1', [submission_id]);
+      const existing = await queryOne('SELECT id, review_status, activity_submitter_id, scope_names, scope_type, scope_name, leader_details FROM activity_submissions WHERE id=$1', [submission_id]);
       if (!existing) return NextResponse.json({ success: false, error: '原活动提交记录不存在' }, { status: 404 });
       if (existing.review_status === '已通过') return NextResponse.json({ success: false, error: '该活动已审核通过，不能重新提交' }, { status: 400 });
       if (user.role !== 'admin' && existing.activity_submitter_id !== user.id) return NextResponse.json({ success: false, error: '只能由原提交人重新提交该活动' }, { status: 403 });
       const originalScopes = getActivityScopes(existing);
       if (!hasAnyScopePermission(user, 'submitActivity', originalScopes)) return NextResponse.json({ success: false, error: '你已不再拥有该联办活动的提交权限' }, { status: 403 });
       // 驳回重提沿用原联办范围；联办成员不必恰好属于原主办单位。
-      const leader = await resolveLeaders(normalizeIds(body.leader_ids), leader_name, leader_phone, originalScopes, user);
+      const originalDetails = getActivityLeaderDetails(existing as Record<string, unknown>);
+      const leader = await resolveLeaders(normalizeIds(body.leader_ids), normalizeIds(body.former_leader_ids), leader_name, leader_phone, originalScopes, user, originalDetails);
       const firstScope = originalScopes[0];
       // 用 WHERE review_status<>'已通过' 做原子守卫：如果在读取校验和这次写入之间，
       // 该提交已被管理员审核通过（正式活动已生成），这里必须失败，不能把状态强行改回待审核。
@@ -143,7 +229,7 @@ export async function POST(request: NextRequest) {
     const scopeValidation = validateHostingScope(user, scopes);
     if (!scopeValidation.valid) return NextResponse.json({ success: false, error: scopeValidation.error || '缺少活动所属部门或班级' }, { status: 400 });
     if (!hasAnyScopePermission(user, 'submitActivity', scopes)) return NextResponse.json({ success: false, error: '你没有该部门或班级的活动提交权限' }, { status: 403 });
-    const leader = await resolveLeaders(normalizeIds(body.leader_ids), leader_name, leader_phone, scopes, user);
+    const leader = await resolveLeaders(normalizeIds(body.leader_ids), normalizeIds(body.former_leader_ids), leader_name, leader_phone, scopes, user);
     const firstScope = scopes[0];
     const result = await withTransaction(async (client) => {
     const imageUrl = await requireActivityImage(client, body.activity_image_url, user);

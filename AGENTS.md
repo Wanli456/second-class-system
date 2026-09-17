@@ -111,3 +111,8 @@ src/
 - **users** - 用户表
 - **evening_study_schedules** - 晚自习安排表
 - **evening_study_attendance** - 晚自习考勤记录表
+
+## 表格与窄屏约定
+
+- 表格放在 `overflow-x-auto` 容器内时必须加 `min-w-*`（列数多可用 `min-w-[720px]`），禁止只写 `w-full`：窄屏下没有最小宽度的表格会被挤到单元格文字逐字竖排换行，行高被撑到数百像素，视觉上像"卡片下方大片空白"。
+- 已知反例就是本项目曾出现的问题：不要新增无 `min-w` 的 `overflow-x-auto > table` 组合；含长文本列的表格可改用卡片布局（参考 /admin 班级名册的 sm:hidden 卡片方案）。

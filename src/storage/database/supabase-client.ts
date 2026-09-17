@@ -285,6 +285,18 @@ if (localDb && shouldInitializeLocalDb) {
       purpose TEXT NOT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE former_activity_leaders (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      department TEXT NOT NULL,
+      student_id TEXT,
+      contact_phone TEXT,
+      active BOOLEAN NOT NULL DEFAULT true,
+      linked_user_id TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
   `);
 
   // Stable accounts for local previews; this database is never used when PGDATABASE_URL is configured.
@@ -838,7 +850,23 @@ async function migrateDatabaseSchema(): Promise<void> {
 
   await executeSchemaSql(`CREATE TABLE IF NOT EXISTS audit_logs (id TEXT PRIMARY KEY DEFAULT ${uuidDefault}, actor_user_id TEXT, actor_name TEXT, action TEXT NOT NULL, resource_type TEXT NOT NULL, resource_id TEXT, details JSONB NOT NULL DEFAULT '{}'::jsonb, ip_address TEXT, created_at TIMESTAMP NOT NULL DEFAULT NOW()); CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx ON audit_logs (created_at); CREATE INDEX IF NOT EXISTS audit_logs_actor_idx ON audit_logs (actor_user_id); CREATE INDEX IF NOT EXISTS audit_logs_resource_idx ON audit_logs (resource_type, resource_id);`);
 
-  
+  if (!(await tableExists('former_activity_leaders'))) {
+    await executeSchemaSql(`
+      CREATE TABLE former_activity_leaders (
+        id TEXT PRIMARY KEY DEFAULT ${uuidDefault},
+        name TEXT NOT NULL,
+        department TEXT NOT NULL,
+        student_id TEXT,
+        contact_phone TEXT,
+        active BOOLEAN NOT NULL DEFAULT true,
+        linked_user_id TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+    `);
+  }
+  // 唯一性（同部门同学号、一个账号只关联一条名册）在路由事务中校验，
+  // pg-mem 不支持带 WHERE 的部分唯一索引，生产端由 schema.sql 的部分索引兜底。
   await ensureDepartmentsTable();
 }
 
