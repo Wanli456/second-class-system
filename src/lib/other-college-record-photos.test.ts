@@ -5,6 +5,9 @@ import path from 'node:path';
 import { NextRequest } from 'next/server';
 import { GET, POST } from '@/app/api/other-college-registrations/route';
 import { GET as download } from '@/app/api/uploads/[filename]/route';
+import { GET as scoringList } from '@/app/api/scoring/route';
+import { GET as activityList } from '@/app/api/activities/route';
+import { parseStoredRecordPhotos } from '@/lib/other-college-record-photos';
 import { createSessionToken } from '@/lib/auth';
 import { ensureDatabaseSchema, query, queryOne } from '@/storage/database/supabase-client';
 
@@ -55,6 +58,7 @@ async function main(): Promise<void> {
   await createUser('other-photo-scorer', 'student', true);
   await createUser('other-photo-outsider');
   await createUser('other-photo-admin', 'admin');
+  await query("INSERT INTO upload_assets (url,original_file_name,uploaded_by_user_id,purpose) VALUES ('/uploads/other-photo-3.png','备案表第3页.png','other-photo-owner','other-college')");
   await query(
     "INSERT INTO upload_assets (url,original_file_name,uploaded_by_user_id,purpose) VALUES ($1,$2,$3,'other-college'),($4,$5,$3,'other-college'),($6,$7,$3,'other-college'),($8,$9,$10,'other-college')",
     [
@@ -68,6 +72,7 @@ async function main(): Promise<void> {
   const created = await POST(request('other-photo-owner', registrationBody([
     { url: '/uploads/other-photo-1.png', fileName: '伪造-1.png' },
     { url: '/uploads/other-photo-2.png', fileName: '伪造-2.png' },
+    { url: '/uploads/other-photo-3.png', fileName: '伪造-3.png' },
   ]), 'other-photo-create'));
   const createdBody = await created.json() as { success?: boolean; data?: { id?: string } };
   assert.equal(created.status, 200, JSON.stringify(createdBody));
@@ -81,6 +86,7 @@ async function main(): Promise<void> {
   assert.deepEqual(JSON.parse(stored?.record_photo_list || '[]'), [
     { url: '/uploads/other-photo-1.png', fileName: '备案表第1页.png' },
     { url: '/uploads/other-photo-2.png', fileName: '备案表第2页.png' },
+    { url: '/uploads/other-photo-3.png', fileName: '备案表第3页.png' },
   ]);
   assert.equal(stored?.record_photo_url, '/uploads/other-photo-1.png');
   assert.equal(stored?.record_photo_file_name, '备案表第1页.png');
@@ -90,6 +96,32 @@ async function main(): Promise<void> {
   }));
   const recordsBody = await records.json() as { data?: Array<{ id: string; record_photo_list?: string }> };
   assert.equal(recordsBody.data?.find((item) => item.id === createdId)?.record_photo_list, stored?.record_photo_list);
+
+  async function readPhotos(handler: typeof scoringList, url: string, id: string, admin = false) {
+    const token = admin ? createSessionToken('other-photo-admin', 'other-photo-admin-session') : createSessionToken('other-photo-scorer');
+    const response = await handler(new NextRequest('http://localhost' + url, { headers: { Authorization: 'Bearer ' + token } }));
+    assert.equal(response.status, 200);
+    const body = await response.json() as { data: Array<StoredPhotos & { id: string }> };
+    const row = body.data.find((item) => item.id === id);
+    assert.ok(row, url + ' 应返回目标活动');
+    return parseStoredRecordPhotos(row.record_photo_list, row.record_photo_url, row.record_photo_file_name);
+  }
+  const expectedPhotos = JSON.parse(stored!.record_photo_list);
+  assert.deepEqual(await readPhotos(scoringList, '/api/scoring', createdId), expectedPhotos, '赋分接口必须返回全部三张照片');
+  assert.deepEqual(await readPhotos(activityList, '/api/activities', createdId, true), expectedPhotos);
+  await query("UPDATE activities SET scoring_status='已赋分' WHERE id=$1", [createdId]);
+  for (const status of ['已赋分', 'all']) {
+    assert.deepEqual(await readPhotos(scoringList, '/api/scoring?status=' + encodeURIComponent(status), createdId), expectedPhotos);
+  }
+  await query("UPDATE activities SET scoring_status='待赋分' WHERE id=$1", [createdId]);
+  assert.equal((await scoringList(new NextRequest('http://localhost/api/scoring'))).status, 401);
+  assert.equal((await scoringList(new NextRequest('http://localhost/api/scoring', { headers: { Authorization: 'Bearer ' + createSessionToken('other-photo-outsider') } }))).status, 403);
+
+  const empty = await POST(request('other-photo-owner', registrationBody([]), 'other-photo-empty'));
+  assert.equal(empty.status, 200);
+  const emptyId = (await empty.json()).data.id as string;
+  assert.deepEqual(await readPhotos(scoringList, '/api/scoring', emptyId), []);
+  assert.deepEqual(await readPhotos(activityList, '/api/activities', emptyId, true), []);
 
   const foreign = await POST(request('other-photo-owner', registrationBody([
     { url: '/uploads/other-photo-foreign.png', fileName: '别人的备案表.png' },
@@ -109,6 +141,9 @@ async function main(): Promise<void> {
     "INSERT INTO activities (id,full_name,start_time,end_time,category,level,leader_name,leader_phone,scope_type,scope_name,scoring_material_submitter_id,scoring_table_url,scoring_table_file_name,record_photo_url,record_photo_file_name,status,scoring_status) VALUES ('other-photo-legacy','旧单图登记',NOW(),NOW()+INTERVAL '1 hour','德','校级','','','other_college','智能制造学院',$1,'/uploads/other-college-score.xlsx','真实赋分表.xlsx','/uploads/legacy-photo.png','旧备案表.png','正常活动','待赋分')",
     ['other-photo-owner'],
   );
+  const legacyPhotos = [{ url: '/uploads/legacy-photo.png', fileName: '旧备案表.png' }];
+  assert.deepEqual(await readPhotos(scoringList, '/api/scoring', 'other-photo-legacy'), legacyPhotos);
+  assert.deepEqual(await readPhotos(activityList, '/api/activities', 'other-photo-legacy', true), legacyPhotos);
   const legacy = await POST(request('other-photo-owner', registrationBody([
     { url: '/uploads/legacy-photo.png', fileName: '旧备案表.png' },
   ], 'other-photo-legacy'), 'other-photo-legacy-update'));
