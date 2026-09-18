@@ -400,7 +400,7 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
                 {batchSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
                 应用到已选用户
               </button>
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800 hover:bg-teal-100 sm:py-1.5">
+              <label className="relative inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800 hover:bg-teal-100 sm:py-1.5">
                 <FileSpreadsheet className="size-3.5" />
                 {importing ? '导入中…' : 'Excel 覆盖导入'}
                 <input type="file" accept=".xlsx,.xls" className="sr-only" disabled={importing} onChange={(event) => { void importPermissions(event.target.files?.[0] || null); event.currentTarget.value = ''; }} />
@@ -443,13 +443,13 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
                       <h2 className="font-semibold">{user.name}</h2><span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{roleLabel(user.role)}</span></div>
                     <p className="mt-1 text-xs text-slate-500">学号：{user.studentId || '—'}　班级：{user.className || '—'}{user.department && user.department !== department ? '　部门：' + user.department : ''}</p>
                     {managedDepartment === '学习竞技部' && (
-                      <label className="mt-3 flex w-fit items-center gap-2 text-sm text-slate-700">
-                        账号角色
+                      <label className="mt-3 flex min-w-0 items-center gap-2 text-sm text-slate-700">
+                        <span className="shrink-0">账号角色</span>
                         <select
                           value={user.role === 'leader' ? 'leader' : user.role === 'class_leader' ? 'class_leader' : 'student'}
                           onChange={(event) => updateRole(user.id, event.target.value as 'student' | 'class_leader' | 'leader')}
                           disabled={savingId === user.id}
-                          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+                          className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
                         >
                           <option value="student">学生</option>
                           <option value="class_leader">班级负责人（自动获得假条上传权限）</option>
@@ -457,18 +457,22 @@ export function DepartmentUsers({ managedDepartment }: { managedDepartment?: Dep
                         </select>
                       </label>
                     )}
-                    {managedDepartment === '学习竞技部' && user.role === 'leader' && (
-                      <label className="mt-2 flex w-fit items-center gap-2 text-sm text-slate-700">
-                        联系方式
+                    {managedDepartment === '学习竞技部' && user.role === 'leader' ? (
+                      <label className="mt-2 flex min-w-0 items-center gap-2 text-sm text-slate-700">
+                        <span className="shrink-0">联系方式</span>
                         <input
                           type="tel"
                           value={user.contactPhone || ''}
                           onChange={(event) => updateContactPhone(user.id, event.target.value)}
                           placeholder="部门负责人的联系电话"
                           disabled={savingId === user.id}
-                          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+                          className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
                         />
                       </label>
+                    ) : (
+                      <p className="mt-2 break-all text-sm text-slate-700">
+                        联系方式（手机号/微信号）：{user.contactPhone || '未填写'}
+                      </p>
                     )}
                   </div>
                   <button type="button" onClick={() => saveUser(user)} disabled={savingId === user.id} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60">

@@ -1960,10 +1960,13 @@ function UserManagement({
                         <span className="text-xs text-slate-500">所属班级</span>
                         <span className="truncate font-medium">{item.className || '未设置'}</span>
                       </div>
-                      {(item.role === 'admin' || item.role === 'leader' || item.canSubmitActivity || item.canSubmitScoring) && <label className="min-w-0 sm:col-span-2">
+                      {(item.role === 'admin' || item.role === 'leader' || item.canSubmitActivity || item.canSubmitScoring) ? <label className="min-w-0 sm:col-span-2">
                         <span className="mb-1.5 block text-xs font-medium text-slate-500">联系方式（手机号/微信号）</span>
                         <input aria-label={`${item.name}的联系方式`} defaultValue={item.contactPhone || ''} onBlur={(event) => void onUpdateContactPhone(item.id, event.target.value.trim() || null)} placeholder="未填写" className="h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200" />
-                      </label>}
+                      </label> : <div className="min-w-0 sm:col-span-2">
+                        <span className="mb-1.5 block text-xs font-medium text-slate-500">联系方式（手机号/微信号）</span>
+                        <p className="break-all text-sm text-slate-700">{item.contactPhone || '未填写'}</p>
+                      </div>}
                     </div>
 
                                           <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
