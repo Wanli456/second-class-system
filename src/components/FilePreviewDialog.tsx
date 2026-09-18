@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { previewKind, type PreviewKind } from '@/lib/file-preview';
 import { apiFetch } from '@/lib/client-api';
 import type { ExcelPreviewSheet } from '@/lib/excel-preview';
+import { acquireImagePreview, isSessionImageUrl } from '@/lib/image-preview-cache';
 
 type DocumentPreviewState =
   | { status: 'idle' }
@@ -339,6 +340,36 @@ function ExcelPreview({ sheets, viewState, onViewChange, scrollPositionRef }: {
   );
 }
 
+export function CachedImage({ src, alt, className, ...props }: Omit<React.ComponentProps<'img'>, 'src'> & { src: string }) {
+  const [state, setState] = useState<{ url: string; source: string | null; error: string | null }>({ url: '', source: null, error: null });
+  const cacheable = isSessionImageUrl(src);
+
+  useEffect(() => {
+    if (!cacheable) {
+      setState({ url: src, source: src, error: null });
+      return;
+    }
+
+    let active = true;
+    setState({ url: src, source: null, error: null });
+    const lease = acquireImagePreview(src);
+    void lease.promise
+      .then((source) => { if (active) setState({ url: src, source, error: null }); })
+      .catch((error: unknown) => {
+        if (active) setState({ url: src, source: null, error: error instanceof Error ? error.message : '图片读取失败' });
+      });
+    return () => {
+      active = false;
+      lease.release();
+    };
+  }, [cacheable, src]);
+
+  if (!cacheable) return <img src={src} alt={alt} className={className} {...props} />;
+  if (state.url !== src || (!state.source && !state.error)) return <span className={className} role="img" aria-label={alt} aria-busy="true">加载中…</span>;
+  if (state.error) return <span className={className} role="img" aria-label={alt} title={state.error}>图片加载失败</span>;
+  return <img src={state.source!} alt={alt} className={className} {...props} />;
+}
+
 export function FilePreviewDialog({
   open,
   onOpenChange,
@@ -447,7 +478,7 @@ export function FilePreviewDialog({
         <div ref={restoreDocumentScroll} onScroll={event => { documentScroll.current = { top: event.currentTarget.scrollTop, left: event.currentTarget.scrollLeft }; }} className={`min-h-0 flex-1 overflow-auto p-4 ${kind === 'word' ? 'bg-white' : 'bg-slate-100'}`}>
           {kind === 'image' && url && (
             <div className="flex min-h-[50dvh] items-center justify-center">
-              <img src={url} alt={label} className="max-h-[calc(100dvh-10rem)] max-w-full select-text object-contain" />
+              <CachedImage src={url} alt={label} className="max-h-[calc(100dvh-10rem)] max-w-full select-text object-contain" />
             </div>
           )}
           {kind === 'pdf' && url && <iframe title={label} src={url} className="h-[calc(100dvh-10rem)] min-h-[32rem] w-full rounded border bg-white" />}

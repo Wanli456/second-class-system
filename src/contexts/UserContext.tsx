@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { refreshCurrentUser } from '@/lib/client-api';
+import { clearImagePreviewCache } from '@/lib/image-preview-cache';
 
 interface User {
   id: string;
@@ -46,6 +47,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [routeChanging, setRouteChanging] = useState(false);
+  const imagePreviewCacheIdentity = user ? JSON.stringify(user) : 'anonymous';
+
+  useEffect(() => {
+    clearImagePreviewCache();
+  }, [imagePreviewCacheIdentity]);
 
   useEffect(() => {
     let cancelled = false;
